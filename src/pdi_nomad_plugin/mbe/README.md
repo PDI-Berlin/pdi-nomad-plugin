@@ -22,9 +22,11 @@ PDI_plugin/
 │       ├── __init__.py
 │       ├── mbe
 │       │   ├── growth_excel
-│       │   │   ├── nomad_plugin.yaml
+│       │   │   ├── __init__.py
 │       │   │   └── parser.py
+│       │   ├── __init__.py
 │       │   └── schema.py
+│       ├── __init__.py
 │       └── utils.py
 └── tests
     └── data
@@ -37,6 +39,7 @@ PDI_plugin/
 - `growth_excel/`: contains the source code to parse the excel file.
 - `schema.py` defines the structure of the data after it has been parsed. It specifies the fields that the structured data will contain and the types of those fields.
 - `parser.py` contains the logic for parsing the raw data from the MBE growth process. This includes reading the data from its original format, extracting the relevant information, and transforming it into a structured format.
+- `__init__.py` defines the raw file matching rules of the parser. Check [NOMAD plugin official docs](https://nomad-lab.eu/prod/v1/staging/docs/howto/customization/plugins_dev.html#parser-plugin-metadata) for more info.
 
 
 ## Installation
