@@ -354,6 +354,8 @@ class SubstrateMbe(CrystallineSubstrate, EntryData):
 
     m_def = Section(
         label_quantity='lab_id',
+        categories=[PDIMBECategory],
+        label='Substrate',
         a_eln=ELNAnnotation(
             properties=SectionProperties(
                 order=[
@@ -375,7 +377,6 @@ class SubstrateMbe(CrystallineSubstrate, EntryData):
             ),
             lane_width='600px',
         ),
-        label='Substrate',
     )
     # tags = Quantity(
     #     type=str,
