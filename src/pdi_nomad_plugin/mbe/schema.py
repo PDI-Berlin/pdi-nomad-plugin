@@ -353,44 +353,76 @@ class SubstrateMbe(CrystallineSubstrate, EntryData):
     """
 
     m_def = Section(
-        label_quantity='lab_id', categories=[PDIMBECategory], label='Substrate'
+        label_quantity='lab_id',
+        a_eln=ELNAnnotation(
+            properties=SectionProperties(
+                order=[
+                    'name',
+                    'delivery_date',
+                    'datetime',
+                    'supplier',
+                    'supplier_id',
+                    'crystal_id',
+                    'charge',
+                    'charge_id',
+                    'polishing',
+                    'lab_id',
+                    'epi_ready',
+                    'substrate_image',
+                    'information_sheet',
+                    'description',
+                ],
+            ),
+            lane_width='600px',
+        ),
+        label='Substrate',
     )
-    tags = Quantity(
+    # tags = Quantity(
+    #     type=str,
+    #     description='FILL',
+    #     a_eln=ELNAnnotation(
+    #         component='StringEditQuantity',
+    #         label='Box ID',
+    #     ),
+    # )
+    crystal_id = Quantity(
+        type=str,
+        description='The ID of the crystal from which the current batch was cut, given by the manufacturer.',
+        a_eln=ELNAnnotation(
+            component='StringEditQuantity',
+        ),
+    )
+    charge = Quantity(
         type=str,
         description='FILL',
         a_eln=ELNAnnotation(
             component='StringEditQuantity',
-            label='Box ID',
-        ),
-        a_tabular={'name': 'Substrate/Substrate Box'},
-    )
-    annealing = Quantity(
-        type=bool,
-        description='Annealing',
-        a_eln=ELNAnnotation(
-            component='BoolEditQuantity',
         ),
     )
-    cleaning = Quantity(
-        type=bool,
-        description='Cleaning',
-        a_eln=ELNAnnotation(
-            component='BoolEditQuantity',
-        ),
-    )
-    regrowth = Quantity(
-        type=bool,
-        description='Regrowth',
-        a_eln=ELNAnnotation(
-            component='BoolEditQuantity',
-        ),
-    )
-    information_sheet = Quantity(
+    charge_id = Quantity(
         type=str,
-        description='pdf files containing certificate and other documentation',
-        a_browser={'adaptor': 'RawFileAdaptor'},
+        description='The ID of the charge, or polishing batch, given by the manufacturer.',
         a_eln=ELNAnnotation(
-            component='FileEditQuantity',
+            component='StringEditQuantity',
+            label='Charge ID',
+        ),
+    )
+    polishing = Quantity(
+        type=MEnum(
+            'Single-side',
+            'Double-side',
+            'Other',
+        ),
+        description='The type of conductivity of the material.',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.EnumEditQuantity,
+        ),
+    )
+    epi_ready = Quantity(
+        type=bool,
+        description='Sample ready for epitaxy',
+        a_eln=ELNAnnotation(
+            component='BoolEditQuantity',
         ),
     )
     description = Quantity(
