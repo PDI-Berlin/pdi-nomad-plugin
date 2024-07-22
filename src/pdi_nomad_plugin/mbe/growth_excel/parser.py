@@ -91,8 +91,6 @@ from pdi_nomad_plugin.mbe.schema import (
     ShaftTemperature,
     FilamentTemperature,
     SubstrateMbe,
-    SubstrateCrystalPropertiesMbe,
-    MiscutMbe,
     Shape,
     SampleParametersMbe,
     FilamentTemperature,
@@ -553,8 +551,8 @@ class ParserMbePDI(MatchingParser):
             )
             substrate_data = SubstrateMbe()
             substrate_data.geometry = Shape()
-            substrate_data.crystal_properties = SubstrateCrystalPropertiesMbe()
-            substrate_data.crystal_properties.miscut = MiscutMbe()
+            substrate_data.crystal_properties = SubstrateCrystalProperties()
+            substrate_data.crystal_properties.miscut = [Miscut()]
 
             substrate_data.lab_id = substrate_id
             substrate_data.name = fill_quantity(substrate_row, 'Material')
@@ -613,11 +611,11 @@ class ParserMbePDI(MatchingParser):
 
             miscut_angle = fill_quantity(substrate_row, 'Off-cut')
             if miscut_angle:
-                substrate_data.crystal_properties.miscut.angle = miscut_angle
+                substrate_data.crystal_properties.miscut[0].angle = miscut_angle
 
             mo = fill_quantity(substrate_row, 'Off-cut Orientation')
             if mo:
-                substrate_data.crystal_properties.miscut.orientation = mo
+                substrate_data.crystal_properties.miscut[0].orientation = mo
 
             substrate_data.elemental_composition = populate_elements(substrate_row)
 
