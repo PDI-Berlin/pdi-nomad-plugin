@@ -38,6 +38,7 @@ dependencies = [
     'nomad-analysis',
     'lakeshore-nomad-plugin@git+https://github.com/IKZ-Berlin/lakeshore-nomad-plugin.git@main',
     'laytec_epitt_plugin@git+https://github.com/IKZ-Berlin/laytec_epitt_nomad_plugin.git@main',
+    'epic_scraper@git+https://github.com/PDI-Berlin/EPIC_scraper@main',
 ]
 [project.urls]
 "Homepage" = "https://github.com/PDI-Berlin/pdi-nomad-plugin"
@@ -126,3 +127,4 @@ general_schema = "pdi_nomad_plugin.general:general_schema"
 characterization_schema = "pdi_nomad_plugin.characterization:characterization_schema"
 mbe_schema = "pdi_nomad_plugin.mbe:mbe_schema"
 mbe_growth_excel_parser = "pdi_nomad_plugin.mbe.growth_excel:mbe_growth_excel_parser"
+mbe_epic_parser = "pdi_nomad_plugin.mbe.epic_parser:mbe_epic_parser"
