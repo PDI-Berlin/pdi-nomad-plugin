@@ -75,6 +75,11 @@ from nomad_material_processing.vapor_deposition import (
     Pressure,
     Temperature,
     VolumetricFlowRate,
+    SubstrateHolder,
+    SubstrateHolderPosition,
+    FilledSubstrateHolder,
+    FilledSubstrateHolderPosition,
+    InsertReduction,
 )
 
 from nomad_material_processing.vapor_deposition.cvd import (
@@ -111,6 +116,66 @@ from nomad.metainfo import (
 configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:mbe_schema')
 
 m_package = SchemaPackage()
+
+
+class InsterReductionPDI(InsertReduction, EntryData):
+    pass
+
+
+class SubstrateHolderPositionPDI(SubstrateHolderPosition):
+    rho = Quantity(
+        type=float,
+        description="""
+        Rho angle of the substrate holder in the x-y plane.
+        """,
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+        ),
+    )
+    theta = Quantity(
+        type=float,
+        description="""
+        Theta angle of the substrate holder in the x-z plane.
+        """,
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+        ),
+    )
+
+
+class SubstrateHolderPDI(SubstrateHolder, EntryData):
+    positions = SubSection(
+        section_def=SubstrateHolderPositionPDI,
+        repeats=True,
+    )
+
+
+class FilledSubstrateHolderPositionPDI(FilledSubstrateHolderPosition):
+    rho = Quantity(
+        type=float,
+        description="""
+        Rho angle of the substrate holder in the x-y plane.
+        """,
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+        ),
+    )
+    theta = Quantity(
+        type=float,
+        description="""
+        Theta angle of the substrate holder in the x-z plane.
+        """,
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+        ),
+    )
+
+
+class FilledSubstrateHolderPDI(FilledSubstrateHolder, EntryData):
+    positions = SubSection(
+        section_def=FilledSubstrateHolderPositionPDI,
+        repeats=True,
+    )
 
 
 class Shape(Parallelepiped):
