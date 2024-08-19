@@ -89,18 +89,16 @@ To load the full functionality, use the following `plugins` section:
 ```yaml
 plugins:
   include:
-    - 'schemas/nomad_measurements'
-    - 'parsers/xrd'
-    - 'schemas/analysis'
+    - "nomad_measurements.general:general_schema"
+    - "nomad_measurements.xrd:xrd_schema"
+    - "nomad_measurements.xrd.parser:xrd_parser"
+    - "nomad_measurements.transmission:transmission_schema"
+    - "nomad_measurements.transmission:transmission_parser"
     - 'schemas/nomad_material_processing'
     - 'schemas/nomad_material_processing/vd'
     - 'schemas/nomad_material_processing/vd/cvd'
     - 'schemas/nomad_material_processing/vd/pvd'
   options:
-    schemas/nomad_measurements:
-      python_package: nomad_measurements
-    parsers/xrd:
-      python_package: xrd
     schemas/analysis:
       python_package: nomad_analysis
     schemas/nomad_material_processing:

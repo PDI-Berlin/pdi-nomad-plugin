@@ -70,7 +70,7 @@ from nomad_material_processing.general.schema import (
     AnnealingRecipe,
     CleaningRecipe,
 )
-from nomad_measurements import ActivityReference
+from nomad_measurements.general.schema import ActivityReference
 
 from nomad.utils import hash
 
