@@ -107,6 +107,8 @@ from pdi_nomad_plugin.general.schema import (
 )
 from pdi_nomad_plugin.characterization.schema import AFMmeasurement, LightMicroscope
 
+from pdi_nomad_plugin.general.schema import PDICategory, PDIMBECategory
+
 # m_package = Package(name="mbe_PDI")
 
 from nomad.metainfo import (
@@ -118,8 +120,11 @@ configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:mbe_schema')
 m_package = SchemaPackage()
 
 
-class InsterReductionPDI(InsertReduction, EntryData):
-    pass
+class InsertReductionPDI(InsertReduction, EntryData):
+    m_def = Section(
+        label='InsertReduction',
+        categories=[PDIMBECategory],
+    )
 
 
 class SubstrateHolderPositionPDI(SubstrateHolderPosition):
@@ -144,6 +149,10 @@ class SubstrateHolderPositionPDI(SubstrateHolderPosition):
 
 
 class SubstrateHolderPDI(SubstrateHolder, EntryData):
+    m_def = Section(
+        label='SubstrateHolder (Empty Template)',
+        categories=[PDIMBECategory],
+    )
     positions = SubSection(
         section_def=SubstrateHolderPositionPDI,
         repeats=True,
@@ -172,6 +181,10 @@ class FilledSubstrateHolderPositionPDI(FilledSubstrateHolderPosition):
 
 
 class FilledSubstrateHolderPDI(FilledSubstrateHolder, EntryData):
+    m_def = Section(
+        label='SubstrateHolder (Filled)',
+        categories=[PDIMBECategory],
+    )
     positions = SubSection(
         section_def=FilledSubstrateHolderPositionPDI,
         repeats=True,
