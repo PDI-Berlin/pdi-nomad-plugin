@@ -62,10 +62,10 @@ from nomad_material_processing.vapor_deposition.cvd import (
     CVDSource,
     Rotation,
 )
-from nomad_measurements import (
+from nomad_measurements.general.schema import (
     ActivityReference,
 )
-from nomad_measurements.xrd import ELNXRayDiffraction
+from nomad_measurements.xrd.schema import ELNXRayDiffraction
 from structlog.stdlib import (
     BoundLogger,
 )
@@ -865,7 +865,6 @@ class XRDmeasurementReference(SectionReference):
             and self.reference is not None
             and hasattr(self, 'sample_id')
         ):
-
             # xrd_context = ServerContext(
             #     get_upload_with_read_access(
             #         archive.m_context.upload_id,
