@@ -123,8 +123,8 @@ where = ["src"]
 
 [project.entry-points.'nomad.plugin']
 
-general_schema = "pdi_nomad_plugin.general:general_schema"
-characterization_schema = "pdi_nomad_plugin.characterization:characterization_schema"
-mbe_schema = "pdi_nomad_plugin.mbe:mbe_schema"
-mbe_growth_excel_parser = "pdi_nomad_plugin.mbe.growth_excel:mbe_growth_excel_parser"
-mbe_epic_parser = "pdi_nomad_plugin.mbe.epic_parser:mbe_epic_parser"
+general_schema = "pdi_nomad_plugin.general:schema"
+characterization_schema = "pdi_nomad_plugin.characterization:schema"
+mbe_schema = "pdi_nomad_plugin.mbe:schema"
+mbe_growth_excel_parser = "pdi_nomad_plugin.mbe.growth_excel:parser"
+mbe_epic_parser = "pdi_nomad_plugin.mbe.epic_parser:parser"
