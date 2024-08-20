@@ -16,44 +16,16 @@
 # limitations under the License.
 #
 
-import re
-from time import sleep, perf_counter
-import pandas as pd
-from typing import Dict, List
-import yaml
 import json
 import math
-import numpy as np
 
+import pandas as pd
+import yaml
 from nomad.datamodel.context import ClientContext
-from nomad.datamodel import EntryArchive
-from nomad.metainfo import MSection, Quantity, Section
-from nomad.parsing import MatchingParser
-from nomad.datamodel.metainfo.annotations import ELNAnnotation
-from nomad.datamodel.data import EntryData
-from nomad.units import ureg
 from nomad.datamodel.metainfo.basesections import (
-    SystemComponent,
-    CompositeSystemReference,
-    ElementalComposition,
-    PureSubstanceComponent,
-    PureSubstanceSection,
     ExperimentStep,
 )
-
-from nomad_material_processing import Dopant, SubstrateReference
-from nomad_material_processing.vapor_deposition import (
-    MolarFlowRate,
-    Temperature,
-    Pressure,
-    VolumetricFlowRate,
-)
-from nomad_material_processing.vapor_deposition.cvd import (
-    PartialVaporPressure,
-    BubblerEvaporator,
-)
-
-from nomad.datamodel.datamodel import EntryArchive, EntryMetadata
+from nomad.units import ureg
 
 
 def get_reference(upload_id, entry_id):
@@ -111,8 +83,6 @@ def dict_nan_equal(dict1, dict2):
 def create_archive(
     entry_dict, context, filename, file_type, logger, *, overwrite: bool = False
 ):
-    from nomad.datamodel.context import ClientContext
-    from nomad.datamodel import EntryArchive
 
     file_exists = context.raw_path_exists(filename)
     dicts_are_equal = None
@@ -247,8 +217,8 @@ def rename_block_cols(string, block_cols, initial_col):
 
 
 def fetch_substrate(archive, sample_id, substrate_id, logger):
-    from nomad.datamodel.context import ClientContext, ServerContext
     from nomad.app.v1.models.models import User
+    from nomad.datamodel.context import ServerContext
     from nomad.search import search
 
     substrate_reference_str = None
@@ -273,8 +243,8 @@ def fetch_substrate(archive, sample_id, substrate_id, logger):
         return None
     if len(search_result.data) >= 1:
         upload_id = search_result.data[0]['upload_id']
-        from nomad.files import UploadFiles
         from nomad.app.v1.routers.uploads import get_upload_with_read_access
+        from nomad.files import UploadFiles
 
         upload_files = UploadFiles.get(upload_id)
 

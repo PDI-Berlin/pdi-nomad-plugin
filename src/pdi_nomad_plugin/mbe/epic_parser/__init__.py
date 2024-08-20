@@ -26,7 +26,7 @@ class EpicParserEntryPoint(ParserEntryPoint):
         return ParserEpicPDI(**self.dict())
 
 
-mbe_epic_parser = EpicParserEntryPoint(
+parser = EpicParserEntryPoint(
     name='EpicParser',
     description='Parser for EPIC log files.',
     mainfile_mime_re=r'text/.*|application/zip',

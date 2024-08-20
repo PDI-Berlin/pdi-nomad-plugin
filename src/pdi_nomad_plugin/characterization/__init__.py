@@ -28,7 +28,7 @@ class CharacterizationSchemaPackageEntryPoint(SchemaPackageEntryPoint):
         return m_package
 
 
-characterization_schema = CharacterizationSchemaPackageEntryPoint(
+schema = CharacterizationSchemaPackageEntryPoint(
     name='CharacterizationSchema',
     description='Schema package defined using the new plugin mechanism.',
 )

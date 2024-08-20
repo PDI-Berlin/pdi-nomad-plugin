@@ -16,8 +16,8 @@
 #
 
 
-from pydantic import Field
 from nomad.config.models.plugins import SchemaPackageEntryPoint
+from pydantic import Field
 
 # from .schema import *
 
@@ -31,7 +31,7 @@ class PDIMbeEntryPoint(SchemaPackageEntryPoint):
         return m_package
 
 
-mbe_schema = PDIMbeEntryPoint(
+schema = PDIMbeEntryPoint(
     name='MbeSchema',
     description='Schema package defined using the new plugin mechanism.',
 )

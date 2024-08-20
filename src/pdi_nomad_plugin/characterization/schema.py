@@ -1,18 +1,18 @@
 import numpy as np
+from nomad.config import config
+from nomad.datamodel.data import EntryData
 from nomad.datamodel.metainfo.basesections import (
     Measurement,
     MeasurementResult,
 )
-from nomad.metainfo import SchemaPackage, Quantity, SubSection, MEnum, Datetime, Section
-from nomad.datamodel.data import EntryData
-from nomad.config import config
+from nomad.metainfo import Datetime, Quantity, SchemaPackage, Section, SubSection
 
 from pdi_nomad_plugin.general.schema import (
     PDICategory,
 )
 
 configuration = config.get_plugin_entry_point(
-    'pdi_nomad_plugin.characterization:characterization_schema'
+    'pdi_nomad_plugin.characterization:schema'
 )
 
 m_package = SchemaPackage()

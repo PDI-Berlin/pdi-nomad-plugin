@@ -1,121 +1,86 @@
-import numpy as np
-import yaml
 import json
-import plotly.express as px
-from plotly.subplots import make_subplots
-from nomad.datamodel.metainfo.basesections import (
-    Activity,
-    ActivityStep,
-    System,
-    Component,
-    SystemComponent,
-    PureSubstance,
-    Process,
-    PureSubstanceComponent,
-    PureSubstanceSection,
-    EntityReference,
-    CompositeSystemReference,
-    PubChemPureSubstanceSection,
-    SectionReference,
-    Experiment,
-    ExperimentStep,
-)
-from nomad.datamodel.metainfo.annotations import (
-    ELNAnnotation,
-    SectionProperties,
-)
 
-
-from nomad.parsing.tabular import TableData
-from structlog.stdlib import (
-    BoundLogger,
-)
+import numpy as np
+from nomad.config import config
+from nomad.datamodel.data import ArchiveSection, EntryData
 from nomad.datamodel.metainfo.annotations import (
     ELNAnnotation,
     ELNComponentEnum,
+    SectionProperties,
 )
-
-from nomad.utils import hash
-
-from nomad.metainfo import (
-    Package,
-    Quantity,
-    SubSection,
-    MEnum,
-    Datetime,
-    Section,
-    Reference,
+from nomad.datamodel.metainfo.basesections import (
+    Component,
+    CompositeSystemReference,
+    Experiment,
+    Process,
+    PureSubstance,
+    SectionReference,
+    System,
+    SystemComponent,
 )
-from nomad.datamodel.data import EntryData, ArchiveSection, Author
-
-from nomad.datamodel.metainfo.plot import PlotSection, PlotlyFigure
+from nomad.datamodel.metainfo.plot import PlotSection
 from nomad.datamodel.metainfo.workflow import (
     Link,
-    Task,
-    Workflow,
 )
 
+# m_package = Package(name="mbe_PDI")
+from nomad.metainfo import (
+    Datetime,
+    MEnum,
+    Quantity,
+    Reference,
+    SchemaPackage,
+    Section,
+    SubSection,
+)
+from nomad.utils import hash
 from nomad_material_processing import (
-    SubstrateReference,
     CrystallineSubstrate,
-    Miscut,
-    SubstrateCrystalProperties,
     Geometry,
+    Parallelepiped,
+    SubstrateReference,
     ThinFilm,
     ThinFilmStack,
     ThinFilmStackReference,
-    Parallelepiped,
 )
 from nomad_material_processing.vapor_deposition import (
-    VaporDeposition,
-    VaporDepositionStep,
-    SampleParameters,
     ChamberEnvironment,
-    SubstrateHeater,
-    Pressure,
-    Temperature,
-    VolumetricFlowRate,
-    SubstrateHolder,
-    SubstrateHolderPosition,
     FilledSubstrateHolder,
     FilledSubstrateHolderPosition,
     InsertReduction,
+    Pressure,
+    SampleParameters,
+    SubstrateHeater,
+    SubstrateHolder,
+    SubstrateHolderPosition,
+    Temperature,
+    VaporDeposition,
+    VaporDepositionStep,
+    VolumetricFlowRate,
 )
-
 from nomad_material_processing.vapor_deposition.cvd import (
     CVDSource,
     Rotation,
 )
-
 from nomad_measurements import (
     ActivityReference,
 )
-
 from nomad_measurements.xrd import ELNXRayDiffraction
-
-from nomad.config import config
-
-from lakeshore_nomad_plugin.hall.schema import HallMeasurement
-
-from pdi_nomad_plugin.utils import (
-    create_archive,
-    handle_section,
+from structlog.stdlib import (
+    BoundLogger,
 )
+
+from pdi_nomad_plugin.characterization.schema import AFMmeasurement, LightMicroscope
 from pdi_nomad_plugin.general.schema import (
     PDIMBECategory,
     SampleCutPDI,
 )
-from pdi_nomad_plugin.characterization.schema import AFMmeasurement, LightMicroscope
-
-from pdi_nomad_plugin.general.schema import PDICategory, PDIMBECategory
-
-# m_package = Package(name="mbe_PDI")
-
-from nomad.metainfo import (
-    SchemaPackage,
+from pdi_nomad_plugin.utils import (
+    create_archive,
+    handle_section,
 )
 
-configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:mbe_schema')
+configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:schema')
 
 m_package = SchemaPackage()
 
@@ -502,7 +467,7 @@ class SubstrateBatchMbe(SubstrateMbe, EntryData):
         filetype = 'yaml'
         if not self.number_of_substrates:
             logger.error(
-                f"Error in SubstrateBatch: 'number_of_substrates' expected, but None found."
+                "Error in SubstrateBatch: 'number_of_substrates' expected, but None found."
             )
         if self.substrates:
             logger.error(
@@ -900,9 +865,6 @@ class XRDmeasurementReference(SectionReference):
             and self.reference is not None
             and hasattr(self, 'sample_id')
         ):
-            from nomad.datamodel.context import ServerContext
-            from nomad.app.v1.routers.uploads import get_upload_with_read_access
-            from nomad.datamodel.data import User
 
             # xrd_context = ServerContext(
             #     get_upload_with_read_access(

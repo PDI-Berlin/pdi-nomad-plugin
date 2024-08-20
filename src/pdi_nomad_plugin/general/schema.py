@@ -1,82 +1,43 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from nomad.datamodel.datamodel import (
-        EntryArchive,
-    )
-    from structlog.stdlib import (
-        BoundLogger,
-    )
+    pass
 
-from nomad.config import config
-from nomad.datamodel.data import Schema
-from nomad.datamodel.metainfo.annotations import ELNAnnotation, ELNComponentEnum
-from nomad.metainfo import Quantity, SchemaPackage
 
 import numpy as np
-import yaml
-import json
-import math
-
-from nomad.datamodel.data import EntryData, EntryDataCategory, ArchiveSection
-
-from nomad.metainfo import (
-    SchemaPackage,
-    Package,
-    Quantity,
-    SubSection,
-    Datetime,
-    Section,
-    Category,
-    MEnum,
-    Reference,
-)
-
-from nomad.metainfo import (
-    SectionProxy,
-    Reference,
-)
-
-from nomad.datamodel.metainfo.basesections import (
-    CompositeSystem,
-    Component,
-    System,
-    Activity,
-    ActivityStep,
-    ProcessStep,
-    Process,
-    CompositeSystemReference,
-    PureSubstanceSection,
-    PureSubstanceComponent,
-)
 from nomad.config import config
-from nomad.datamodel.metainfo.annotations import (
-    ELNAnnotation,
-    ELNComponentEnum,
+from nomad.datamodel.data import EntryData, EntryDataCategory
+from nomad.datamodel.metainfo.annotations import ELNAnnotation, ELNComponentEnum
+from nomad.datamodel.metainfo.basesections import (
+    CompositeSystemReference,
+    Process,
 )
-
+from nomad.metainfo import (
+    Category,
+    Quantity,
+    Reference,
+    SchemaPackage,
+    Section,
+    SectionProxy,
+    SubSection,
+)
+from nomad.utils import hash
 from nomad_material_processing import (
-    SubstrateReference,
     Geometry,
 )
-
-
 from nomad_material_processing.general.schema import (
-    Recipe,
-    Etching,
     Annealing,
-    Cleaning,
-    EtchingRecipe,
     AnnealingRecipe,
+    Cleaning,
     CleaningRecipe,
+    Etching,
+    EtchingRecipe,
+    Recipe,
 )
-from nomad_measurements.general.schema import ActivityReference
-
-from nomad.utils import hash
 
 from pdi_nomad_plugin.utils import create_archive
 
-configuration = config.get_plugin_entry_point('pdi_nomad_plugin.general:general_schema')
+configuration = config.get_plugin_entry_point('pdi_nomad_plugin.general:schema')
 
 m_package = SchemaPackage()
 
@@ -258,11 +219,11 @@ class SampleCutPDI(Process, EntryData):
         filetype = 'yaml'
         if not self.number_of_samples:
             logger.error(
-                f"Error in SampleCut: 'number_of_samples' expected, but None found."
+                "Error in SampleCut: 'number_of_samples' expected, but None found."
             )
         if not self.parent_sample:
             logger.error(
-                f"Error in SampleCut: 'parent_sample' expected, but None found."
+                "Error in SampleCut: 'parent_sample' expected, but None found."
             )
         if self.children_samples:
             logger.error(

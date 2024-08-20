@@ -16,95 +16,75 @@
 # limitations under the License.
 #
 
-from time import sleep, perf_counter
-import pandas as pd
-import yaml
-import json
-from typing import Dict, List
 
-from nomad.units import ureg
-from nomad.utils import hash
-from nomad.metainfo import MSection, Quantity, Section
-from nomad.parsing import MatchingParser
-from nomad.datamodel.metainfo.annotations import ELNAnnotation
+import pandas as pd
 from nomad.datamodel.data import EntryData
 from nomad.datamodel.datamodel import EntryArchive, EntryMetadata
-
+from nomad.datamodel.metainfo.annotations import ELNAnnotation
 from nomad.datamodel.metainfo.basesections import (
-    SystemComponent,
     CompositeSystemReference,
-    PubChemPureSubstanceSection,
     ElementalComposition,
+    PubChemPureSubstanceSection,
     PureSubstanceComponent,
     PureSubstanceSection,
-    ExperimentStep,
 )
-
+from nomad.metainfo import Quantity, Section
+from nomad.parsing import MatchingParser
+from nomad.utils import hash
 from nomad_material_processing import (
+    Dopant,
+    Miscut,
+    SubstrateCrystalProperties,
     SubstrateReference,
     ThinFilmReference,
-    ThinFilmStackReference,
-    Parallelepiped,
-    SubstrateCrystalProperties,
-    Miscut,
-    Dopant,
 )
 from nomad_material_processing.vapor_deposition import (
     Pressure,
-    VolumetricFlowRate,
     Temperature,
+    VolumetricFlowRate,
 )
-
 from nomad_material_processing.vapor_deposition.cvd import (
-    PartialVaporPressure,
     BubblerEvaporator,
-    Rotation,
     BubblerSource,
-    GasCylinderSource,
-    GasCylinderEvaporator,
-    PushPurgeGasFlow,
-    MistSource,
-    MistEvaporator,
     ComponentConcentration,
-)
-
-from pdi_nomad_plugin.general.schema import (
-    SampleCutPDI,
+    GasCylinderEvaporator,
+    GasCylinderSource,
+    MistEvaporator,
+    MistSource,
+    PushPurgeGasFlow,
+    Rotation,
 )
 
 from pdi_nomad_plugin.characterization.schema import (
     AFMmeasurement,
     AFMresults,
 )
-
+from pdi_nomad_plugin.general.schema import (
+    SampleCutPDI,
+)
 from pdi_nomad_plugin.mbe.schema import (
+    AFMmeasurementReference,
+    ChamberEnvironmentMbe,
+    CharacterizationMbePDI,
     ExperimentMbePDI,
-    GrowthStepMbePDI,
+    FilamentTemperature,
     GrowthMbePDI,
     GrowthMbePDIReference,
+    GrowthStepMbePDI,
     SampleCutPDIReference,
+    SampleParametersMbe,
+    Shape,
+    SubstrateMbe,
     ThinFilmMbe,
     ThinFilmStackMbePDI,
     ThinFilmStackMbeReference,
-    SampleParametersMbe,
-    ChamberEnvironmentMbe,
-    ShaftTemperature,
-    FilamentTemperature,
-    SubstrateMbe,
-    Shape,
-    SampleParametersMbe,
-    FilamentTemperature,
     XRDmeasurementReference,
-    AFMmeasurementReference,
-    CharacterizationMbePDI,
 )
-
 from pdi_nomad_plugin.utils import (
+    clean_col_names,
     create_archive,
-    fetch_substrate,
     fill_quantity,
     rename_block_cols,
-    clean_col_names,
     split_list_by_element,
 )
 

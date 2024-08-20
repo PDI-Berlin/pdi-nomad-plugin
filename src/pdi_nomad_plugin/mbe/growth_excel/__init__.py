@@ -26,7 +26,7 @@ class MbeParserEntryPoint(ParserEntryPoint):
         return ParserMbePDI(**self.dict())
 
 
-mbe_growth_excel_parser = MbeParserEntryPoint(
+parser = MbeParserEntryPoint(
     name='MbeParser',
     description='Parser defined using the new plugin mechanism.',
     mainfile_name_re=r'.+\.xlsx',
