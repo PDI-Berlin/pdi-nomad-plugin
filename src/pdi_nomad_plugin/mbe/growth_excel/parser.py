@@ -31,19 +31,22 @@ from nomad.datamodel.metainfo.basesections import (
 from nomad.metainfo import Quantity, Section
 from nomad.parsing import MatchingParser
 from nomad.utils import hash
-from nomad_material_processing import (
+
+from nomad_material_processing.general import (
+    SubstrateReference,
+    ThinFilmReference,
     Dopant,
     Miscut,
     SubstrateCrystalProperties,
-    SubstrateReference,
-    ThinFilmReference,
 )
-from nomad_material_processing.vapor_deposition import (
+from nomad_material_processing.vapor_deposition.general import (
     Pressure,
     Temperature,
     VolumetricFlowRate,
 )
-from nomad_material_processing.vapor_deposition.cvd import (
+
+from nomad_material_processing.vapor_deposition.cvd.general import (
+    PartialVaporPressure,
     BubblerEvaporator,
     BubblerSource,
     ComponentConcentration,

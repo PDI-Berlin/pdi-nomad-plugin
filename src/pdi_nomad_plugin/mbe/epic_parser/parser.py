@@ -25,6 +25,53 @@ from nomad.metainfo import Quantity, Section
 from nomad.parsing import MatchingParser
 from nomad.utils import hash
 
+from nomad.datamodel.metainfo.basesections import (
+    SystemComponent,
+    CompositeSystemReference,
+    PubChemPureSubstanceSection,
+    ElementalComposition,
+    PureSubstanceComponent,
+    PureSubstanceSection,
+    ExperimentStep,
+)
+
+from nomad_material_processing.general import (
+    SubstrateReference,
+    ThinFilmReference,
+    ThinFilmStackReference,
+    Parallelepiped,
+    SubstrateCrystalProperties,
+    Miscut,
+    Dopant,
+)
+from nomad_material_processing.vapor_deposition.general import (
+    Pressure,
+    VolumetricFlowRate,
+    Temperature,
+)
+
+from nomad_material_processing.vapor_deposition.cvd.general import (
+    PartialVaporPressure,
+    BubblerEvaporator,
+    Rotation,
+    BubblerSource,
+    GasCylinderSource,
+    GasCylinderEvaporator,
+    PushPurgeGasFlow,
+    MistSource,
+    MistEvaporator,
+    ComponentConcentration,
+)
+
+from pdi_nomad_plugin.general.schema import (
+    SampleCutPDI,
+)
+
+from pdi_nomad_plugin.characterization.schema import (
+    AFMmeasurement,
+    AFMresults,
+)
+
 from pdi_nomad_plugin.mbe.schema import (
     ExperimentMbePDI,
 )
@@ -34,11 +81,11 @@ from pdi_nomad_plugin.utils import (
 
 
 class RawFileGrowthRun(EntryData):
-    m_def = Section(a_eln=None, label="Raw File Growth Run")
+    m_def = Section(a_eln=None, label='Raw File Growth Run')
     name = Quantity(
         type=str,
         a_eln=ELNAnnotation(
-            component="StringEditQuantity",
+            component='StringEditQuantity',
         ),
     )
     growth_run = Quantity(
@@ -46,24 +93,24 @@ class RawFileGrowthRun(EntryData):
         # a_eln=ELNAnnotation(
         #     component="ReferenceEditQuantity",
         # ),
-        shape=["*"],
+        shape=['*'],
     )
 
 
 class ParserEpicPDI(MatchingParser):
     def parse(self, mainfile: str, archive: EntryArchive, logger) -> None:
-        data_file = mainfile.split("/")[-1]
-        folder_name = mainfile.split("/")[-2]
+        data_file = mainfile.split('/')[-1]
+        folder_name = mainfile.split('/')[-2]
         data_path = f"{mainfile.split('raw/')[0]}raw/"
         dataframe_list = epiclog_read_batch(folder_name, data_path)
-        filetype = "yaml"
+        filetype = 'yaml'
 
         print(dataframe_list)
         # creating experiment archive
-        experiment_filename = f"a00000.ExperimentMbePDI.archive.{filetype}"
+        experiment_filename = f'a00000.ExperimentMbePDI.archive.{filetype}'
         experiment_data = ExperimentMbePDI(
-            name="experiment",
-            method="MBE 2 experiment",
+            name='experiment',
+            method='MBE 2 experiment',
         )
         experiment_archive = EntryArchive(
             data=experiment_data if experiment_data else ExperimentMbePDI(),
@@ -81,7 +128,7 @@ class ParserEpicPDI(MatchingParser):
         archive.data = RawFileGrowthRun(
             name=data_file,
             growth_run=[
-                f"../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, experiment_filename)}#data"
+                f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, experiment_filename)}#data'
             ],
         )
-        archive.metadata.entry_name = data_file + "raw file"
+        archive.metadata.entry_name = data_file + 'raw file'

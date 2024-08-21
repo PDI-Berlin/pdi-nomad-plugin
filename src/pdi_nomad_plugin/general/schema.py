@@ -25,7 +25,12 @@ from nomad.utils import hash
 from nomad_material_processing import (
     Geometry,
 )
-from nomad_material_processing.general.schema import (
+
+from nomad_material_processing.general import (
+    SubstrateReference,
+    Geometry,
+    Recipe,
+    Etching,
     Annealing,
     AnnealingRecipe,
     Cleaning,

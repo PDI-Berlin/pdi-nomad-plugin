@@ -34,7 +34,9 @@ from nomad.metainfo import (
     SubSection,
 )
 from nomad.utils import hash
-from nomad_material_processing import (
+
+from nomad_material_processing.general import (
+    SubstrateReference,
     CrystallineSubstrate,
     Geometry,
     Parallelepiped,
@@ -43,7 +45,10 @@ from nomad_material_processing import (
     ThinFilmStack,
     ThinFilmStackReference,
 )
-from nomad_material_processing.vapor_deposition import (
+from nomad_material_processing.vapor_deposition.general import (
+    VaporDeposition,
+    VaporDepositionStep,
+    SampleParameters,
     ChamberEnvironment,
     FilledSubstrateHolder,
     FilledSubstrateHolderPosition,
@@ -58,12 +63,23 @@ from nomad_material_processing.vapor_deposition import (
     VaporDepositionStep,
     VolumetricFlowRate,
 )
-from nomad_material_processing.vapor_deposition.cvd import (
+
+from nomad_material_processing.vapor_deposition.cvd.general import (
     CVDSource,
     Rotation,
 )
-from nomad_measurements.general.schema import (
-    ActivityReference,
+
+from nomad_measurements.general import ActivityReference
+
+from nomad_measurements.xrd.schema import ELNXRayDiffraction
+
+from nomad.config import config
+
+from lakeshore_nomad_plugin.hall.schema import HallMeasurement
+
+from pdi_nomad_plugin.utils import (
+    create_archive,
+    handle_section,
 )
 from nomad_measurements.xrd.schema import ELNXRayDiffraction
 from structlog.stdlib import (
