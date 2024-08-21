@@ -1,4 +1,28 @@
 import json
+from unidecode import unidecode
+import plotly.express as px
+from plotly.subplots import make_subplots
+from nomad.datamodel.metainfo.basesections import (
+    Activity,
+    ActivityStep,
+    System,
+    Component,
+    SystemComponent,
+    PureSubstance,
+    Process,
+    PureSubstanceComponent,
+    PureSubstanceSection,
+    EntityReference,
+    CompositeSystemReference,
+    PubChemPureSubstanceSection,
+    SectionReference,
+    Experiment,
+    ExperimentStep,
+)
+from nomad.datamodel.metainfo.annotations import (
+    ELNAnnotation,
+    SectionProperties,
+)
 
 import numpy as np
 from nomad.config import config
@@ -481,6 +505,32 @@ class SubstrateBatchMbe(SubstrateMbe, EntryData):
 
         super(SubstrateBatchMbe, self).normalize(archive, logger)
         filetype = 'yaml'
+
+        if (
+            self.supplier_id is not None
+            and self.crystal_id is not None
+            and self.charge_id is not None
+            and self.lab_id is None
+        ):
+            self.lab_id = f'{self.supplier_id}_{self.crystal_id}_{self.charge_id}'
+        elif (
+            self.supplier_id is not None
+            and self.crystal_id is not None
+            and self.charge_id is not None
+            and self.lab_id is not None
+        ):
+            logger.warning(f"Error in SubstrateBatch: 'Substrate ID' is already given.")
+        elif (
+            self.supplier_id is None
+            and self.crystal_id is None
+            and self.charge_id is None
+            and self.lab_id is None
+        ):
+            logger.error(
+                f"Error in SubstrateBatch: 'Substrate ID' expected, but None found.\n"
+                f"Please provide 'supplier_id', 'crystal_id', 'charge_id' and 'lab_id'."
+            )
+
         if not self.number_of_substrates:
             logger.error(
                 "Error in SubstrateBatch: 'number_of_substrates' expected, but None found."
