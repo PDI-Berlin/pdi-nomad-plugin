@@ -22,9 +22,6 @@ from nomad.metainfo import (
     SubSection,
 )
 from nomad.utils import hash
-from nomad_material_processing import (
-    Geometry,
-)
 
 from nomad_material_processing.general import (
     SubstrateReference,
