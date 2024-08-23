@@ -5,6 +5,7 @@ from nomad.datamodel.metainfo.basesections import (
     Measurement,
     MeasurementResult,
 )
+from nomad.datamodel.metainfo.annotations import ELNAnnotation, ELNComponentEnum
 from nomad.metainfo import Datetime, Quantity, SchemaPackage, Section, SubSection
 
 from pdi_nomad_plugin.general.schema import (
@@ -72,6 +73,14 @@ class AFMmeasurement(Measurement, EntryData):
         type=str,
         default='AFM (PDI MBE)',
     )
+    tags = Quantity(
+        type=str,
+        shape=['*'],
+        description='Searchable tags for this entry. Use Explore tab for searching.',
+        a_eln=ELNAnnotation(
+            component='StringEditQuantity',
+        ),
+    )
     description = Quantity(
         type=str,
         a_eln={'component': 'StringEditQuantity'},
@@ -124,6 +133,14 @@ class LightMicroscope(Measurement, EntryData):
     method = Quantity(
         type=str,
         default='Light Microscope (MBE PDI)',
+    )
+    tags = Quantity(
+        type=str,
+        shape=['*'],
+        description='Searchable tags for this entry. Use Explore tab for searching.',
+        a_eln=ELNAnnotation(
+            component='StringEditQuantity',
+        ),
     )
     datetime = Quantity(
         type=Datetime,
