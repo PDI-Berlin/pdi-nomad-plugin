@@ -1,28 +1,4 @@
 import json
-from unidecode import unidecode
-import plotly.express as px
-from plotly.subplots import make_subplots
-from nomad.datamodel.metainfo.basesections import (
-    Activity,
-    ActivityStep,
-    System,
-    Component,
-    SystemComponent,
-    PureSubstance,
-    Process,
-    PureSubstanceComponent,
-    PureSubstanceSection,
-    EntityReference,
-    CompositeSystemReference,
-    PubChemPureSubstanceSection,
-    SectionReference,
-    Experiment,
-    ExperimentStep,
-)
-from nomad.datamodel.metainfo.annotations import (
-    ELNAnnotation,
-    SectionProperties,
-)
 
 import numpy as np
 from nomad.config import config
@@ -58,9 +34,7 @@ from nomad.metainfo import (
     SubSection,
 )
 from nomad.utils import hash
-
 from nomad_material_processing.general import (
-    SubstrateReference,
     CrystallineSubstrate,
     Geometry,
     Parallelepiped,
@@ -68,10 +42,11 @@ from nomad_material_processing.general import (
     ThinFilmStack,
     ThinFilmStackReference,
 )
+from nomad_material_processing.vapor_deposition.cvd.general import (
+    CVDSource,
+    Rotation,
+)
 from nomad_material_processing.vapor_deposition.general import (
-    VaporDeposition,
-    VaporDepositionStep,
-    SampleParameters,
     ChamberEnvironment,
     FilledSubstrateHolder,
     FilledSubstrateHolderPosition,
@@ -86,24 +61,7 @@ from nomad_material_processing.vapor_deposition.general import (
     VaporDepositionStep,
     VolumetricFlowRate,
 )
-
-from nomad_material_processing.vapor_deposition.cvd.general import (
-    CVDSource,
-    Rotation,
-)
-
 from nomad_measurements.general import ActivityReference
-
-from nomad_measurements.xrd.schema import ELNXRayDiffraction
-
-from nomad.config import config
-
-from lakeshore_nomad_plugin.hall.schema import HallMeasurement
-
-from pdi_nomad_plugin.utils import (
-    create_archive,
-    handle_section,
-)
 from nomad_measurements.xrd.schema import ELNXRayDiffraction
 from structlog.stdlib import (
     BoundLogger,
@@ -498,8 +456,8 @@ class SubstrateMbe(CrystallineSubstrate, EntryData):
             and self.lab_id is not None
         ):
             logger.warning(
-                f"Error in SubstrateBatch: 'Substrate ID' is already given:\n"
-                f'supplier_id, charge_id, crystal_id are not used to compose it.'
+                "Error in SubstrateBatch: 'Substrate ID' is already given:\n"
+                'supplier_id, charge_id, crystal_id are not used to compose it.'
             )
         elif (
             self.supplier_id is None
@@ -508,9 +466,9 @@ class SubstrateMbe(CrystallineSubstrate, EntryData):
             and self.lab_id is None
         ):
             logger.error(
-                f"Error in SubstrateBatch: 'Substrate ID' expected, but None found.\n"
-                f"Please provide 'supplier_id', 'crystal_id', and 'charge_id',"
-                f" or 'Substrate ID'."
+                "Error in SubstrateBatch: 'Substrate ID' expected, but None found.\n"
+                "Please provide 'supplier_id', 'crystal_id', and 'charge_id',"
+                " or 'Substrate ID'."
             )
 
 

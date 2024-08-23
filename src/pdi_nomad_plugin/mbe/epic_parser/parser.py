@@ -25,53 +25,6 @@ from nomad.metainfo import Quantity, Section
 from nomad.parsing import MatchingParser
 from nomad.utils import hash
 
-from nomad.datamodel.metainfo.basesections import (
-    SystemComponent,
-    CompositeSystemReference,
-    PubChemPureSubstanceSection,
-    ElementalComposition,
-    PureSubstanceComponent,
-    PureSubstanceSection,
-    ExperimentStep,
-)
-
-from nomad_material_processing.general import (
-    SubstrateReference,
-    ThinFilmReference,
-    ThinFilmStackReference,
-    Parallelepiped,
-    SubstrateCrystalProperties,
-    Miscut,
-    Dopant,
-)
-from nomad_material_processing.vapor_deposition.general import (
-    Pressure,
-    VolumetricFlowRate,
-    Temperature,
-)
-
-from nomad_material_processing.vapor_deposition.cvd.general import (
-    PartialVaporPressure,
-    BubblerEvaporator,
-    Rotation,
-    BubblerSource,
-    GasCylinderSource,
-    GasCylinderEvaporator,
-    PushPurgeGasFlow,
-    MistSource,
-    MistEvaporator,
-    ComponentConcentration,
-)
-
-from pdi_nomad_plugin.general.schema import (
-    SampleCutPDI,
-)
-
-from pdi_nomad_plugin.characterization.schema import (
-    AFMmeasurement,
-    AFMresults,
-)
-
 from pdi_nomad_plugin.mbe.schema import (
     ExperimentMbePDI,
 )

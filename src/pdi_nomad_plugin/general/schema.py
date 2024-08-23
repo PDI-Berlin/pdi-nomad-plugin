@@ -22,18 +22,14 @@ from nomad.metainfo import (
     SubSection,
 )
 from nomad.utils import hash
-
 from nomad_material_processing.general import (
-    SubstrateReference,
-    Geometry,
-    Recipe,
-    Etching,
     Annealing,
     AnnealingRecipe,
     Cleaning,
     CleaningRecipe,
     Etching,
     EtchingRecipe,
+    Geometry,
     Recipe,
 )
 
