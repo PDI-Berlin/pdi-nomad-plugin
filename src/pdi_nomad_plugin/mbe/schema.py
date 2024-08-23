@@ -64,7 +64,6 @@ from nomad_material_processing.general import (
     CrystallineSubstrate,
     Geometry,
     Parallelepiped,
-    SubstrateReference,
     ThinFilm,
     ThinFilmStack,
     ThinFilmStackReference,
@@ -130,20 +129,31 @@ class InsertReductionPDI(InsertReduction, EntryData):
         label='InsertReduction',
         categories=[PDIMBECategory],
     )
+    tags = Quantity(
+        type=str,
+        shape=['*'],
+        description='Searchable tags for this entry. Use Explore tab for searching.',
+        a_eln=ELNAnnotation(
+            component='StringEditQuantity',
+        ),
+    )
 
 
 class SubstrateHolderPositionPDI(SubstrateHolderPosition):
     rho = Quantity(
         type=float,
+        unit='meter',
         description="""
         Rho angle of the substrate holder in the x-y plane.
         """,
         a_eln=ELNAnnotation(
             component=ELNComponentEnum.NumberEditQuantity,
+            defaultDisplayUnit='millimeter',
         ),
     )
     theta = Quantity(
         type=float,
+        unit='degree',
         description="""
         Theta angle of the substrate holder in the x-z plane.
         """,
@@ -161,6 +171,14 @@ class SubstrateHolderPDI(SubstrateHolder, EntryData):
     positions = SubSection(
         section_def=SubstrateHolderPositionPDI,
         repeats=True,
+    )
+    tags = Quantity(
+        type=str,
+        shape=['*'],
+        description='Searchable tags for this entry. Use Explore tab for searching.',
+        a_eln=ELNAnnotation(
+            component='StringEditQuantity',
+        ),
     )
 
 
@@ -193,6 +211,14 @@ class FilledSubstrateHolderPDI(FilledSubstrateHolder, EntryData):
     positions = SubSection(
         section_def=FilledSubstrateHolderPositionPDI,
         repeats=True,
+    )
+    tags = Quantity(
+        type=str,
+        shape=['*'],
+        description='Searchable tags for this entry. Use Explore tab for searching.',
+        a_eln=ELNAnnotation(
+            component='StringEditQuantity',
+        ),
     )
 
 
@@ -294,6 +320,14 @@ class BubblerPrecursor(PureSubstance, EntryData):
             component='FileEditQuantity',
         ),
     )
+    tags = Quantity(
+        type=str,
+        shape=['*'],
+        description='Searchable tags for this entry. Use Explore tab for searching.',
+        a_eln=ELNAnnotation(
+            component='StringEditQuantity',
+        ),
+    )
 
 
 class Cylinder(Geometry):
@@ -371,12 +405,12 @@ class SubstrateMbe(CrystallineSubstrate, EntryData):
             properties=SectionProperties(
                 order=[
                     'name',
+                    'tags',
                     'delivery_date',
                     'datetime',
                     'supplier',
                     'supplier_id',
                     'crystal_id',
-                    'charge',
                     'charge_id',
                     'polishing',
                     'lab_id',
@@ -389,14 +423,14 @@ class SubstrateMbe(CrystallineSubstrate, EntryData):
             lane_width='600px',
         ),
     )
-    # tags = Quantity(
-    #     type=str,
-    #     description='FILL',
-    #     a_eln=ELNAnnotation(
-    #         component='StringEditQuantity',
-    #         label='Box ID',
-    #     ),
-    # )
+    tags = Quantity(
+        type=str,
+        shape=['*'],
+        description='Searchable tags for this entry. Use Explore tab for searching.',
+        a_eln=ELNAnnotation(
+            component='StringEditQuantity',
+        ),
+    )
 
     delivery_date = Quantity(
         type=Datetime,
@@ -412,13 +446,6 @@ class SubstrateMbe(CrystallineSubstrate, EntryData):
         ),
         label='Crystal ID',
     )
-    charge = Quantity(
-        type=str,
-        description='FILL',
-        a_eln=ELNAnnotation(
-            component='StringEditQuantity',
-        ),
-    )
     charge_id = Quantity(
         type=str,
         description='The ID of the charge, or polishing batch, given by the manufacturer.',
@@ -433,7 +460,7 @@ class SubstrateMbe(CrystallineSubstrate, EntryData):
             'Double-side',
             'Other',
         ),
-        description='The type of conductivity of the material.',
+        description='The polishing applied to the material.',
         a_eln=ELNAnnotation(
             component=ELNComponentEnum.EnumEditQuantity,
         ),
@@ -454,6 +481,38 @@ class SubstrateMbe(CrystallineSubstrate, EntryData):
         ),
     )
 
+    def normalize(self, archive, logger):
+        super(SubstrateMbe, self).normalize(archive, logger)
+
+        if (
+            self.supplier_id is not None
+            and self.crystal_id is not None
+            and self.charge_id is not None
+            and self.lab_id is None
+        ):
+            self.lab_id = f'{self.supplier_id}_{self.crystal_id}_{self.charge_id}'
+        elif (
+            self.supplier_id is not None
+            and self.crystal_id is not None
+            and self.charge_id is not None
+            and self.lab_id is not None
+        ):
+            logger.warning(
+                f"Error in SubstrateBatch: 'Substrate ID' is already given:\n"
+                f'supplier_id, charge_id, crystal_id are not used to compose it.'
+            )
+        elif (
+            self.supplier_id is None
+            and self.crystal_id is None
+            and self.charge_id is None
+            and self.lab_id is None
+        ):
+            logger.error(
+                f"Error in SubstrateBatch: 'Substrate ID' expected, but None found.\n"
+                f"Please provide 'supplier_id', 'crystal_id', and 'charge_id',"
+                f" or 'Substrate ID'."
+            )
+
 
 class SubstrateBatchMbe(SubstrateMbe, EntryData):
     """
@@ -473,7 +532,6 @@ class SubstrateBatchMbe(SubstrateMbe, EntryData):
                     'supplier',
                     'supplier_id',
                     'crystal_id',
-                    'charge',
                     'charge_id',
                     'polishing',
                     'lab_id',
@@ -496,7 +554,7 @@ class SubstrateBatchMbe(SubstrateMbe, EntryData):
         description="""
         The substrates in the batch.
         """,
-        section_def=SubstrateMbe,
+        section_def=CompositeSystemReference,
         repeats=True,
     )
 
@@ -506,30 +564,30 @@ class SubstrateBatchMbe(SubstrateMbe, EntryData):
         super(SubstrateBatchMbe, self).normalize(archive, logger)
         filetype = 'yaml'
 
-        if (
-            self.supplier_id is not None
-            and self.crystal_id is not None
-            and self.charge_id is not None
-            and self.lab_id is None
-        ):
-            self.lab_id = f'{self.supplier_id}_{self.crystal_id}_{self.charge_id}'
-        elif (
-            self.supplier_id is not None
-            and self.crystal_id is not None
-            and self.charge_id is not None
-            and self.lab_id is not None
-        ):
-            logger.warning(f"Error in SubstrateBatch: 'Substrate ID' is already given.")
-        elif (
-            self.supplier_id is None
-            and self.crystal_id is None
-            and self.charge_id is None
-            and self.lab_id is None
-        ):
-            logger.error(
-                f"Error in SubstrateBatch: 'Substrate ID' expected, but None found.\n"
-                f"Please provide 'supplier_id', 'crystal_id', 'charge_id' and 'lab_id'."
-            )
+        # if (
+        #     self.supplier_id is not None
+        #     and self.crystal_id is not None
+        #     and self.charge_id is not None
+        #     and self.lab_id is None
+        # ):
+        #     self.lab_id = f'{self.supplier_id}_{self.crystal_id}_{self.charge_id}'
+        # elif (
+        #     self.supplier_id is not None
+        #     and self.crystal_id is not None
+        #     and self.charge_id is not None
+        #     and self.lab_id is not None
+        # ):
+        #     logger.warning(f"Error in SubstrateBatch: 'Substrate ID' is already given.")
+        # elif (
+        #     self.supplier_id is None
+        #     and self.crystal_id is None
+        #     and self.charge_id is None
+        #     and self.lab_id is None
+        # ):
+        #     logger.error(
+        #         f"Error in SubstrateBatch: 'Substrate ID' expected, but None found.\n"
+        #         f"Please provide 'supplier_id', 'crystal_id', 'charge_id' and 'lab_id'."
+        #     )
 
         if not self.number_of_substrates:
             logger.error(
@@ -546,7 +604,7 @@ class SubstrateBatchMbe(SubstrateMbe, EntryData):
             substrate_object = self.m_copy(deep=True)
             substrate_object.m_def = SubstrateMbe.m_def
             substrate_object.number_of_substrates = None
-            for substrate_index in range(self.number_of_substrates):
+            for substrate_index in range(1, self.number_of_substrates + 1):
                 child_name = self.lab_id if self.lab_id else self.name
                 substrate_filename = (
                     f'{child_name}_{substrate_index}.Substrate.archive.{filetype}'
@@ -593,6 +651,14 @@ class ThinFilmMbe(ThinFilm, EntryData):
             label='Grown Sample ID',
         ),
     )
+    tags = Quantity(
+        type=str,
+        shape=['*'],
+        description='Searchable tags for this entry. Use Explore tab for searching.',
+        a_eln=ELNAnnotation(
+            component='StringEditQuantity',
+        ),
+    )
     test_quantities = Quantity(
         type=str,
         description='Test quantity',
@@ -619,6 +685,14 @@ class ThinFilmStackMbePDI(ThinFilmStack, EntryData):
         a_eln=ELNAnnotation(
             component='StringEditQuantity',
             label='Grown Sample ID',
+        ),
+    )
+    tags = Quantity(
+        type=str,
+        shape=['*'],
+        description='Searchable tags for this entry. Use Explore tab for searching.',
+        a_eln=ELNAnnotation(
+            component='StringEditQuantity',
         ),
     )
     parent_sample = SubSection(
@@ -710,6 +784,14 @@ class PrecursorsPreparationPDI(Process, EntryData):
         a_tabular={'name': 'Precursors/Sample ID'},
         a_eln={'component': 'StringEditQuantity', 'label': 'Sample ID'},
     )
+    tags = Quantity(
+        type=str,
+        shape=['*'],
+        description='Searchable tags for this entry. Use Explore tab for searching.',
+        a_eln=ELNAnnotation(
+            component='StringEditQuantity',
+        ),
+    )
     name = Quantity(
         type=str,
         description='FILL',
@@ -798,27 +880,6 @@ class HallMeasurementReference(SectionReference):
         a_eln=ELNAnnotation(
             component='ReferenceEditQuantity',
             label='Hall Measurement Reference',
-        ),
-    )
-
-
-class SubstrateMbeReference(SubstrateReference):
-    """
-    A section for describing a system component and its role in a composite system.
-    """
-
-    lab_id = Quantity(
-        type=str,
-        a_eln=ELNAnnotation(
-            component=ELNComponentEnum.StringEditQuantity,
-            label='Substrate ID',
-        ),
-    )
-    reference = Quantity(
-        type=SubstrateMbe,
-        a_eln=ELNAnnotation(
-            component=ELNComponentEnum.ReferenceEditQuantity,
-            label='Substrate',
         ),
     )
 
@@ -1225,6 +1286,14 @@ class GrowthMbePDI(VaporDeposition, EntryData):
         type=str,
         default='MBE PDI',
     )
+    tags = Quantity(
+        type=str,
+        shape=['*'],
+        description='Searchable tags for this entry. Use Explore tab for searching.',
+        a_eln=ELNAnnotation(
+            component='StringEditQuantity',
+        ),
+    )
     data_file = Quantity(
         type=str,
         description='Upload here the spreadsheet file containing the deposition control data',
@@ -1385,6 +1454,14 @@ class ExperimentMbePDI(Experiment, EntryData):
     # lab_id
     method = Quantity(
         type=str,
+    )
+    tags = Quantity(
+        type=str,
+        shape=['*'],
+        description='Searchable tags for this entry. Use Explore tab for searching.',
+        a_eln=ELNAnnotation(
+            component='StringEditQuantity',
+        ),
     )
     data_file = Quantity(
         type=str,

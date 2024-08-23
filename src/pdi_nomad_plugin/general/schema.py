@@ -168,8 +168,26 @@ class BackSideCoatingRecipePDI(BackSideCoatingPDI, Recipe, EntryData):
     """
 
     m_def = Section(
-        label='BackSideCoatingRecipe',
-        a_eln={'hide': ['datetime', 'samples']},
+        a_eln={
+            'hide': [
+                'datetime',
+                'samples',
+                'starting_time',
+                'ending_time',
+                'location',
+                'recipe',
+            ]
+        },
+    )
+    lab_id = Quantity(
+        type=str,
+        description="""
+        A unique human readable ID for the recipe.
+        """,
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.StringEditQuantity,
+            label='Recipe ID',
+        ),
     )
 
 
@@ -238,9 +256,13 @@ class SampleCutPDI(Process, EntryData):
             children_object = self.parent_sample.reference.m_copy(deep=True)
             if self.children_geometry:
                 children_object.geometry = self.children_geometry
+                children_object.geometry.height = (
+                    self.parent_sample.reference.geometry.height
+                )
             else:
-                children_object.geometry = None
-            for sample_index in range(self.number_of_samples):
+                logger.warning('No children geometry found. Using parent geometry.')
+
+            for sample_index in range(1, self.number_of_samples + 1):
                 child_name = (
                     self.parent_sample.reference.lab_id
                     if self.parent_sample.reference.lab_id
