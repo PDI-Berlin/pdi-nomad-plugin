@@ -25,20 +25,6 @@ from nomad.datamodel.context import ClientContext
 from nomad.datamodel.metainfo.basesections import (
     ExperimentStep,
 )
-
-from nomad_material_processing.general import Dopant, SubstrateReference
-from nomad_material_processing.vapor_deposition.general import (
-    MolarFlowRate,
-    Temperature,
-    Pressure,
-    VolumetricFlowRate,
-)
-from nomad_material_processing.vapor_deposition.cvd.general import (
-    PartialVaporPressure,
-    BubblerEvaporator,
-)
-
-from nomad.datamodel.datamodel import EntryArchive, EntryMetadata
 from nomad.units import ureg
 
 

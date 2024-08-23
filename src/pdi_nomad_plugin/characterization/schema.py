@@ -1,11 +1,11 @@
 import numpy as np
 from nomad.config import config
 from nomad.datamodel.data import EntryData
+from nomad.datamodel.metainfo.annotations import ELNAnnotation
 from nomad.datamodel.metainfo.basesections import (
     Measurement,
     MeasurementResult,
 )
-from nomad.datamodel.metainfo.annotations import ELNAnnotation, ELNComponentEnum
 from nomad.metainfo import Datetime, Quantity, SchemaPackage, Section, SubSection
 
 from pdi_nomad_plugin.general.schema import (
