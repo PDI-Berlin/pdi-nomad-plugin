@@ -22,8 +22,6 @@ from nomad.datamodel.metainfo.plot import PlotSection
 from nomad.datamodel.metainfo.workflow import (
     Link,
 )
-
-# m_package = Package(name="mbe_PDI")
 from nomad.metainfo import (
     Datetime,
     MEnum,
