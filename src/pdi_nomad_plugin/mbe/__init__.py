@@ -22,16 +22,40 @@ from pydantic import Field
 # from .schema import *
 
 
-class PDIMbeEntryPoint(SchemaPackageEntryPoint):
-    parameter: int = Field(0, description='Custom configuration parameter')
-
+class PDIMbeMaterialsEntryPoint(SchemaPackageEntryPoint):
     def load(self):
-        from pdi_nomad_plugin.mbe.schema import m_package
+        from pdi_nomad_plugin.mbe.materials import m_package
 
         return m_package
 
 
-schema = PDIMbeEntryPoint(
-    name='MbeSchema',
+materials_schema = PDIMbeMaterialsEntryPoint(
+    name='MbeMaterialsSchema',
     description='Schema package defined using the new plugin mechanism.',
+)
+
+
+class PDIMbeInstrumentEntryPoint(SchemaPackageEntryPoint):
+    def load(self):
+        from pdi_nomad_plugin.mbe.instrument import m_package
+
+        return m_package
+
+
+instrument_schema = PDIMbeInstrumentEntryPoint(
+    name='MbeInstrumentSchema',
+    description='Schema package defined using the new plugin mechanism.',
+)
+
+
+class PDIMbeProcessesEntryPoint(SchemaPackageEntryPoint):
+    def load(self):
+        from pdi_nomad_plugin.mbe.processes import m_package
+
+        return m_package
+
+
+processes_schema = PDIMbeProcessesEntryPoint(
+    name='MbeProcessesSchema',
+    description='Schema package for synthesis and characterization processes.',
 )

@@ -124,6 +124,8 @@ where = ["src"]
 
 general_schema = "pdi_nomad_plugin.general:schema"
 characterization_schema = "pdi_nomad_plugin.characterization:schema"
-mbe_schema = "pdi_nomad_plugin.mbe:schema"
-mbe_growth_excel_parser = "pdi_nomad_plugin.mbe.growth_excel:parser"
+materials_schema = "pdi_nomad_plugin.mbe:materials_schema"
+instrument_schema = "pdi_nomad_plugin.mbe:instrument_schema"
+processes_schema = "pdi_nomad_plugin.mbe:processes_schema"
+mbe_instrument = "pdi_nomad_plugin.mbe:schema"
 mbe_epic_parser = "pdi_nomad_plugin.mbe.epic_parser:parser"
