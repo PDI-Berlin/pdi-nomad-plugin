@@ -7,6 +7,7 @@ from nomad.datamodel.metainfo.annotations import (
 )
 from nomad.datamodel.metainfo.basesections import (
     PubChemPureSubstanceSection,
+    Instrument,
 )
 from nomad.metainfo import (
     MEnum,
@@ -23,15 +24,16 @@ from nomad_material_processing.vapor_deposition.general import (
     SubstrateHolder,
     SubstrateHolderPosition,
 )
-from nomad_material_processing.vapor_deposition.pvd.general import PVDSource
+from nomad_material_processing.vapor_deposition.pvd.general import (
+    PVDSource,
+    PVDEvaporationSource,
+)
 from nomad_material_processing.vapor_deposition.pvd.thermal import (
     ThermalEvaporationSource,
 )
 
 from pdi_nomad_plugin.general.schema import (
     PDIMBECategory,
-    PVDEvaporationSource,
-    PVDSource,
 )
 
 configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:instrument_schema')
@@ -66,12 +68,11 @@ class SourcePDI(ArchiveSection):
 
     type = Quantity(
         type=MEnum(
-            values=[
-                'RF plasma source',
-                'Single filament effusion cell',
-                'Double filament effusion cell',
-                'other',
-            ],
+            'RF plasma source',
+            'Single filament effusion cell',
+            'Double filament effusion cell',
+            'other',
+            'none',
         ),
         description='The type of the thermal evaporation source.',
     )
@@ -343,6 +344,116 @@ class FilledSubstrateHolderPDI(FilledSubstrateHolder, EntryData):
         a_eln=ELNAnnotation(
             component='StringEditQuantity',
         ),
+    )
+
+
+class Port(ArchiveSection):
+    """
+    A port in the MBE machine where
+    the source,
+    the substrate holder,
+    or the window
+    are mounted.
+    """
+
+    m_def = Section()
+
+    lab_id = Quantity(
+        type=str,
+        description="""
+        A unique human readable ID for the Instrument with a specific setup.
+        """,
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.StringEditQuantity,
+            label='Port ID',
+        ),
+    )
+    number = Quantity(
+        type=int,
+        description='The port number.',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+        ),
+    )
+    theta = Quantity(
+        type=float,
+        description='Theta angle of the port in the x-z plane.',
+        unit='degree',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+        ),
+    )
+    phi = Quantity(
+        type=float,
+        description='Phi angle of the port in the x-y plane.',
+        unit='degree',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+        ),
+    )
+    flange_diameter = Quantity(
+        type=float,
+        description='The diameter of the flange.',
+        unit='meter',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+            defaultDisplayUnit='millimeter',
+        ),
+    )
+    flange_to_substrate_distance = Quantity(
+        type=float,
+        description='The distance from the flange to the substrate.',
+        unit='meter',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+            defaultDisplayUnit='millimeter',
+        ),
+    )
+    device = Quantity(
+        type=MEnum(
+            'source',
+            'substrate holder',
+            'window',
+            'other',
+            'none',
+        ),
+        description='The device mounted in the port.',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.EnumEditQuantity,
+        ),
+    )
+
+
+class InstrumentMbePDI(Instrument, EntryData):
+    """
+    The instrument used for Molecular Beam Epitaxy (MBE) at PDI.
+    """
+
+    m_def = Section(
+        label='Instrument MBE',
+        categories=[PDIMBECategory],
+    )
+
+    lab_id = Quantity(
+        type=str,
+        description="""
+        A unique human readable ID for the Instrument with a specific setup.
+        """,
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.StringEditQuantity,
+            label='Instrument ID',
+        ),
+    )
+    chamber_geometry = Quantity(
+        type=str,
+        description='The geometry of the MBE chamber.',
+        a_eln=ELNAnnotation(
+            component='StringEditQuantity',
+        ),
+    )
+    port_list = SubSection(
+        section_def=Port,
+        repeats=True,
     )
 
 

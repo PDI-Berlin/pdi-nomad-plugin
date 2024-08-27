@@ -1,4 +1,3 @@
-
 from nomad.config import config
 from nomad.datamodel.data import EntryData
 from nomad.datamodel.metainfo.annotations import (
@@ -106,7 +105,8 @@ class SubstrateMbe(CrystallineSubstrate, EntryData):
         type=MEnum(
             'Single-side',
             'Double-side',
-            'Other',
+            'other',
+            'none',
         ),
         description='The polishing applied to the material.',
         a_eln=ELNAnnotation(

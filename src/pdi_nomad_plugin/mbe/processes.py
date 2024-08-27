@@ -651,7 +651,7 @@ class ExperimentMbePDI(Experiment, EntryData):
     m_def = Section(
         # a_eln={"hide": ["steps"]},
         categories=[PDIMBECategory],
-        label='MBE Experiment',
+        label='Experiment MBE',
     )
     # lab_id
     method = Quantity(
