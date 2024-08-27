@@ -1,32 +1,18 @@
-import json
 
-import numpy as np
 from nomad.config import config
-from nomad.datamodel.data import ArchiveSection, EntryData
+from nomad.datamodel.data import EntryData
 from nomad.datamodel.metainfo.annotations import (
     ELNAnnotation,
     ELNComponentEnum,
     SectionProperties,
 )
 from nomad.datamodel.metainfo.basesections import (
-    Component,
     CompositeSystemReference,
-    Experiment,
-    Process,
-    PureSubstance,
-    SectionReference,
-    System,
-    SystemComponent,
-)
-from nomad.datamodel.metainfo.plot import PlotSection
-from nomad.datamodel.metainfo.workflow import (
-    Link,
 )
 from nomad.metainfo import (
     Datetime,
     MEnum,
     Quantity,
-    Reference,
     SchemaPackage,
     Section,
     SubSection,
@@ -38,37 +24,18 @@ from nomad_material_processing.general import (
     ThinFilmStack,
     ThinFilmStackReference,
 )
-from nomad_material_processing.vapor_deposition.cvd.general import (
-    CVDSource,
-    Rotation,
-)
-from nomad_material_processing.vapor_deposition.general import (
-    ChamberEnvironment,
-    Pressure,
-    SampleParameters,
-    SubstrateHeater,
-    Temperature,
-    VaporDeposition,
-    VaporDepositionStep,
-    VolumetricFlowRate,
-)
-from nomad_measurements.general import ActivityReference
-from nomad_measurements.xrd.schema import ELNXRayDiffraction
 from structlog.stdlib import (
     BoundLogger,
 )
 
-from pdi_nomad_plugin.characterization.schema import AFMmeasurement, LightMicroscope
 from pdi_nomad_plugin.general.schema import (
     PDIMBECategory,
-    SampleCutPDI,
 )
 from pdi_nomad_plugin.utils import (
     create_archive,
-    handle_section,
 )
 
-configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:materials')
+configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:materials_schema')
 
 m_package = SchemaPackage()
 

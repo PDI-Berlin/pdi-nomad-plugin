@@ -34,7 +34,7 @@ from pdi_nomad_plugin.general.schema import (
     PVDSource,
 )
 
-configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:instrument')
+configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:instrument_schema')
 
 m_package = SchemaPackage()
 

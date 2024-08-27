@@ -9,34 +9,19 @@ from nomad.datamodel.metainfo.annotations import (
     SectionProperties,
 )
 from nomad.datamodel.metainfo.basesections import (
-    Component,
     CompositeSystemReference,
     Experiment,
-    Process,
-    PureSubstance,
     SectionReference,
-    System,
-    SystemComponent,
 )
 from nomad.datamodel.metainfo.plot import PlotSection
 from nomad.datamodel.metainfo.workflow import (
     Link,
 )
 from nomad.metainfo import (
-    Datetime,
-    MEnum,
     Quantity,
-    Reference,
     SchemaPackage,
     Section,
     SubSection,
-)
-from nomad.utils import hash
-from nomad_material_processing.general import (
-    CrystallineSubstrate,
-    ThinFilm,
-    ThinFilmStack,
-    ThinFilmStackReference,
 )
 from nomad_material_processing.vapor_deposition.cvd.general import (
     CVDSource,
@@ -54,9 +39,6 @@ from nomad_material_processing.vapor_deposition.general import (
 )
 from nomad_measurements.general import ActivityReference
 from nomad_measurements.xrd.schema import ELNXRayDiffraction
-from structlog.stdlib import (
-    BoundLogger,
-)
 
 from pdi_nomad_plugin.characterization.schema import AFMmeasurement, LightMicroscope
 from pdi_nomad_plugin.general.schema import (
@@ -68,7 +50,7 @@ from pdi_nomad_plugin.utils import (
     handle_section,
 )
 
-configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:processes')
+configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:processes_schema')
 
 m_package = SchemaPackage()
 
@@ -720,10 +702,6 @@ class ExperimentMbePDI(Experiment, EntryData):
             'component': 'StringEditQuantity',
         },
     )
-    precursors_preparation = SubSection(
-        section_def=PrecursorsPreparationPDIReference,
-    )
-
     pregrowth = SubSection(
         section_def=GrowthMbePDIReference,
     )

@@ -56,8 +56,10 @@ plugins:
     - "nomad_measurements.transmission:parser"
     - 'pdi_nomad_plugin.general:general_schema'
     - 'pdi_nomad_plugin.characterization:characterization_schema'
-    - 'pdi_nomad_plugin.mbe:mbe_schema'
-    - 'pdi_nomad_plugin.mbe.growth_excel:mbe_growth_excel_parser'
+    - "pdi_nomad_plugin.mbe:materials_schema"
+    - "pdi_nomad_plugin.mbe:instrument_schema"
+    - "pdi_nomad_plugin.mbe:processes_schema"
+    - "pdi_nomad_plugin.mbe.epic_parser:parser"
 ```
 
 ## Usage
