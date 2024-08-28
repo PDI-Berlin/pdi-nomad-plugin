@@ -23,8 +23,10 @@ from nomad.metainfo import (
     Section,
     SubSection,
 )
+from nomad_material_processing.vapor_deposition.pvd.general import (
+    PVDSource,
+)
 from nomad_material_processing.vapor_deposition.cvd.general import (
-    CVDSource,
     Rotation,
 )
 from nomad_material_processing.vapor_deposition.general import (
@@ -437,7 +439,7 @@ class GrowthStepMbePDI(VaporDepositionStep, PlotSection):
         repeats=True,
     )
     sources = SubSection(
-        section_def=CVDSource,
+        section_def=PVDSource,
         repeats=True,
     )
     environment = SubSection(
@@ -665,12 +667,6 @@ class ExperimentMbePDI(Experiment, EntryData):
             component='StringEditQuantity',
         ),
     )
-    data_file = Quantity(
-        type=str,
-        description='Upload here the spreadsheet file containing the growth data',
-        a_browser={'adaptor': 'RawFileAdaptor'},
-        a_eln={'component': 'FileEditQuantity'},
-    )
     description = Quantity(
         type=str,
         description='description',
@@ -678,32 +674,6 @@ class ExperimentMbePDI(Experiment, EntryData):
             component='StringEditQuantity',
             label='Notes',
         ),
-    )
-    substrate_temperature = Quantity(
-        type=np.float64,
-        description='FILL THE DESCRIPTION',
-        a_eln=ELNAnnotation(
-            component='NumberEditQuantity',
-            defaultDisplayUnit='celsius',
-        ),
-        unit='kelvin',
-    )
-    oxygen_argon_ratio = Quantity(
-        type=str,
-        description='FILL THE DESCRIPTION',
-        a_eln=ELNAnnotation(
-            component='StringEditQuantity',
-        ),
-    )
-    composition = Quantity(
-        type=str,
-        description='FILL THE DESCRIPTION',
-        a_eln={
-            'component': 'StringEditQuantity',
-        },
-    )
-    pregrowth = SubSection(
-        section_def=GrowthMbePDIReference,
     )
     growth_run = SubSection(
         section_def=GrowthMbePDIReference,

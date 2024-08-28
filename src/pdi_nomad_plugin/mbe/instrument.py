@@ -91,6 +91,11 @@ class SourcePDI(ArchiveSection):
             component=ELNComponentEnum.NumberEditQuantity,
         ),
     )
+    epic_loop = Quantity(
+        type=str,
+        description='The EPIC loop number.',
+    )
+
     distance_to_substrate = Quantity(
         type=float,
         description='The distance from the tip of the source to the substrate.',
@@ -453,6 +458,11 @@ class InstrumentMbePDI(Instrument, EntryData):
     )
     port_list = SubSection(
         section_def=Port,
+        repeats=True,
+    )
+    # TODO parse these things properly within the port_list
+    sources = SubSection(
+        section_def=PVDSource,
         repeats=True,
     )
 

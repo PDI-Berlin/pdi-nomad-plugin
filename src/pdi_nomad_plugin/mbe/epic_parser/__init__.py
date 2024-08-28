@@ -19,6 +19,26 @@ from nomad.config.models.plugins import ParserEntryPoint
 from pydantic import Field
 
 
+class ConfigurationParserEntryPoint(ParserEntryPoint):
+    def load(self):
+        from pdi_nomad_plugin.mbe.epic_parser.parser import ParserConfigurationMbePDI
+
+        return ParserConfigurationMbePDI(**self.dict())
+
+
+config_parser = ConfigurationParserEntryPoint(
+    name='ConfigMbeParser',
+    description='Parse excel files for configuration parameters logged manually.',
+    mainfile_name_re=r'.+\.xlsx',
+    mainfile_mime_re='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    mainfile_contents_dict={
+        'MBE sources': {'__has_all_keys': ['source type', 'EPIC_loop']},
+        'comment symbol': '#',
+        #'MBE gas mixing': {'__has_all_keys': ['mfc1_EPIC_name']},
+    },
+)
+
+
 class EpicParserEntryPoint(ParserEntryPoint):
     def load(self):
         from pdi_nomad_plugin.mbe.epic_parser.parser import ParserEpicPDI
@@ -26,9 +46,10 @@ class EpicParserEntryPoint(ParserEntryPoint):
         return ParserEpicPDI(**self.dict())
 
 
-parser = EpicParserEntryPoint(
-    name='EpicParser',
+epic_parser = EpicParserEntryPoint(
+    name='EpicMbeParser',
     description='Parser for EPIC log files.',
     mainfile_mime_re=r'text/.*|application/zip',
     mainfile_name_re=r'.+\.txt',
+    mainfile_contents_re=r'EPIC',
 )
