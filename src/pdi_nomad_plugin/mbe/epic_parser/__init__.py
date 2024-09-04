@@ -34,8 +34,8 @@ config_parser = ConfigurationParserEntryPoint(
     mainfile_contents_dict={
         'MBE sources': {'__has_all_keys': ['source type', 'EPIC_loop']},
         '__comment_symbol': '#',
-        'MBE gas mixing ss': {'__has_all_keys': ['mfc1_EPIC_name']},
     },
+    # 'MBE gas mixing': {'__has_all_keys': ['mfc1_EPIC_name']},
 )
 
 
