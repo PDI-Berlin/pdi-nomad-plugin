@@ -16,9 +16,6 @@
 # limitations under the License.
 #
 import pandas as pd
-
-from nomad.utils import hash
-
 from epic_scraper.epicfileimport.epic_module import (
     epiclog_read_batch,
 )
@@ -29,24 +26,15 @@ from nomad.metainfo import Quantity, Section
 from nomad.parsing import MatchingParser
 from nomad.utils import hash
 
-from nomad_material_processing.vapor_deposition.general import (
-    GasFlow,
-    VolumetricFlowRate,
+from pdi_nomad_plugin.mbe.instrument import (
+    InstrumentMbePDI,
+    PlasmaSourcePDI,
 )
-from nomad_material_processing.vapor_deposition.pvd.general import (
-    PVDSource,
-)
-from pdi_nomad_plugin.mbe.processes import (
+from pdi_nomad_plugin.mbe.schema import (
     ExperimentMbePDI,
     GrowthMbePDI,
     GrowthMbePDIReference,
 )
-
-from pdi_nomad_plugin.mbe.instrument import (
-    PlasmaSourcePDI,
-    InstrumentMbePDI,
-)
-
 from pdi_nomad_plugin.utils import (
     create_archive,
 )

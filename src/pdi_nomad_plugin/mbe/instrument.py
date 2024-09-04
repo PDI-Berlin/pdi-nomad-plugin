@@ -6,8 +6,8 @@ from nomad.datamodel.metainfo.annotations import (
     SectionProperties,
 )
 from nomad.datamodel.metainfo.basesections import (
-    PubChemPureSubstanceSection,
     Instrument,
+    PubChemPureSubstanceSection,
 )
 from nomad.metainfo import (
     MEnum,
@@ -25,8 +25,8 @@ from nomad_material_processing.vapor_deposition.general import (
     SubstrateHolderPosition,
 )
 from nomad_material_processing.vapor_deposition.pvd.general import (
-    PVDSource,
     PVDEvaporationSource,
+    PVDSource,
 )
 from nomad_material_processing.vapor_deposition.pvd.thermal import (
     ThermalEvaporationSource,
