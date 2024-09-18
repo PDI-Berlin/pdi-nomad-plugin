@@ -12,6 +12,7 @@ from nomad.datamodel.metainfo.basesections import (
 from nomad.metainfo import (
     MEnum,
     Quantity,
+    Datetime,
     SchemaPackage,
     Section,
     SubSection,
@@ -27,9 +28,12 @@ from nomad_material_processing.vapor_deposition.general import (
 from nomad_material_processing.vapor_deposition.pvd.general import (
     PVDEvaporationSource,
     PVDSource,
+    SourcePower,
 )
 from nomad_material_processing.vapor_deposition.pvd.thermal import (
     ThermalEvaporationSource,
+    ThermalEvaporationHeater,
+    ThermalEvaporationHeaterTemperature,
 )
 
 from pdi_nomad_plugin.general.schema import (
@@ -68,9 +72,9 @@ class SourcePDI(ArchiveSection):
 
     type = Quantity(
         type=MEnum(
-            'RF plasma source',
-            'Single filament effusion cell',
-            'Double filament effusion cell',
+            'RF plasma source (PLASMA)',
+            'Single filament effusion cell (SFC)',
+            'Double filament effusion cell (DFC)',
             'other',
             'none',
         ),
@@ -145,6 +149,72 @@ class Crucible(ArchiveSection):
         description='image of teh crucible',
         a_browser={'adaptor': 'RawFileAdaptor'},
         a_eln={'component': 'FileEditQuantity'},
+    )
+
+
+class EffusionCellHeaterPower(SourcePower):
+    """
+    The power of the heater during the deposition process.
+    """
+
+    m_def = Section(
+        a_plot=[
+            {
+                'label': 'voltage_set',
+                'x': 'time',
+                'y': ['value'],
+            },
+        ],
+        a_eln={
+            'hide': [
+                'set_value',
+                'set_time',
+            ]
+        },
+    )
+    time = Quantity(
+        type=Datetime,
+        description='The process time when each of the values were recorded.',
+        shape=['*'],
+    )
+
+
+class EffusionCellHeaterTemperature(ThermalEvaporationHeaterTemperature):
+    """
+    The temperature of the heater during the deposition process.
+    """
+
+    m_def = Section(
+        a_plot=[
+            {
+                'label': 'voltage_set',
+                'x': 'time',
+                'y': ['value'],
+            },
+        ],
+        a_eln={
+            'hide': [
+                'set_value',
+                'set_time',
+            ]
+        },
+    )
+    value = Quantity(
+        type=float,
+        unit='kelvin',
+        shape=['*'],
+    )
+    time = Quantity(
+        type=Datetime,
+        description='The process time when each of the values were recorded.',
+        shape=['*'],
+    )
+
+
+class EffusionCellHeater(ThermalEvaporationHeater):
+    m_def = Section()
+    temperature = SubSection(
+        section_def=EffusionCellHeaterTemperature,
     )
 
 
@@ -274,7 +344,7 @@ class SubstrateHolderPositionPDI(SubstrateHolderPosition):
         type=float,
         unit='meter',
         description="""
-        Rho angle of the substrate holder in the x-y plane.
+        Module of the substrate holder in the x-y plane.
         """,
         a_eln=ELNAnnotation(
             component=ELNComponentEnum.NumberEditQuantity,
@@ -285,7 +355,7 @@ class SubstrateHolderPositionPDI(SubstrateHolderPosition):
         type=float,
         unit='degree',
         description="""
-        Theta angle of the substrate holder in the x-z plane.
+        Theta angle of the substrate holder in the x-y plane.
         """,
         a_eln=ELNAnnotation(
             component=ELNComponentEnum.NumberEditQuantity,

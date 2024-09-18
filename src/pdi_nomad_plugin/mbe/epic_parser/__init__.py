@@ -32,7 +32,7 @@ config_parser = ConfigurationParserEntryPoint(
     mainfile_name_re=r'.+\.xlsx',
     mainfile_mime_re='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     mainfile_contents_dict={
-        'MBE sources': {'__has_all_keys': ['source type', 'EPIC_loop']},
+        'MBE sources': {'__has_all_keys': ['source type', 'EPIC loop']},
         '__comment_symbol': '#',
     },
     # 'MBE gas mixing': {'__has_all_keys': ['mfc1_EPIC_name']},

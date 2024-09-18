@@ -15,9 +15,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import glob
+import os
 import pandas as pd
 from epic_scraper.epicfileimport.epic_module import (
+    epiclog_read,
     epiclog_read_batch,
+    growth_time,
 )
 from nomad.datamodel.data import EntryData
 from nomad.datamodel.datamodel import EntryArchive, EntryMetadata
@@ -29,14 +33,19 @@ from nomad.utils import hash
 from pdi_nomad_plugin.mbe.instrument import (
     InstrumentMbePDI,
     PlasmaSourcePDI,
+    EffusionCellHeaterTemperature,
+    EffusionCellHeater,
+    EffusionCellSourcePDI,
+    EffusionCellHeaterPower,
 )
-from pdi_nomad_plugin.mbe.schema import (
+from pdi_nomad_plugin.mbe.processes import (
     ExperimentMbePDI,
     GrowthMbePDI,
     GrowthMbePDIReference,
 )
 from pdi_nomad_plugin.utils import (
     create_archive,
+    fill_quantity,
 )
 
 
@@ -80,25 +89,77 @@ class ParserConfigurationMbePDI(MatchingParser):
     def parse(self, mainfile: str, archive: EntryArchive, logger) -> None:
         filetype = 'yaml'
         data_file = mainfile.split('/')[-1]
-        data_file_with_path = mainfile.split('raw/')[-1]
+        upload_path = f"{mainfile.split('raw/')[0]}raw/"
+        folder_name = mainfile.split('/')[-2]
+        folder_path = f'{upload_path}{folder_name}/'
         xlsx = pd.ExcelFile(mainfile)
 
+        # "MBE config files" sheet
+        config_sheet = pd.read_excel(
+            xlsx,
+            'MBE config files',
+            comment='#',
+        )
+        config_sheet.columns = config_sheet.columns.str.strip()
+
+        if config_sheet['messages'][0]:
+            messages_df = epiclog_read(f"{folder_path}{config_sheet['messages'][0]}")
+            growth_events = growth_time(messages_df)
+            for line in growth_events.iterrows():
+                if line[1]['to'] == 'GC':
+                    growth_object = line[1][
+                        'object'
+                    ]  # check TODO with Oliver which ID to write
+                    growth_starttime = line[0]
+                if line[1]['from'] == 'GC':
+                    growth_endtime = line[0]
+                    growth_duration = growth_endtime - growth_starttime
+                    print(
+                        f'Detected growth of {growth_object} started at {growth_starttime} and ended at {growth_endtime} with a duration of {growth_duration}'
+                    )
+
         # "MBE sources" sheet
-        sources_file = pd.read_excel(
+        sources_sheet = pd.read_excel(
             xlsx,
             'MBE sources',
             comment='#',
         )
-        sources_file.columns = sources_file.columns.str.strip()
+        sources_sheet.columns = sources_sheet.columns.str.strip()
 
         sources = []
-        for sources_index, sources_row in sources_file.iterrows():
+        for sources_index, sources_row in sources_sheet.iterrows():
             if sources_row['source type'] == 'PLASMA':
                 sources.append(
                     PlasmaSourcePDI(
-                        epic_loop=sources_row['EPIC_loop'],
+                        epic_loop=sources_row['EPIC loop'],
                     )
                 )
+
+            if sources_row['source type'] == 'DFC':
+                dfc_temperature = epiclog_read(
+                    f"{folder_path}{sources_row['temp mv']}.txt"
+                )
+                dfc_power = epiclog_read(f"{folder_path}{sources_row['temp wop']}.txt")
+                sources.append(
+                    EffusionCellSourcePDI(
+                        epic_loop=fill_quantity(sources_row, 'EPIC loop'),
+                        vapor_source=EffusionCellHeater(
+                            temperature=EffusionCellHeaterTemperature(
+                                value=dfc_temperature.values,
+                                time=list(dfc_temperature.index),
+                            ),
+                            power=EffusionCellHeaterPower(
+                                value=dfc_power.values,
+                                time=list(dfc_power.index),
+                            ),
+                        ),
+                    )
+                )
+
+        # list files in folder:
+        found_files = glob.glob(os.path.join(folder_path, '*.txt'))
+
+        # print(found_files)
 
         # creating instrument archive
         instrument_filename = f'{data_file}.InstrumentMbePDI.archive.{filetype}'
@@ -177,8 +238,8 @@ class ParserEpicPDI(MatchingParser):
     def parse(self, mainfile: str, archive: EntryArchive, logger) -> None:
         data_file = mainfile.split('/')[-1]
         folder_name = mainfile.split('/')[-2]
-        data_path = f"{mainfile.split('raw/')[0]}raw/"
-        dataframe_list = epiclog_read_batch(folder_name, data_path)
+        upload_path = f"{mainfile.split('raw/')[0]}raw/"
+        dataframe_list = epiclog_read_batch(folder_name, upload_path)
         filetype = 'yaml'
 
         print(dataframe_list)

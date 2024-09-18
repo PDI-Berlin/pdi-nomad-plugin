@@ -144,26 +144,54 @@ def handle_section(section):
         return [ExperimentStep(activity=section, name=section.name)]
 
 
-def fill_quantity(dataframe, column_header, read_unit=None):
+# see imem plugin for this function
+def fill_quantity(dataframe, column_header, read_unit=None, array=False):
     """
     Fetches a value from a DataFrame and optionally converts it to a specified unit.
     """
     try:
-        value = (
-            dataframe[column_header] if not pd.isna(dataframe[column_header]) else None
-        )
+        if isinstance(dataframe[column_header], str):
+            value = (
+                dataframe[column_header].strip()
+                if not pd.isna(dataframe[column_header])
+                else None
+            )
+        else:
+            value = (
+                dataframe[column_header]
+                if not pd.isna(dataframe[column_header])
+                else None
+            )
     except (KeyError, IndexError):
         value = None
 
+    pint_value = None
     if read_unit is not None:
         try:
-            if value is not None:
-                value *= ureg(read_unit).to_base_units().magnitude
-        except ValueError:
-            if not value.empty():
-                value *= ureg(read_unit).to_base_units().magnitude
+            if value != '' and value is not None:
+                if not array:
+                    pint_value = ureg.Quantity(
+                        value,
+                        ureg(read_unit),
+                    )
+                else:
+                    pint_value = ureg.Quantity(
+                        [value],
+                        ureg(read_unit),
+                    )
 
-    return value
+            else:
+                value = None
+        except ValueError:
+            if hasattr(value, 'empty') and not value.empty():
+                pint_value = ureg.Quantity(
+                    value,
+                    ureg(read_unit),
+                )
+            elif value == '':
+                pint_value = None
+
+    return pint_value if read_unit is not None else value
 
 
 def clean_col_names(growth_run_dataframe):

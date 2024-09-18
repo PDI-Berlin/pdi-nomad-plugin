@@ -11,15 +11,23 @@ from nomad.datamodel.metainfo.annotations import (
 from nomad.datamodel.metainfo.basesections import (
     CompositeSystemReference,
     Experiment,
+    Process,
+    System,
+    Component,
+    PureSubstance,
     SectionReference,
+    SystemComponent,
 )
 from nomad.datamodel.metainfo.plot import PlotSection
 from nomad.datamodel.metainfo.workflow import (
     Link,
 )
 from nomad.metainfo import (
+    Datetime,
+    MEnum,
     Quantity,
     SchemaPackage,
+    Reference,
     Section,
     SubSection,
 )
@@ -67,104 +75,6 @@ from pdi_nomad_plugin.utils import (
 configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:processes_schema')
 
 m_package = SchemaPackage()
-
-
-class InsertReductionPDI(InsertReduction, EntryData):
-    m_def = Section(
-        label='InsertReduction',
-        categories=[PDIMBECategory],
-    )
-    tags = Quantity(
-        type=str,
-        shape=['*'],
-        description='Searchable tags for this entry. Use Explore tab for searching.',
-        a_eln=ELNAnnotation(
-            component='StringEditQuantity',
-        ),
-    )
-
-
-class SubstrateHolderPositionPDI(SubstrateHolderPosition):
-    rho = Quantity(
-        type=float,
-        unit='meter',
-        description="""
-        Rho angle of the substrate holder in the x-y plane.
-        """,
-        a_eln=ELNAnnotation(
-            component=ELNComponentEnum.NumberEditQuantity,
-            defaultDisplayUnit='millimeter',
-        ),
-    )
-    theta = Quantity(
-        type=float,
-        unit='degree',
-        description="""
-        Theta angle of the substrate holder in the x-z plane.
-        """,
-        a_eln=ELNAnnotation(
-            component=ELNComponentEnum.NumberEditQuantity,
-        ),
-    )
-
-
-class SubstrateHolderPDI(SubstrateHolder, EntryData):
-    m_def = Section(
-        label='SubstrateHolder (Empty Template)',
-        categories=[PDIMBECategory],
-    )
-    positions = SubSection(
-        section_def=SubstrateHolderPositionPDI,
-        repeats=True,
-    )
-    tags = Quantity(
-        type=str,
-        shape=['*'],
-        description='Searchable tags for this entry. Use Explore tab for searching.',
-        a_eln=ELNAnnotation(
-            component='StringEditQuantity',
-        ),
-    )
-
-
-class FilledSubstrateHolderPositionPDI(FilledSubstrateHolderPosition):
-    rho = Quantity(
-        type=float,
-        description="""
-        Rho angle of the substrate holder in the x-y plane.
-        """,
-        a_eln=ELNAnnotation(
-            component=ELNComponentEnum.NumberEditQuantity,
-        ),
-    )
-    theta = Quantity(
-        type=float,
-        description="""
-        Theta angle of the substrate holder in the x-z plane.
-        """,
-        a_eln=ELNAnnotation(
-            component=ELNComponentEnum.NumberEditQuantity,
-        ),
-    )
-
-
-class FilledSubstrateHolderPDI(FilledSubstrateHolder, EntryData):
-    m_def = Section(
-        label='SubstrateHolder (Filled)',
-        categories=[PDIMBECategory],
-    )
-    positions = SubSection(
-        section_def=FilledSubstrateHolderPositionPDI,
-        repeats=True,
-    )
-    tags = Quantity(
-        type=str,
-        shape=['*'],
-        description='Searchable tags for this entry. Use Explore tab for searching.',
-        a_eln=ELNAnnotation(
-            component='StringEditQuantity',
-        ),
-    )
 
 
 class Shape(Parallelepiped):
