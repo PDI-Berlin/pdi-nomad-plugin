@@ -33,9 +33,12 @@ from nomad.utils import hash
 from pdi_nomad_plugin.mbe.instrument import (
     InstrumentMbePDI,
     PlasmaSourcePDI,
-    EffusionCellHeaterTemperature,
+    RfGeneratorHeater,
+    RfGeneratorHeaterPower,
+    SingleFilamentEffusionCell,
+    DoubleFilamentEffusionCell,
     EffusionCellHeater,
-    EffusionCellSourcePDI,
+    EffusionCellHeaterTemperature,
     EffusionCellHeaterPower,
 )
 from pdi_nomad_plugin.mbe.processes import (
@@ -127,34 +130,83 @@ class ParserConfigurationMbePDI(MatchingParser):
         sources_sheet.columns = sources_sheet.columns.str.strip()
 
         sources = []
+        source_object = None
         for sources_index, sources_row in sources_sheet.iterrows():
             if sources_row['source type'] == 'PLASMA':
-                sources.append(
-                    PlasmaSourcePDI(
-                        epic_loop=sources_row['EPIC loop'],
-                    )
+                # TODO check if file exists, everywhere
+                forward_power = epiclog_read(
+                    f"{folder_path}{sources_row['f power']}.txt"
                 )
-
+                reflected_power = epiclog_read(
+                    f"{folder_path}{sources_row['r power']}.txt"
+                )
+                source_object = PlasmaSourcePDI()
+                source_object.vapor_source = RfGeneratorHeater()
+                source_object.vapor_source.forward_power = RfGeneratorHeaterPower()
+                source_object.vapor_source.reflected_power = RfGeneratorHeaterPower()
+                source_object.vapor_source.forward_power.value = forward_power.values
+                source_object.vapor_source.forward_power.time = list(
+                    forward_power.index
+                )
+                source_object.vapor_source.reflected_power.value = (
+                    reflected_power.values
+                )
+                source_object.vapor_source.reflected_power.time = list(
+                    reflected_power.index
+                )
+                # TODO fill in dissipated power as the difference between forward and reflected power
+                sources.append(source_object)
+            if sources_row['source type'] == 'SFC':
+                sfc_temperature = epiclog_read(
+                    f"{folder_path}{sources_row['temp mv']}.txt"
+                )
+                sfc_power = epiclog_read(f"{folder_path}{sources_row['temp wop']}.txt")
+                source_object = SingleFilamentEffusionCell()
+                source_object.vapor_source = EffusionCellHeater()
+                source_object.vapor_source.temperature = EffusionCellHeaterTemperature()
+                source_object.vapor_source.power = EffusionCellHeaterPower()
+                source_object.vapor_source.temperature.value = sfc_temperature.values
+                source_object.vapor_source.temperature.time = list(
+                    sfc_temperature.index
+                )
+                source_object.vapor_source.power.value = sfc_power.values
+                source_object.vapor_source.power.time = list(sfc_power.index)
+                sources.append(source_object)
             if sources_row['source type'] == 'DFC':
                 dfc_temperature = epiclog_read(
                     f"{folder_path}{sources_row['temp mv']}.txt"
                 )
                 dfc_power = epiclog_read(f"{folder_path}{sources_row['temp wop']}.txt")
-                sources.append(
-                    EffusionCellSourcePDI(
-                        epic_loop=fill_quantity(sources_row, 'EPIC loop'),
-                        vapor_source=EffusionCellHeater(
-                            temperature=EffusionCellHeaterTemperature(
-                                value=dfc_temperature.values,
-                                time=list(dfc_temperature.index),
-                            ),
-                            power=EffusionCellHeaterPower(
-                                value=dfc_power.values,
-                                time=list(dfc_power.index),
-                            ),
-                        ),
-                    )
+                dfc_hl_temperature = epiclog_read(
+                    f"{folder_path}{sources_row['hl temp mv']}.txt"
                 )
+                dfc_hl_power = epiclog_read(
+                    f"{folder_path}{sources_row['hl temp wop']}.txt"
+                )
+                source_object = DoubleFilamentEffusionCell()
+                source_object.vapor_source = EffusionCellHeater()
+                source_object.vapor_source.temperature = EffusionCellHeaterTemperature()
+                source_object.vapor_source.power = EffusionCellHeaterPower()
+                source_object.vapor_source_hot_lip = EffusionCellHeater()
+                source_object.vapor_source_hot_lip.temperature = (
+                    EffusionCellHeaterTemperature()
+                )
+                source_object.vapor_source_hot_lip.power = EffusionCellHeaterPower()
+                source_object.vapor_source.temperature.value = dfc_temperature.values
+                source_object.vapor_source.temperature.time = list(
+                    dfc_temperature.index
+                )
+                source_object.vapor_source.power.value = dfc_power.values
+                source_object.vapor_source.power.time = list(dfc_power.index)
+                source_object.vapor_source_hot_lip.temperature.value = (
+                    dfc_hl_temperature.values
+                )
+                source_object.vapor_source_hot_lip.temperature.time = list(
+                    dfc_hl_temperature.index
+                )
+                source_object.vapor_source_hot_lip.power.value = dfc_hl_power.values
+                source_object.vapor_source_hot_lip.power.time = list(dfc_hl_power.index)
+                sources.append(source_object)
 
         # list files in folder:
         found_files = glob.glob(os.path.join(folder_path, '*.txt'))

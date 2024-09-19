@@ -248,7 +248,73 @@ class EffusionCellSourcePDI(ThermalEvaporationSource, SourcePDI):
     )
 
 
-class RfGenerator(PVDEvaporationSource):
+class SingleFilamentEffusionCell(EffusionCellSourcePDI):
+    """
+    A single filament effusion cell is a thermal evaporation source
+    with a single filament that heats the material to the point of evaporation.
+    """
+
+    m_def = Section(
+        label='Single Filament Effusion Cell',
+    )
+    vapor_source = SubSection(
+        section_def=EffusionCellHeater,
+    )
+
+
+class DoubleFilamentEffusionCell(EffusionCellSourcePDI):
+    """
+    A double filament effusion cell is a thermal evaporation source
+    with two filaments that heat the material to the point of evaporation.
+    """
+
+    m_def = Section(
+        label='Double Filament Effusion Cell',
+        a_eln=ELNAnnotation(
+            properties=SectionProperties(
+                order=[
+                    'vapor_source',
+                    'vapor_source_hot_lip',
+                ],
+            ),
+        ),
+    )
+    vapor_source = SubSection(
+        section_def=EffusionCellHeater,
+    )
+    vapor_source_hot_lip = SubSection(
+        section_def=EffusionCellHeater,
+    )
+
+
+class RfGeneratorHeaterPower(SourcePower):
+    """
+    The power of the heater during the deposition process.
+    """
+
+    m_def = Section(
+        a_plot=[
+            {
+                'label': 'voltage_set',
+                'x': 'time',
+                'y': ['value'],
+            },
+        ],
+        a_eln={
+            'hide': [
+                'set_value',
+                'set_time',
+            ]
+        },
+    )
+    time = Quantity(
+        type=Datetime,
+        description='The process time when each of the values were recorded.',
+        shape=['*'],
+    )
+
+
+class RfGeneratorHeater(PVDEvaporationSource):
     """
     The RF generator used to create the plasma.
     """
@@ -256,32 +322,20 @@ class RfGenerator(PVDEvaporationSource):
     m_def = Section(
         label='RF Generator',
     )
-    forward_power = Quantity(
-        type=float,
+    forward_power = SubSection(
+        section_def=RfGeneratorHeaterPower,
         description='The power of the RF generator sent in the coil.',
-        unit='W',
-        a_eln=ELNAnnotation(
-            component='NumberEditQuantity',
-        ),
     )
-    reflected_power = Quantity(
-        type=float,
+    reflected_power = SubSection(
+        section_def=RfGeneratorHeaterPower,
         description='The power reflected back.',
-        unit='W',
-        a_eln=ELNAnnotation(
-            component='NumberEditQuantity',
-        ),
     )
-    dissipated_power = Quantity(
-        type=float,
+    dissipated_power = SubSection(
+        section_def=RfGeneratorHeaterPower,
         description="""
         Difference between forward and reflected power.
         The power adsorbed by the vapor.
         """,
-        unit='W',
-        a_eln=ELNAnnotation(
-            component='NumberEditQuantity',
-        ),
     )
 
 
@@ -313,7 +367,7 @@ class PlasmaSourcePDI(PVDSource, SourcePDI):
         ),
     )
     vapor_source = SubSection(
-        section_def=RfGenerator,
+        section_def=RfGeneratorHeater,
         description="""
         The RF generator used to create the plasma.
         """,
