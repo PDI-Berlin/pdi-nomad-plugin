@@ -44,7 +44,11 @@ from pdi_nomad_plugin.mbe.instrument import (
 from pdi_nomad_plugin.mbe.processes import (
     ExperimentMbePDI,
     GrowthMbePDI,
+    GrowthStepMbePDI,
     GrowthMbePDIReference,
+    SampleParametersMbe,
+    SubstrateHeaterTemperature,
+    SubstrateHeaterPower,
 )
 from pdi_nomad_plugin.utils import (
     create_archive,
@@ -105,6 +109,16 @@ class ParserConfigurationMbePDI(MatchingParser):
         )
         config_sheet.columns = config_sheet.columns.str.strip()
 
+        # "MBE sources" sheet
+        sources_sheet = pd.read_excel(
+            xlsx,
+            'MBE sources',
+            comment='#',
+        )
+        sources_sheet.columns = sources_sheet.columns.str.strip()
+
+        # reading Messages.txt
+        # TODO so far, nothing is done with this metadata
         if config_sheet['messages'][0]:
             messages_df = epiclog_read(f"{folder_path}{config_sheet['messages'][0]}")
             growth_events = growth_time(messages_df)
@@ -121,14 +135,7 @@ class ParserConfigurationMbePDI(MatchingParser):
                         f'Detected growth of {growth_object} started at {growth_starttime} and ended at {growth_endtime} with a duration of {growth_duration}'
                     )
 
-        # "MBE sources" sheet
-        sources_sheet = pd.read_excel(
-            xlsx,
-            'MBE sources',
-            comment='#',
-        )
-        sources_sheet.columns = sources_sheet.columns.str.strip()
-
+        # filling in the sources objects list
         sources = []
         source_object = None
         for sources_index, sources_row in sources_sheet.iterrows():
@@ -208,10 +215,38 @@ class ParserConfigurationMbePDI(MatchingParser):
                 source_object.vapor_source_hot_lip.power.time = list(dfc_hl_power.index)
                 sources.append(source_object)
 
-        # list files in folder:
-        found_files = glob.glob(os.path.join(folder_path, '*.txt'))
+            # filling in growth process archive
+            if sources_row['source type'] == 'SUB':
+                substrate_temperature = epiclog_read(
+                    f"{folder_path}{sources_row['temp mv']}.txt"
+                )
+                substrate_power = epiclog_read(
+                    f"{folder_path}{sources_row['temp wop']}.txt"
+                )
+                process_data = GrowthMbePDI()
+                process_data.name = f'{data_file} growth'
+                process_data.steps = [GrowthStepMbePDI()]
+                process_data.steps[0].sample_parameters = [SampleParametersMbe()]
+                process_data.steps[0].sample_parameters[
+                    0
+                ].substrate_temperature = SubstrateHeaterTemperature()
+                process_data.steps[0].sample_parameters[
+                    0
+                ].substrate_power = SubstrateHeaterPower()
 
-        # print(found_files)
+                process_data.steps[0].sources = sources
+                process_data.steps[0].sample_parameters[
+                    0
+                ].substrate_temperature.value = substrate_temperature.values
+                process_data.steps[0].sample_parameters[
+                    0
+                ].substrate_temperature.time = list(substrate_temperature.index)
+                process_data.steps[0].sample_parameters[
+                    0
+                ].substrate_power.value = substrate_power.values
+                process_data.steps[0].sample_parameters[0].substrate_power.time = list(
+                    substrate_power.index
+                )
 
         # creating instrument archive
         instrument_filename = f'{data_file}.InstrumentMbePDI.archive.{filetype}'
@@ -236,9 +271,6 @@ class ParserConfigurationMbePDI(MatchingParser):
             )
 
         # creating process archive
-        process_data = GrowthMbePDI(
-            name=f'{data_file} process',
-        )
         process_filename = f'{data_file}.GrowthMbePDI.archive.{filetype}'
         if archive.m_context.raw_path_exists(process_filename):
             print(f'Process archive already exists: {process_filename}')
@@ -284,6 +316,9 @@ class ParserConfigurationMbePDI(MatchingParser):
             epic_file=mainfile,
         )
         archive.metadata.entry_name = data_file.replace('.txt', '')
+
+        # list files in folder:
+        # found_files = glob.glob(os.path.join(folder_path, '*.txt'))
 
 
 class ParserEpicPDI(MatchingParser):

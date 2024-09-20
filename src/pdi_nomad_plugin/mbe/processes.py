@@ -31,6 +31,7 @@ from nomad.metainfo import (
     Section,
     SubSection,
 )
+
 from nomad.utils import hash
 from nomad_material_processing.general import (
     CrystallineSubstrate,
@@ -39,6 +40,10 @@ from nomad_material_processing.general import (
     ThinFilm,
     ThinFilmStack,
     ThinFilmStackReference,
+)
+
+from nomad_material_processing.general import (
+    TimeSeries,
 )
 from nomad_material_processing.vapor_deposition.cvd.general import (
     Rotation,
@@ -943,70 +948,136 @@ class ChamberEnvironmentMbe(ChamberEnvironment):
     )
 
 
-class SampleParametersMbe(SampleParameters):
+class SubstrateHeaterPower(TimeSeries):
+    """
+    The power supplied to the substrate (watt).
+    """
+
     m_def = Section(
-        a_eln=ELNAnnotation(
-            properties=SectionProperties(
-                order=[
-                    'shaft_temperature',
-                    'filament_temperature',
-                    'laytec_temperature',
-                    'substrate_temperature',
-                    'in_situ_reflectance',
-                    'growth_rate',
-                    'layer',
-                    'substrate',
-                ],
-            ),
-        ),
-        a_plotly_graph_object=[
+        a_plot=[
             {
-                'label': 'filament temperature',
-                'index': 1,
-                'dragmode': 'pan',
-                'data': {
-                    'type': 'scattergl',
-                    'line': {'width': 2},
-                    'marker': {'size': 6},
-                    'mode': 'lines+markers',
-                    'name': 'Filament Temperature',
-                    'x': '#filament_temperature/time',
-                    'y': '#filament_temperature/value',
-                },
-                'layout': {
-                    'title': {'text': 'Filament Temperature'},
-                    'xaxis': {
-                        'showticklabels': True,
-                        'fixedrange': True,
-                        'ticks': '',
-                        'title': {'text': 'Process time [min]'},
-                        # "showline": True,
-                        'linewidth': 1,
-                        'linecolor': 'black',
-                        'mirror': True,
-                    },
-                    'yaxis': {
-                        'showticklabels': True,
-                        'fixedrange': True,
-                        'ticks': '',
-                        'title': {'text': 'Temperature [°C]'},
-                        # "showline": True,
-                        'linewidth': 1,
-                        'linecolor': 'black',
-                        'mirror': True,
-                    },
-                    'showlegend': False,
-                },
-                'config': {
-                    'displayModeBar': False,
-                    'scrollZoom': False,
-                    'responsive': False,
-                    'displaylogo': False,
-                    'dragmode': False,
-                },
+                'label': 'measured power',
+                'x': 'time',
+                'y': ['value'],
             },
         ],
+        a_eln={
+            'hide': [
+                'set_value',
+                'set_time',
+            ]
+        },
     )
+    value = Quantity(
+        type=float,
+        unit='watt',
+        shape=['*'],
+    )
+    time = Quantity(
+        type=Datetime,
+        description='The process time when each of the values were recorded.',
+        shape=['*'],
+    )
+
+
+class SubstrateHeaterTemperature(TimeSeries):
+    """
+    The temperature of the heater during the deposition process.
+    """
+
+    m_def = Section(
+        a_plot=[
+            {
+                'label': 'measured temperature',
+                'x': 'time',
+                'y': ['value'],
+            },
+        ],
+        a_eln={
+            'hide': [
+                'set_value',
+                'set_time',
+            ]
+        },
+    )
+    value = Quantity(
+        type=float,
+        unit='kelvin',
+        shape=['*'],
+    )
+    time = Quantity(
+        type=Datetime,
+        description='The process time when each of the values were recorded.',
+        shape=['*'],
+    )
+
+
+class SubstrateHeaterCurrent(TimeSeries):
+    """
+    The current of the heater during the deposition process.
+    """
+
+    m_def = Section(
+        a_plot=[
+            {
+                'label': 'measured current',
+                'x': 'time',
+                'y': ['value'],
+            },
+        ],
+        a_eln={
+            'hide': [
+                'set_value',
+                'set_time',
+            ]
+        },
+    )
+    value = Quantity(
+        type=float,
+        unit='ampere',
+        shape=['*'],
+    )
+    time = Quantity(
+        type=Datetime,
+        description='The process time when each of the values were recorded.',
+        shape=['*'],
+    )
+
+
+class SubstrateHeaterVoltage(TimeSeries):
+    """
+    The voltage of the heater during the deposition process.
+    """
+
+    m_def = Section(
+        a_plot=[
+            {
+                'label': 'measured voltage',
+                'x': 'time',
+                'y': ['value'],
+            },
+        ],
+        a_eln={
+            'hide': [
+                'set_value',
+                'set_time',
+            ]
+        },
+    )
+    value = Quantity(
+        type=float,
+        unit='volt',
+        shape=['*'],
+    )
+    time = Quantity(
+        type=Datetime,
+        description='The process time when each of the values were recorded.',
+        shape=['*'],
+    )
+
+
+class SampleParametersMbe(SampleParameters):
+    m_def = Section()
     name = Quantity(
         type=str,
         description="""
@@ -1026,11 +1097,17 @@ class SampleParametersMbe(SampleParameters):
         """,
         shape=[1],
     )
-    filament_temperature = SubSection(
-        section_def=FilamentTemperature,
+    substrate_temperature = SubSection(
+        section_def=SubstrateHeaterTemperature,
     )
-    in_situ_reflectance = SubSection(
-        section_def=InSituMonitoringReference,
+    substrate_power = SubSection(
+        section_def=SubstrateHeaterPower,
+    )
+    substrate_voltage = SubSection(
+        section_def=SubstrateHeaterVoltage,
+    )
+    substrate_current = SubSection(
+        section_def=SubstrateHeaterCurrent,
     )
 
 
