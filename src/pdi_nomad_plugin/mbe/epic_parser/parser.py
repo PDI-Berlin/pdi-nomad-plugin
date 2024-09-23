@@ -15,7 +15,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from time import perf_counter
 import glob
+from datetime import datetime
+from zoneinfo import ZoneInfo
+import pytz
 import os
 import pandas as pd
 from epic_scraper.epicfileimport.epic_module import (
@@ -30,6 +34,9 @@ from nomad.metainfo import Quantity, Section
 from nomad.parsing import MatchingParser
 from nomad.utils import hash
 
+from nomad.datamodel.metainfo.basesections import (
+    PubChemPureSubstanceSection,
+)
 from pdi_nomad_plugin.mbe.instrument import (
     InstrumentMbePDI,
     PlasmaSourcePDI,
@@ -40,6 +47,8 @@ from pdi_nomad_plugin.mbe.instrument import (
     EffusionCellHeater,
     EffusionCellHeaterTemperature,
     EffusionCellHeaterPower,
+    Port,
+    SourcePDIReference,
 )
 from pdi_nomad_plugin.mbe.processes import (
     ExperimentMbePDI,
@@ -53,6 +62,7 @@ from pdi_nomad_plugin.mbe.processes import (
 from pdi_nomad_plugin.utils import (
     create_archive,
     fill_quantity,
+    get_hash_ref,
 )
 
 
@@ -136,9 +146,10 @@ class ParserConfigurationMbePDI(MatchingParser):
                     )
 
         # filling in the sources objects list
-        sources = []
-        source_object = None
+        sources_ref = []
+        port_list = []
         for sources_index, sources_row in sources_sheet.iterrows():
+            source_object = None
             if sources_row['source type'] == 'PLASMA':
                 # TODO check if file exists, everywhere
                 forward_power = epiclog_read(
@@ -162,7 +173,6 @@ class ParserConfigurationMbePDI(MatchingParser):
                     reflected_power.index
                 )
                 # TODO fill in dissipated power as the difference between forward and reflected power
-                sources.append(source_object)
             if sources_row['source type'] == 'SFC':
                 sfc_temperature = epiclog_read(
                     f"{folder_path}{sources_row['temp mv']}.txt"
@@ -178,7 +188,6 @@ class ParserConfigurationMbePDI(MatchingParser):
                 )
                 source_object.vapor_source.power.value = sfc_power.values
                 source_object.vapor_source.power.time = list(sfc_power.index)
-                sources.append(source_object)
             if sources_row['source type'] == 'DFC':
                 dfc_temperature = epiclog_read(
                     f"{folder_path}{sources_row['temp mv']}.txt"
@@ -213,7 +222,73 @@ class ParserConfigurationMbePDI(MatchingParser):
                 )
                 source_object.vapor_source_hot_lip.power.value = dfc_hl_power.values
                 source_object.vapor_source_hot_lip.power.time = list(dfc_hl_power.index)
-                sources.append(source_object)
+
+            # fill in quantities common to all sources
+            # and create Source archive and Port object
+            if source_object:
+                source_name = (
+                    str(fill_quantity(sources_row, 'source type'))
+                    + '_'
+                    + str(fill_quantity(sources_row, 'source material'))
+                )
+                source_object.name = source_name
+                source_object.port_number = fill_quantity(sources_row, 'port number')
+                source_object.distance_to_substrate = fill_quantity(
+                    sources_row, 'distance'
+                )
+                # Define a list of tuples containing
+                # the columnd header of the xlsx sheet
+                # and the corresponding attribute name
+                keys_and_attributes = [
+                    ('primary flux species', 'primary_flux_species'),
+                    ('secondary flux species', 'secondary_flux_species'),
+                    ('source material', 'material'),
+                ]
+                for key, attribute in keys_and_attributes:
+                    if sources_row[key]:
+                        substances = sources_row[key].split('+')
+                        substance_objs = [
+                            PubChemPureSubstanceSection(name=substance)
+                            for substance in substances
+                        ]
+                        setattr(source_object, attribute, substance_objs)
+                if sources_row['date'] and sources_row['time']:
+                    source_object.datetime = datetime.combine(
+                        datetime.strptime(
+                            sources_row['date'],
+                            '%d.%m.%y',
+                        ),
+                        datetime.strptime(sources_row['time'], '%H:%M:%S').time(),
+                    ).replace(tzinfo=ZoneInfo('Europe/Berlin'))
+                source_filename = f'{source_name}.SourcePDI.archive.{filetype}'
+                source_archive = EntryArchive(
+                    data=source_object,
+                    # m_context=archive.m_context,
+                    metadata=EntryMetadata(upload_id=archive.m_context.upload_id),
+                )
+                create_archive(
+                    source_archive.m_to_dict(),
+                    archive.m_context,
+                    source_filename,
+                    filetype,
+                    logger,
+                )
+                source_ref = get_hash_ref(archive.m_context.upload_id, source_filename)
+                sources_ref.append(
+                    SourcePDIReference(name=source_name, reference=source_ref)
+                )
+
+                port_object = Port()
+                port_object.name = source_name
+                port_object.port_number = fill_quantity(sources_row, 'port number')
+                port_object.flange_diameter = fill_quantity(sources_row, 'diameter')
+                port_object.flange_to_substrate_distance = fill_quantity(
+                    sources_row, 'distance'
+                )
+                port_object.theta = fill_quantity(sources_row, 'theta')
+                port_object.phi = fill_quantity(sources_row, 'phi')
+                port_object.device = source_ref
+                port_list.append(port_object)
 
             # filling in growth process archive
             if sources_row['source type'] == 'SUB':
@@ -234,7 +309,7 @@ class ParserConfigurationMbePDI(MatchingParser):
                     0
                 ].substrate_power = SubstrateHeaterPower()
 
-                process_data.steps[0].sources = sources
+                process_data.steps[0].sources = sources_ref
                 process_data.steps[0].sample_parameters[
                     0
                 ].substrate_temperature.value = substrate_temperature.values
@@ -253,10 +328,10 @@ class ParserConfigurationMbePDI(MatchingParser):
         if archive.m_context.raw_path_exists(instrument_filename):
             print(f'Instrument archive already exists: {instrument_filename}')
         else:
-            instrument_data = InstrumentMbePDI(
-                name=f'{data_file} instrument',
-                sources=sources,
-            )
+            instrument_data = InstrumentMbePDI()
+            instrument_data.name = f'{data_file} instrument'
+            instrument_data.port_list = port_list
+
             instrument_archive = EntryArchive(
                 data=instrument_data if instrument_data else InstrumentMbePDI(),
                 # m_context=archive.m_context,
