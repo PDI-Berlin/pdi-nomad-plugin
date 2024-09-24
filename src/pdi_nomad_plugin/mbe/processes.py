@@ -74,7 +74,8 @@ from pdi_nomad_plugin.general.schema import (
 )
 from pdi_nomad_plugin.mbe.instrument import (
     FilledSubstrateHolderPDI,
-    SourcePDIReference,
+    FilledSubstrateHolderPDIReference,
+    SourcePDI,
 )
 from pdi_nomad_plugin.utils import (
     create_archive,
@@ -1171,7 +1172,7 @@ class GrowthStepMbePDI(VaporDepositionStep, PlotSection):
         repeats=True,
     )
     sources = SubSection(
-        section_def=SourcePDIReference,
+        section_def=SourcePDI,
         repeats=True,
     )
     environment = SubSection(
@@ -1290,7 +1291,7 @@ class GrowthMbePDI(VaporDeposition, EntryData):
         repeats=True,
     )
     samples = SubSection(
-        section_def=FilledSubstrateHolderPDI,
+        section_def=FilledSubstrateHolderPDIReference,
         repeats=True,
     )
 

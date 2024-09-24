@@ -48,7 +48,7 @@ from pdi_nomad_plugin.mbe.instrument import (
     EffusionCellHeaterTemperature,
     EffusionCellHeaterPower,
     Port,
-    SourcePDIReference,
+    SourcePDI,
 )
 from pdi_nomad_plugin.mbe.processes import (
     ExperimentMbePDI,
@@ -145,8 +145,13 @@ class ParserConfigurationMbePDI(MatchingParser):
                         f'Detected growth of {growth_object} started at {growth_starttime} and ended at {growth_endtime} with a duration of {growth_duration}'
                     )
 
+        # filenames
+        instrument_filename = f'{data_file}.InstrumentMbePDI.archive.{filetype}'
+        process_filename = f'{data_file}.GrowthMbePDI.archive.{filetype}'
+        experiment_filename = f'{data_file}.ExperimentMbePDI.archive.{filetype}'
+
         # filling in the sources objects list
-        sources_ref = []
+        sources_list = []
         port_list = []
         for sources_index, sources_row in sources_sheet.iterrows():
             source_object = None
@@ -162,6 +167,7 @@ class ParserConfigurationMbePDI(MatchingParser):
                 source_object.vapor_source = RfGeneratorHeater()
                 source_object.vapor_source.forward_power = RfGeneratorHeaterPower()
                 source_object.vapor_source.reflected_power = RfGeneratorHeaterPower()
+                source_object.type = 'RF plasma source (PLASMA)'
                 source_object.vapor_source.forward_power.value = forward_power.values
                 source_object.vapor_source.forward_power.time = list(
                     forward_power.index
@@ -182,6 +188,7 @@ class ParserConfigurationMbePDI(MatchingParser):
                 source_object.vapor_source = EffusionCellHeater()
                 source_object.vapor_source.temperature = EffusionCellHeaterTemperature()
                 source_object.vapor_source.power = EffusionCellHeaterPower()
+                source_object.type = 'Single filament effusion cell (SFC)'
                 source_object.vapor_source.temperature.value = sfc_temperature.values
                 source_object.vapor_source.temperature.time = list(
                     sfc_temperature.index
@@ -208,6 +215,7 @@ class ParserConfigurationMbePDI(MatchingParser):
                     EffusionCellHeaterTemperature()
                 )
                 source_object.vapor_source_hot_lip.power = EffusionCellHeaterPower()
+                source_object.type = 'Double filament effusion cell (DFC)'
                 source_object.vapor_source.temperature.value = dfc_temperature.values
                 source_object.vapor_source.temperature.time = list(
                     dfc_temperature.index
@@ -224,7 +232,7 @@ class ParserConfigurationMbePDI(MatchingParser):
                 source_object.vapor_source_hot_lip.power.time = list(dfc_hl_power.index)
 
             # fill in quantities common to all sources
-            # and create Source archive and Port object
+            # and create Source objects and Port objects lists
             if source_object:
                 source_name = (
                     str(fill_quantity(sources_row, 'source type'))
@@ -232,10 +240,6 @@ class ParserConfigurationMbePDI(MatchingParser):
                     + str(fill_quantity(sources_row, 'source material'))
                 )
                 source_object.name = source_name
-                source_object.port_number = fill_quantity(sources_row, 'port number')
-                source_object.distance_to_substrate = fill_quantity(
-                    sources_row, 'distance'
-                )
                 # Define a list of tuples containing
                 # the columnd header of the xlsx sheet
                 # and the corresponding attribute name
@@ -260,23 +264,6 @@ class ParserConfigurationMbePDI(MatchingParser):
                         ),
                         datetime.strptime(sources_row['time'], '%H:%M:%S').time(),
                     ).replace(tzinfo=ZoneInfo('Europe/Berlin'))
-                source_filename = f'{source_name}.SourcePDI.archive.{filetype}'
-                source_archive = EntryArchive(
-                    data=source_object,
-                    # m_context=archive.m_context,
-                    metadata=EntryMetadata(upload_id=archive.m_context.upload_id),
-                )
-                create_archive(
-                    source_archive.m_to_dict(),
-                    archive.m_context,
-                    source_filename,
-                    filetype,
-                    logger,
-                )
-                source_ref = get_hash_ref(archive.m_context.upload_id, source_filename)
-                sources_ref.append(
-                    SourcePDIReference(name=source_name, reference=source_ref)
-                )
 
                 port_object = Port()
                 port_object.name = source_name
@@ -287,8 +274,11 @@ class ParserConfigurationMbePDI(MatchingParser):
                 )
                 port_object.theta = fill_quantity(sources_row, 'theta')
                 port_object.phi = fill_quantity(sources_row, 'phi')
-                port_object.device = source_ref
                 port_list.append(port_object)
+
+                source_object.port = f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, instrument_filename)}#data/port_list/{sources_index}'
+
+                sources_list.append(source_object)
 
             # filling in growth process archive
             if sources_row['source type'] == 'SUB':
@@ -309,7 +299,7 @@ class ParserConfigurationMbePDI(MatchingParser):
                     0
                 ].substrate_power = SubstrateHeaterPower()
 
-                process_data.steps[0].sources = sources_ref
+                process_data.steps[0].sources = sources_list
                 process_data.steps[0].sample_parameters[
                     0
                 ].substrate_temperature.value = substrate_temperature.values
@@ -324,7 +314,6 @@ class ParserConfigurationMbePDI(MatchingParser):
                 )
 
         # creating instrument archive
-        instrument_filename = f'{data_file}.InstrumentMbePDI.archive.{filetype}'
         if archive.m_context.raw_path_exists(instrument_filename):
             print(f'Instrument archive already exists: {instrument_filename}')
         else:
@@ -346,7 +335,6 @@ class ParserConfigurationMbePDI(MatchingParser):
             )
 
         # creating process archive
-        process_filename = f'{data_file}.GrowthMbePDI.archive.{filetype}'
         if archive.m_context.raw_path_exists(process_filename):
             print(f'Process archive already exists: {process_filename}')
         else:
@@ -364,7 +352,6 @@ class ParserConfigurationMbePDI(MatchingParser):
             )
 
         # creating experiment archive
-        experiment_filename = f'{data_file}.ExperimentMbePDI.archive.{filetype}'
         if archive.m_context.raw_path_exists(experiment_filename):
             print(f'Experiment archive already exists: {experiment_filename}')
         else:
