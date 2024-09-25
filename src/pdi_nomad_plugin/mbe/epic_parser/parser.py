@@ -251,10 +251,11 @@ class ParserConfigurationMbePDI(MatchingParser):
                 for key, attribute in keys_and_attributes:
                     if sources_row[key]:
                         substances = sources_row[key].split('+')
-                        substance_objs = [
-                            PubChemPureSubstanceSection(name=substance)
-                            for substance in substances
-                        ]
+                        substance_objs = []
+                        for substance in substances:
+                            substance_objs = [
+                                PubChemPureSubstanceSection(name=substance)
+                            ]
                         setattr(source_object, attribute, substance_objs)
                 if sources_row['date'] and sources_row['time']:
                     source_object.datetime = datetime.combine(

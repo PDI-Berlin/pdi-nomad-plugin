@@ -203,15 +203,6 @@ class SourcePDI(Device, EntryData):
         description='The EPIC loop number.',
     )
 
-    # material has been taken from VaporDepositionSource
-    material = SubSection(
-        section_def=PubChemPureSubstanceSection,
-        description="""
-        The source of the material that is being evaporated.
-        Example: A sputtering target, a powder in a crucible, etc.
-        """,
-        repeats=True,
-    )
     primary_flux_species = SubSection(
         section_def=PubChemPureSubstanceSection,
         description="""
@@ -374,6 +365,15 @@ class EffusionCellSourcePDI(SourcePDI, ThermalEvaporationSource):
     crucible = SubSection(
         section_def=Crucible,
     )
+    # material has been taken from VaporDepositionSource
+    material = SubSection(
+        section_def=PubChemPureSubstanceSection,
+        description="""
+        The source of the material that is being evaporated.
+        Example: A sputtering target, a powder in a crucible, etc.
+        """,
+        repeats=True,
+    )
 
 
 class SingleFilamentEffusionCell(EffusionCellSourcePDI):
@@ -503,6 +503,15 @@ class PlasmaSourcePDI(SourcePDI, PVDSource):
     )
     gas_flow = SubSection(
         section_def=GasFlow,
+        repeats=True,
+    )
+    # material has been taken from VaporDepositionSource
+    material = SubSection(
+        section_def=PubChemPureSubstanceSection,
+        description="""
+        The source of the material that is being evaporated.
+        Example: A sputtering target, a powder in a crucible, etc.
+        """,
         repeats=True,
     )
 
