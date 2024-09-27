@@ -65,97 +65,114 @@ from pdi_nomad_plugin.utils import (
     get_hash_ref,
 )
 
+from pdi_nomad_plugin.general.schema import EtchingPDI
+
 
 class RawFileConfigurationExcel(EntryData):
-    m_def = Section(a_eln=None, label='Raw File Config Excel')
+    m_def = Section(a_eln=None, label="Raw File Config Excel")
     name = Quantity(
         type=str,
         a_eln=ELNAnnotation(
-            component='StringEditQuantity',
+            component="StringEditQuantity",
         ),
     )
     excel_file = Quantity(
         type=str,
         a_eln=ELNAnnotation(
-            component='FileEditQuantity',
+            component="FileEditQuantity",
         ),
-        a_browser={'adaptor': 'RawFileAdaptor'},
-        description='Configuration Excel file',
+        a_browser={"adaptor": "RawFileAdaptor"},
+        description="Configuration Excel file",
     )
 
 
 class RawFileEPIC(EntryData):
-    m_def = Section(a_eln=None, label='Raw File EPIC')
+    m_def = Section(a_eln=None, label="Raw File EPIC")
     name = Quantity(
         type=str,
         a_eln=ELNAnnotation(
-            component='StringEditQuantity',
+            component="StringEditQuantity",
         ),
     )
     epic_file = Quantity(
         type=str,
         a_eln=ELNAnnotation(
-            component='FileEditQuantity',
+            component="FileEditQuantity",
         ),
-        a_browser={'adaptor': 'RawFileAdaptor'},
-        description='EPIC log file list',
+        a_browser={"adaptor": "RawFileAdaptor"},
+        description="EPIC log file list",
     )
 
 
 class ParserConfigurationMbePDI(MatchingParser):
     def parse(self, mainfile: str, archive: EntryArchive, logger) -> None:
-        filetype = 'yaml'
-        data_file = mainfile.split('/')[-1]
+        filetype = "yaml"
+        data_file = mainfile.split("/")[-1]
         upload_path = f"{mainfile.split('raw/')[0]}raw/"
-        folder_name = mainfile.split('/')[-2]
-        folder_path = f'{upload_path}{folder_name}/'
+        folder_name = mainfile.split("/")[-2]
+        folder_path = f"{upload_path}{folder_name}/"
         xlsx = pd.ExcelFile(mainfile)
 
         # "MBE config files" sheet
         config_sheet = pd.read_excel(
             xlsx,
-            'MBE config files',
-            comment='#',
+            "MBE config files",
+            comment="#",
         )
         config_sheet.columns = config_sheet.columns.str.strip()
 
         # "MBE sources" sheet
         sources_sheet = pd.read_excel(
             xlsx,
-            'MBE sources',
-            comment='#',
+            "MBE sources",
+            comment="#",
         )
         sources_sheet.columns = sources_sheet.columns.str.strip()
 
         # reading Messages.txt
         # TODO so far, nothing is done with this metadata
-        if config_sheet['messages'][0]:
+        if config_sheet["messages"][0]:
             messages_df = epiclog_read(f"{folder_path}{config_sheet['messages'][0]}")
             growth_events = growth_time(messages_df)
             for line in growth_events.iterrows():
-                if line[1]['to'] == 'GC':
+                if line[1]["to"] == "GC":
                     growth_object = line[1][
-                        'object'
+                        "object"
                     ]  # check TODO with Oliver which ID to write
                     growth_starttime = line[0]
-                if line[1]['from'] == 'GC':
+                if line[1]["from"] == "GC":
                     growth_endtime = line[0]
                     growth_duration = growth_endtime - growth_starttime
                     print(
-                        f'Detected growth of {growth_object} started at {growth_starttime} and ended at {growth_endtime} with a duration of {growth_duration}'
+                        f"Detected growth of {growth_object} started at {growth_starttime} and ended at {growth_endtime} with a duration of {growth_duration}"
                     )
 
         # filenames
-        instrument_filename = f'{data_file}.InstrumentMbePDI.archive.{filetype}'
-        process_filename = f'{data_file}.GrowthMbePDI.archive.{filetype}'
-        experiment_filename = f'{data_file}.ExperimentMbePDI.archive.{filetype}'
+        instrument_filename = f"{data_file}.InstrumentMbePDI.archive.{filetype}"
+        process_filename = f"{data_file}.GrowthMbePDI.archive.{filetype}"
+        experiment_filename = f"{data_file}.ExperimentMbePDI.archive.{filetype}"
 
+        etching_filename = f"TEST.InstrumentMbePDI.archive.{filetype}"
+        etching_data = EtchingPDI()
+
+        etching_archive = EntryArchive(
+            data=etching_data if etching_data else EtchingPDI(),
+            # m_context=archive.m_context,
+            metadata=EntryMetadata(upload_id=archive.m_context.upload_id),
+        )
+        create_archive(
+            etching_archive.m_to_dict(),
+            archive.m_context,
+            etching_filename,
+            filetype,
+            logger,
+        )
         # filling in the sources objects list
         sources_list = []
         port_list = []
         for sources_index, sources_row in sources_sheet.iterrows():
             source_object = None
-            if sources_row['source type'] == 'PLASMA':
+            if sources_row["source type"] == "PLASMA":
                 # TODO check if file exists, everywhere
                 forward_power = epiclog_read(
                     f"{folder_path}{sources_row['f power']}.txt"
@@ -167,7 +184,7 @@ class ParserConfigurationMbePDI(MatchingParser):
                 source_object.vapor_source = RfGeneratorHeater()
                 source_object.vapor_source.forward_power = RfGeneratorHeaterPower()
                 source_object.vapor_source.reflected_power = RfGeneratorHeaterPower()
-                source_object.type = 'RF plasma source (PLASMA)'
+                source_object.type = "RF plasma source (PLASMA)"
                 source_object.vapor_source.forward_power.value = forward_power.values
                 source_object.vapor_source.forward_power.time = list(
                     forward_power.index
@@ -179,7 +196,7 @@ class ParserConfigurationMbePDI(MatchingParser):
                     reflected_power.index
                 )
                 # TODO fill in dissipated power as the difference between forward and reflected power
-            if sources_row['source type'] == 'SFC':
+            if sources_row["source type"] == "SFC":
                 sfc_temperature = epiclog_read(
                     f"{folder_path}{sources_row['temp mv']}.txt"
                 )
@@ -188,14 +205,14 @@ class ParserConfigurationMbePDI(MatchingParser):
                 source_object.vapor_source = EffusionCellHeater()
                 source_object.vapor_source.temperature = EffusionCellHeaterTemperature()
                 source_object.vapor_source.power = EffusionCellHeaterPower()
-                source_object.type = 'Single filament effusion cell (SFC)'
+                source_object.type = "Single filament effusion cell (SFC)"
                 source_object.vapor_source.temperature.value = sfc_temperature.values
                 source_object.vapor_source.temperature.time = list(
                     sfc_temperature.index
                 )
                 source_object.vapor_source.power.value = sfc_power.values
                 source_object.vapor_source.power.time = list(sfc_power.index)
-            if sources_row['source type'] == 'DFC':
+            if sources_row["source type"] == "DFC":
                 dfc_temperature = epiclog_read(
                     f"{folder_path}{sources_row['temp mv']}.txt"
                 )
@@ -215,7 +232,7 @@ class ParserConfigurationMbePDI(MatchingParser):
                     EffusionCellHeaterTemperature()
                 )
                 source_object.vapor_source_hot_lip.power = EffusionCellHeaterPower()
-                source_object.type = 'Double filament effusion cell (DFC)'
+                source_object.type = "Double filament effusion cell (DFC)"
                 source_object.vapor_source.temperature.value = dfc_temperature.values
                 source_object.vapor_source.temperature.time = list(
                     dfc_temperature.index
@@ -235,54 +252,54 @@ class ParserConfigurationMbePDI(MatchingParser):
             # and create Source objects and Port objects lists
             if source_object:
                 source_name = (
-                    str(fill_quantity(sources_row, 'source type'))
-                    + '_'
-                    + str(fill_quantity(sources_row, 'source material'))
+                    str(fill_quantity(sources_row, "source type"))
+                    + "_"
+                    + str(fill_quantity(sources_row, "source material"))
                 )
                 source_object.name = source_name
                 # Define a list of tuples containing
                 # the columnd header of the xlsx sheet
                 # and the corresponding attribute name
                 keys_and_attributes = [
-                    ('primary flux species', 'primary_flux_species'),
-                    ('secondary flux species', 'secondary_flux_species'),
-                    ('source material', 'material'),
+                    ("primary flux species", "primary_flux_species"),
+                    ("secondary flux species", "secondary_flux_species"),
+                    ("source material", "material"),
                 ]
                 for key, attribute in keys_and_attributes:
                     if sources_row[key]:
-                        substances = sources_row[key].split('+')
+                        substances = sources_row[key].split("+")
                         substance_objs = []
                         for substance in substances:
                             substance_objs = [
                                 PubChemPureSubstanceSection(name=substance)
                             ]
                         setattr(source_object, attribute, substance_objs)
-                if sources_row['date'] and sources_row['time']:
+                if sources_row["date"] and sources_row["time"]:
                     source_object.datetime = datetime.combine(
                         datetime.strptime(
-                            sources_row['date'],
-                            '%d.%m.%y',
+                            sources_row["date"],
+                            "%d.%m.%y",
                         ),
-                        datetime.strptime(sources_row['time'], '%H:%M:%S').time(),
-                    ).replace(tzinfo=ZoneInfo('Europe/Berlin'))
+                        datetime.strptime(sources_row["time"], "%H:%M:%S").time(),
+                    ).replace(tzinfo=ZoneInfo("Europe/Berlin"))
 
                 port_object = Port()
                 port_object.name = source_name
-                port_object.port_number = fill_quantity(sources_row, 'port number')
-                port_object.flange_diameter = fill_quantity(sources_row, 'diameter')
+                port_object.port_number = fill_quantity(sources_row, "port number")
+                port_object.flange_diameter = fill_quantity(sources_row, "diameter")
                 port_object.flange_to_substrate_distance = fill_quantity(
-                    sources_row, 'distance'
+                    sources_row, "distance"
                 )
-                port_object.theta = fill_quantity(sources_row, 'theta')
-                port_object.phi = fill_quantity(sources_row, 'phi')
+                port_object.theta = fill_quantity(sources_row, "theta")
+                port_object.phi = fill_quantity(sources_row, "phi")
                 port_list.append(port_object)
 
-                source_object.port = f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, instrument_filename)}#data/port_list/{sources_index}'
+                source_object.port = f"../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, instrument_filename)}#data/port_list/{sources_index}"
 
                 sources_list.append(source_object)
 
             # filling in growth process archive
-            if sources_row['source type'] == 'SUB':
+            if sources_row["source type"] == "SUB":
                 substrate_temperature = epiclog_read(
                     f"{folder_path}{sources_row['temp mv']}.txt"
                 )
@@ -290,7 +307,7 @@ class ParserConfigurationMbePDI(MatchingParser):
                     f"{folder_path}{sources_row['temp wop']}.txt"
                 )
                 process_data = GrowthMbePDI()
-                process_data.name = f'{data_file} growth'
+                process_data.name = f"{data_file} growth"
                 process_data.steps = [GrowthStepMbePDI()]
                 process_data.steps[0].sample_parameters = [SampleParametersMbe()]
                 process_data.steps[0].sample_parameters[
@@ -316,10 +333,10 @@ class ParserConfigurationMbePDI(MatchingParser):
 
         # creating instrument archive
         if archive.m_context.raw_path_exists(instrument_filename):
-            print(f'Instrument archive already exists: {instrument_filename}')
+            print(f"Instrument archive already exists: {instrument_filename}")
         else:
             instrument_data = InstrumentMbePDI()
-            instrument_data.name = f'{data_file} instrument'
+            instrument_data.name = f"{data_file} instrument"
             instrument_data.port_list = port_list
 
             instrument_archive = EntryArchive(
@@ -337,7 +354,7 @@ class ParserConfigurationMbePDI(MatchingParser):
 
         # creating process archive
         if archive.m_context.raw_path_exists(process_filename):
-            print(f'Process archive already exists: {process_filename}')
+            print(f"Process archive already exists: {process_filename}")
         else:
             process_archive = EntryArchive(
                 data=process_data if process_data else GrowthMbePDI(),
@@ -354,12 +371,12 @@ class ParserConfigurationMbePDI(MatchingParser):
 
         # creating experiment archive
         if archive.m_context.raw_path_exists(experiment_filename):
-            print(f'Experiment archive already exists: {experiment_filename}')
+            print(f"Experiment archive already exists: {experiment_filename}")
         else:
             experiment_data = ExperimentMbePDI(
-                name=f'{data_file} experiment',
+                name=f"{data_file} experiment",
                 growth_run=GrowthMbePDIReference(
-                    reference=f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, process_filename)}#data',
+                    reference=f"../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, process_filename)}#data",
                 ),
             )
             experiment_archive = EntryArchive(
@@ -378,7 +395,7 @@ class ParserConfigurationMbePDI(MatchingParser):
             name=data_file,
             epic_file=mainfile,
         )
-        archive.metadata.entry_name = data_file.replace('.txt', '')
+        archive.metadata.entry_name = data_file.replace(".txt", "")
 
         # list files in folder:
         # found_files = glob.glob(os.path.join(folder_path, '*.txt'))
@@ -386,13 +403,13 @@ class ParserConfigurationMbePDI(MatchingParser):
 
 class ParserEpicPDI(MatchingParser):
     def parse(self, mainfile: str, archive: EntryArchive, logger) -> None:
-        data_file = mainfile.split('/')[-1]
-        folder_name = mainfile.split('/')[-2]
+        data_file = mainfile.split("/")[-1]
+        folder_name = mainfile.split("/")[-2]
         upload_path = f"{mainfile.split('raw/')[0]}raw/"
         dataframe_list = epiclog_read_batch(folder_name, upload_path)
-        filetype = 'yaml'
+        filetype = "yaml"
 
         print(dataframe_list)
 
         archive.data = RawFileEPIC(name=data_file, epic_file=mainfile)
-        archive.metadata.entry_name = data_file.replace('.txt', '')
+        archive.metadata.entry_name = data_file.replace(".txt", "")

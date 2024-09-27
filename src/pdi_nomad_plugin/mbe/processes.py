@@ -80,6 +80,7 @@ from pdi_nomad_plugin.mbe.instrument import (
 from pdi_nomad_plugin.utils import (
     create_archive,
     handle_section,
+    set_sample_status,
 )
 
 configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:processes_schema')
@@ -792,8 +793,21 @@ class GrowthMbePDI(VaporDeposition, EntryData):
         # for substrate in self.substrate:
         #     substrate.normalize(archive, logger)
 
+        for sample_holder in self.samples:
+            if self.sample_holder.reference:
+                for sample in self.sample_holder.reference.positions.substrate:
+                    set_sample_status(
+                        sample.reference,
+                        archive.m_context,
+                        logger,
+                        as_delivered=False,
+                        fresh=False,
+                        processed=True,
+                        grown=True,
+                    )
+
         archive.workflow2 = None
-        super(GrowthMbePDI, self).normalize(archive, logger)
+        super().normalize(archive, logger)
         if self.steps is not None:
             inputs = []
             outputs = []

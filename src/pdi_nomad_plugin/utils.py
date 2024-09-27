@@ -27,6 +27,12 @@ from nomad.datamodel.metainfo.basesections import (
 )
 from nomad.units import ureg
 
+from nomad.datamodel.metainfo.basesections import (
+    EntityReference,
+    CompositeSystem,
+    CompositeSystemReference,
+)
+
 
 def get_reference(upload_id, entry_id):
     return f'../uploads/{upload_id}/archive/{entry_id}'
@@ -294,3 +300,48 @@ def fetch_substrate(archive, sample_id, substrate_id, logger):
                 f"The path '../uploads/{search_result.data[0]['upload_id']}/archive/{search_result.data[0]['entry_id']}#data' is not a file, upload and reprocess to reference it in ThinFilmStack entry [{sample_id}]"
             )
             return None
+
+
+def set_sample_status(
+    sample_reference,
+    context,
+    logger,
+    *,
+    as_delivered=False,
+    fresh=False,
+    processed=False,
+    grown=False,
+):
+    if sample_reference:
+        if (
+            hasattr(sample_reference, 'fresh')
+            and hasattr(sample_reference, 'as_delivered')
+            and hasattr(sample_reference, 'processed')
+            and hasattr(sample_reference, 'grown')
+        ):
+            filename = sample_reference.m_parent.metadata.mainfile
+            with context.raw_file(filename, 'r') as file:
+                sample_dict = (
+                    yaml.safe_load(file)
+                    if filename.split('.')[-1] == 'yaml'
+                    else json.load(file)
+                )
+                sample_dict['data']['fresh'] = fresh
+                sample_dict['data']['as_delivered'] = as_delivered
+                sample_dict['data']['processed'] = processed
+                sample_dict['data']['grown'] = grown
+            with context.raw_file(filename, 'w') as newfile:
+                if filename.split('.')[-1] == 'json':
+                    json.dump(sample_dict, newfile)
+                elif filename.split('.')[-1] == 'yaml':
+                    yaml.dump(sample_dict, newfile)
+            context.upload.process_updated_raw_file(filename, allow_modify=True)
+        else:
+            logger.warn(
+                f'Sample {filename} with entry_id {sample_reference.m_parent.metadata.entry_id} does not have status attribute. Please use a sample class with status.'
+            )
+            return
+    else:
+        logger.warn(
+            f'Sample {sample} does not have a reference. Upload and reprocess to set the status.'
+        )
