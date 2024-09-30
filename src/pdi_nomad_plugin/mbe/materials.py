@@ -155,7 +155,7 @@ class SubstrateMbe(CrystallineSubstrate, EntryData):
     )
 
     def normalize(self, archive, logger):
-        super(SubstrateMbe, self).normalize(archive, logger)
+        super().normalize(archive, logger)
 
         if (
             self.supplier_id is not None
@@ -234,7 +234,7 @@ class SubstrateBatchMbe(SubstrateMbe, EntryData):
     def normalize(self, archive, logger):
         from nomad.datamodel import EntryArchive, EntryMetadata
 
-        super(SubstrateBatchMbe, self).normalize(archive, logger)
+        super().normalize(archive, logger)
         filetype = 'yaml'
 
         # if (
@@ -403,7 +403,7 @@ class ThinFilmStackMbeReference(ThinFilmStackReference):
         """
         The normalizer for the `ThinFilmStackMbeReference` class.
         """
-        super(ThinFilmStackMbeReference, self).normalize(archive, logger)
+        super().normalize(archive, logger)
 
 
 m_package.__init_metainfo__()

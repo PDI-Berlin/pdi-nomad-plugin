@@ -16,17 +16,16 @@
 #
 
 from nomad.config.models.plugins import ParserEntryPoint
-from pydantic import Field
 
 
 class ConfigurationParserEntryPoint(ParserEntryPoint):
     def load(self):
-        from pdi_nomad_plugin.mbe.epic_parser.parser import ParserConfigurationMbePDI
+        from pdi_nomad_plugin.mbe.epic_parser.parser import ParserEpicPDI
 
-        return ParserConfigurationMbePDI(**self.dict())
+        return ParserEpicPDI(**self.dict())
 
 
-config_parser = ConfigurationParserEntryPoint(
+epic_parser = ConfigurationParserEntryPoint(
     name='ConfigMbeParser',
     description='Parse excel files for configuration parameters logged manually.',
     mainfile_name_re=r'.+\.xlsx',
@@ -39,17 +38,17 @@ config_parser = ConfigurationParserEntryPoint(
 )
 
 
-class EpicParserEntryPoint(ParserEntryPoint):
-    def load(self):
-        from pdi_nomad_plugin.mbe.epic_parser.parser import ParserEpicPDI
+# class EpicParserEntryPoint(ParserEntryPoint):
+#     def load(self):
+#         from pdi_nomad_plugin.mbe.epic_parser.parser import ParserEpicPDI
 
-        return ParserEpicPDI(**self.dict())
+#         return ParserEpicPDI(**self.dict())
 
 
-epic_parser = EpicParserEntryPoint(
-    name='EpicMbeParser',
-    description='Parser for EPIC log files.',
-    mainfile_mime_re=r'text/.*|application/zip',
-    mainfile_name_re=r'.+\.txt',
-    mainfile_contents_re=r'EPIC',
-)
+# epic_parser = EpicParserEntryPoint(
+#     name='EpicMbeParser',
+#     description='Parser for EPIC log files.',
+#     mainfile_mime_re=r'text/.*|application/zip',
+#     mainfile_name_re=r'.+\.txt',
+#     mainfile_contents_re=r'EPIC',
+# )

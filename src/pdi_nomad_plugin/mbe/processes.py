@@ -321,7 +321,7 @@ class XRDmeasurementReference(SectionReference):
     )
 
     def normalize(self, archive, logger):
-        super(XRDmeasurementReference, self).normalize(archive, logger)
+        super().normalize(archive, logger)
         if (
             hasattr(self, 'reference')
             and self.reference is not None
@@ -945,7 +945,7 @@ class ExperimentMbePDI(Experiment, EntryData):
         self.steps = [step for step in step_list if step is not None]
 
         archive.workflow2 = None
-        super(ExperimentMbePDI, self).normalize(archive, logger)
+        super().normalize(archive, logger)
 
         # search_result = search(
         #     owner="user",

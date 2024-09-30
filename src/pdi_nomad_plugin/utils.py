@@ -342,5 +342,5 @@ def set_sample_status(
             return
     else:
         logger.warn(
-            f'Sample {sample} does not have a reference. Upload and reprocess to set the status.'
+            f'Sample {sample_reference} is not a valid reference. Upload and reprocess to set the status.'
         )
