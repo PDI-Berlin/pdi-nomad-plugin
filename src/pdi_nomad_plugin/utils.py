@@ -27,12 +27,6 @@ from nomad.datamodel.metainfo.basesections import (
 )
 from nomad.units import ureg
 
-from nomad.datamodel.metainfo.basesections import (
-    EntityReference,
-    CompositeSystem,
-    CompositeSystemReference,
-)
-
 
 def get_reference(upload_id, entry_id):
     return f'../uploads/{upload_id}/archive/{entry_id}'
@@ -312,6 +306,11 @@ def set_sample_status(
     processed=False,
     grown=False,
 ):
+    """
+    Defines the status of a sample by updating the status attribute
+    in the sample reference file.
+    The Sample archive file is then overwritten.
+    """
     if sample_reference:
         if (
             hasattr(sample_reference, 'fresh')

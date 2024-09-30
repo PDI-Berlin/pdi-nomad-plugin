@@ -10,10 +10,10 @@ from nomad.datamodel.metainfo.basesections import (
     MeasurementResult,
 )
 from nomad.metainfo import Datetime, Quantity, SchemaPackage, Section, SubSection
-
 from nomad_material_processing.general import (
     TimeSeries,
 )
+
 from pdi_nomad_plugin.general.schema import (
     PDICategory,
 )

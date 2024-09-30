@@ -6,15 +6,14 @@ from nomad.datamodel.metainfo.annotations import (
     SectionProperties,
 )
 from nomad.datamodel.metainfo.basesections import (
-    BaseSection,
     EntityReference,
     Instrument,
     PubChemPureSubstanceSection,
 )
 from nomad.metainfo import (
+    Datetime,
     MEnum,
     Quantity,
-    Datetime,
     SchemaPackage,
     Section,
     SubSection,
@@ -33,9 +32,9 @@ from nomad_material_processing.vapor_deposition.pvd.general import (
     SourcePower,
 )
 from nomad_material_processing.vapor_deposition.pvd.thermal import (
-    ThermalEvaporationSource,
     ThermalEvaporationHeater,
     ThermalEvaporationHeaterTemperature,
+    ThermalEvaporationSource,
 )
 
 from pdi_nomad_plugin.general.schema import (

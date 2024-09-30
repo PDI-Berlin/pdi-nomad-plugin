@@ -9,13 +9,12 @@ from nomad.datamodel.metainfo.annotations import (
     SectionProperties,
 )
 from nomad.datamodel.metainfo.basesections import (
+    Component,
     CompositeSystemReference,
     Experiment,
     Process,
-    System,
-    Component,
-    PureSubstance,
     SectionReference,
+    System,
     SystemComponent,
 )
 from nomad.datamodel.metainfo.plot import PlotSection
@@ -24,24 +23,12 @@ from nomad.datamodel.metainfo.workflow import (
 )
 from nomad.metainfo import (
     Datetime,
-    MEnum,
     Quantity,
-    SchemaPackage,
     Reference,
+    SchemaPackage,
     Section,
     SubSection,
 )
-
-from nomad.utils import hash
-from nomad_material_processing.general import (
-    CrystallineSubstrate,
-    Geometry,
-    Parallelepiped,
-    ThinFilm,
-    ThinFilmStack,
-    ThinFilmStackReference,
-)
-
 from nomad_material_processing.general import (
     TimeSeries,
 )
@@ -58,14 +45,8 @@ from nomad_material_processing.vapor_deposition.general import (
     VaporDepositionStep,
     VolumetricFlowRate,
 )
-from nomad_material_processing.vapor_deposition.pvd.general import (
-    PVDSource,
-)
 from nomad_measurements.general import ActivityReference
 from nomad_measurements.xrd.schema import ELNXRayDiffraction
-from structlog.stdlib import (
-    BoundLogger,
-)
 
 from pdi_nomad_plugin.characterization.schema import AFMmeasurement, LightMicroscope
 from pdi_nomad_plugin.general.schema import (
@@ -73,7 +54,6 @@ from pdi_nomad_plugin.general.schema import (
     SampleCutPDI,
 )
 from pdi_nomad_plugin.mbe.instrument import (
-    FilledSubstrateHolderPDI,
     FilledSubstrateHolderPDIReference,
     SourcePDI,
 )

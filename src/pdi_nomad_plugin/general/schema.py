@@ -5,16 +5,14 @@ if TYPE_CHECKING:
         BoundLogger,
     )
 
-import yaml
-import json
 import numpy as np
 from nomad.config import config
-from nomad.datamodel.data import EntryData, EntryDataCategory, ArchiveSection
+from nomad.datamodel.data import ArchiveSection, EntryData, EntryDataCategory
 from nomad.datamodel.metainfo.annotations import ELNAnnotation, ELNComponentEnum
 from nomad.datamodel.metainfo.basesections import (
-    EntityReference,
     CompositeSystem,
     CompositeSystemReference,
+    EntityReference,
     Process,
 )
 from nomad.metainfo import (
@@ -40,17 +38,17 @@ from nomad_material_processing.general import (
 
 from pdi_nomad_plugin.utils import create_archive, set_sample_status
 
-configuration = config.get_plugin_entry_point("pdi_nomad_plugin.general:schema")
+configuration = config.get_plugin_entry_point('pdi_nomad_plugin.general:schema')
 
 m_package = SchemaPackage()
 
 
 class PDICategory(EntryDataCategory):
-    m_def = Category(label="PDI", categories=[EntryDataCategory])
+    m_def = Category(label='PDI', categories=[EntryDataCategory])
 
 
 class PDIMBECategory(EntryDataCategory):
-    m_def = Category(label="PDI MBE", categories=[EntryDataCategory, PDICategory])
+    m_def = Category(label='PDI MBE', categories=[EntryDataCategory, PDICategory])
 
 
 class SystemPDI(CompositeSystem):
@@ -61,30 +59,30 @@ class SystemPDI(CompositeSystem):
 
     as_delivered = Quantity(
         type=bool,
-        description="Sample is in the same condition as it was delivered",
+        description='Sample is in the same condition as it was delivered',
         a_eln=ELNAnnotation(
-            component="BoolEditQuantity",
+            component='BoolEditQuantity',
         ),
     )
     fresh = Quantity(
         type=bool,
-        description="Sample is fresh and has not been used",
+        description='Sample is fresh and has not been used',
         a_eln=ELNAnnotation(
-            component="BoolEditQuantity",
+            component='BoolEditQuantity',
         ),
     )
     processed = Quantity(
         type=bool,
-        description="Sample underwent some processing such as etching, annealing, etc.",
+        description='Sample underwent some processing such as etching, annealing, etc.',
         a_eln=ELNAnnotation(
-            component="BoolEditQuantity",
+            component='BoolEditQuantity',
         ),
     )
     grown = Quantity(
         type=bool,
-        description="Sample underwent vapor deposition",
+        description='Sample underwent vapor deposition',
         a_eln=ELNAnnotation(
-            component="BoolEditQuantity",
+            component='BoolEditQuantity',
         ),
     )
 
@@ -96,10 +94,10 @@ class SystemPDIReference(EntityReference):
 
     reference = Quantity(
         type=SystemPDI,
-        description="A reference to a NOMAD `SystemPDI` entry.",
+        description='A reference to a NOMAD `SystemPDI` entry.',
         a_eln=ELNAnnotation(
-            component="ReferenceEditQuantity",
-            label="SystemPDI reference",
+            component='ReferenceEditQuantity',
+            label='SystemPDI reference',
         ),
     )
 
@@ -139,12 +137,12 @@ class EtchingPDI(ProcessPDI, Etching):
     """
 
     m_def = Section(
-        label="Etching",
-        links=["http://purl.obolibrary.org/obo/CHMO_0001558"],
+        label='Etching',
+        links=['http://purl.obolibrary.org/obo/CHMO_0001558'],
         categories=[PDICategory],
     )
 
-    def normalize(self, archive, logger: "BoundLogger") -> None:
+    def normalize(self, archive, logger: 'BoundLogger') -> None:
         """
         The normalizer sets the sample status if a reference to a sample is given.
         """
@@ -170,8 +168,8 @@ class EtchingRecipePDI(EtchingRecipe):
     """
 
     m_def = Section(
-        label="EtchingRecipe",
-        links=["http://purl.obolibrary.org/obo/CHMO_0001558"],
+        label='EtchingRecipe',
+        links=['http://purl.obolibrary.org/obo/CHMO_0001558'],
         categories=[PDICategory],
     )
 
@@ -182,8 +180,8 @@ class AnnealingRecipePDI(AnnealingRecipe):
     """
 
     m_def = Section(
-        label="AnnealingRecipe",
-        links=["http://purl.obolibrary.org/obo/CHMO_0001465"],
+        label='AnnealingRecipe',
+        links=['http://purl.obolibrary.org/obo/CHMO_0001465'],
         categories=[PDICategory],
     )
 
@@ -194,7 +192,7 @@ class CleaningRecipePDI(CleaningRecipe):
     """
 
     m_def = Section(
-        label="CleaningRecipe",
+        label='CleaningRecipe',
         categories=[PDICategory],
     )
 
@@ -205,12 +203,12 @@ class AnnealingPDI(ProcessPDI, Annealing):
     """
 
     m_def = Section(
-        label="Annealing",
-        links=["http://purl.obolibrary.org/obo/CHMO_0001465"],
+        label='Annealing',
+        links=['http://purl.obolibrary.org/obo/CHMO_0001465'],
         categories=[PDICategory],
     )
 
-    def normalize(self, archive, logger: "BoundLogger") -> None:
+    def normalize(self, archive, logger: 'BoundLogger') -> None:
         """
         The normalizer sets the sample status if a reference to a sample is given.
         """
@@ -235,11 +233,11 @@ class CleaningPDI(ProcessPDI, Cleaning):
     """
 
     m_def = Section(
-        label="Cleaning",
+        label='Cleaning',
         categories=[PDICategory],
     )
 
-    def normalize(self, archive, logger: "BoundLogger") -> None:
+    def normalize(self, archive, logger: 'BoundLogger') -> None:
         """
         The normalizer sets the sample status if a reference to a sample is given.
         """
@@ -264,12 +262,12 @@ class BackSideCoatingPDI(ProcessPDI, Process, EntryData):
     """
 
     m_def = Section(
-        label="BackSideCoating",
-        a_eln={"hide": ["steps"]},
+        label='BackSideCoating',
+        a_eln={'hide': ['steps']},
         categories=[PDICategory],
     )
     recipe = Quantity(
-        type=Reference(SectionProxy("BackSideCoatingRecipePDI")),
+        type=Reference(SectionProxy('BackSideCoatingRecipePDI')),
         description=""" The recipe used for the process. If a recipe is found,
            all the data is copied from the Recipe within the Process.
            """,
@@ -279,23 +277,23 @@ class BackSideCoatingPDI(ProcessPDI, Process, EntryData):
     )
     temperature = Quantity(
         type=np.float64,
-        description="The temperature of the annealing process.",
-        a_eln={"component": "NumberEditQuantity", "defaultDisplayUnit": "celsius"},
-        unit="celsius",
+        description='The temperature of the annealing process.',
+        a_eln={'component': 'NumberEditQuantity', 'defaultDisplayUnit': 'celsius'},
+        unit='celsius',
     )
     duration = Quantity(
         type=np.float64,
-        description="The elapsed time since the annealing process started.",
+        description='The elapsed time since the annealing process started.',
         a_eln=ELNAnnotation(
-            component=ELNComponentEnum.NumberEditQuantity, defaultDisplayUnit="minute"
+            component=ELNComponentEnum.NumberEditQuantity, defaultDisplayUnit='minute'
         ),
-        unit="second",
+        unit='second',
     )
     coating_reagents = SubSection(
         section_def=CompositeSystemReference,
     )
 
-    def normalize(self, archive, logger: "BoundLogger") -> None:
+    def normalize(self, archive, logger: 'BoundLogger') -> None:
         """
         The normalizer sets the sample status if a reference to a sample is given.
         """
@@ -321,13 +319,13 @@ class BackSideCoatingRecipePDI(BackSideCoatingPDI, Recipe, EntryData):
 
     m_def = Section(
         a_eln={
-            "hide": [
-                "datetime",
-                "samples",
-                "starting_time",
-                "ending_time",
-                "location",
-                "recipe",
+            'hide': [
+                'datetime',
+                'samples',
+                'starting_time',
+                'ending_time',
+                'location',
+                'recipe',
             ]
         },
     )
@@ -338,7 +336,7 @@ class BackSideCoatingRecipePDI(BackSideCoatingPDI, Recipe, EntryData):
         """,
         a_eln=ELNAnnotation(
             component=ELNComponentEnum.StringEditQuantity,
-            label="Recipe ID",
+            label='Recipe ID',
         ),
     )
 
@@ -349,26 +347,26 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
     """
 
     m_def = Section(
-        a_eln={"hide": ["steps", "samples", "instruments"]},
-        label="Sample Cut",
+        a_eln={'hide': ['steps', 'samples', 'instruments']},
+        label='Sample Cut',
         categories=[PDICategory],
     )
     number_of_samples = Quantity(
         type=int,
         description='The number of samples generated from this "Sample Cut" Task.',
-        a_eln=dict(component="NumberEditQuantity"),
+        a_eln=dict(component='NumberEditQuantity'),
     )
     image = Quantity(
         type=str,
-        description="A photograph or image of the substrate.",
-        a_browser={"adaptor": "RawFileAdaptor"},
+        description='A photograph or image of the substrate.',
+        a_browser={'adaptor': 'RawFileAdaptor'},
         a_eln=ELNAnnotation(
             component=ELNComponentEnum.FileEditQuantity,
         ),
     )
     children_geometry = SubSection(
         section_def=Geometry,
-        description="Section containing the geometry of the substrate.",
+        description='Section containing the geometry of the substrate.',
     )
     parent_sample = SubSection(
         description="""
@@ -384,7 +382,7 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
         repeats=True,
     )
 
-    def normalize(self, archive, logger: "BoundLogger") -> None:
+    def normalize(self, archive, logger: 'BoundLogger') -> None:
         """
         The normalizer sets the sample status if a reference to a sample is given.
         """
@@ -392,7 +390,7 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
 
         super().normalize(archive, logger)
 
-        filetype = "yaml"
+        filetype = 'yaml'
         if not self.number_of_samples:
             logger.error(
                 "Error in SampleCut: 'number_of_samples' expected, but None found."
@@ -403,9 +401,9 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
             )
         if self.children_samples:
             logger.error(
-                f"Error in SampleCut: No children samples expected,"
-                f" but {len(self.children_samples)} children samples given."
-                f" Remove the children samples and save again to generate children."
+                f'Error in SampleCut: No children samples expected,'
+                f' but {len(self.children_samples)} children samples given.'
+                f' Remove the children samples and save again to generate children.'
             )
         generated_samples = []
         if self.parent_sample and self.number_of_samples:
@@ -416,7 +414,7 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
                     self.parent_sample.reference.geometry.height
                 )
             else:
-                logger.warning("No children geometry found. Using parent geometry.")
+                logger.warning('No children geometry found. Using parent geometry.')
 
             for sample_index in range(1, self.number_of_samples + 1):
                 child_name = (
@@ -425,10 +423,10 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
                     else self.parent_sample.reference.name
                 )
                 children_filename = (
-                    f"{child_name}_{sample_index}.CompositeSystem.archive.{filetype}"
+                    f'{child_name}_{sample_index}.CompositeSystem.archive.{filetype}'
                 )
-                children_object.name = f"{child_name}_{sample_index}"
-                children_object.lab_id = f"{child_name}_{sample_index}"
+                children_object.name = f'{child_name}_{sample_index}'
+                children_object.lab_id = f'{child_name}_{sample_index}'
                 children_archive = EntryArchive(
                     data=children_object,
                     m_context=archive.m_context,
@@ -444,7 +442,7 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
                 generated_samples.append(
                     CompositeSystemReference(
                         name=children_object.name,
-                        reference=f"../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, children_filename)}#data",
+                        reference=f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, children_filename)}#data',
                     ),
                 )
             self.children_samples = generated_samples
@@ -458,6 +456,18 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
                     processed=True,
                     grown=sample.reference.grown if sample.reference.grown else False,
                 )
+
+            set_sample_status(
+                self.parent_sample.reference,
+                archive.m_context,
+                logger,
+                as_delivered=False,
+                fresh=False,
+                processed=True,
+                grown=self.parent_sample.reference.grown
+                if self.parent_sample.reference.grown
+                else False,
+            )
 
 
 m_package.__init_metainfo__()
