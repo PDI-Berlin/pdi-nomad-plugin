@@ -1,6 +1,10 @@
-# Welcome to the NOMAD Material Processing Plugin Documentation
+# Welcome to the PDI NOMAD Plugin Documentation
 
-Welcome to the official documentation for the **NOMAD Material Processing Plugin**! This plugin provides NOMAD schemas, readers, and parsers for data of materials science synthesis processes in alignment with the FAIR (Findable, Accessible, Interoperable, and Reusable) principles. It serves as a community or standard plugin, offering commonly used schemas and classes/sections for material processing data that can be shared across a community.
+Welcome to the official documentation for the **PDI NOMAD Plugin**! This plugin provides NOMAD schemas, readers, and parsers for data of materials science synthesis processes in alignment with the FAIR (Findable, Accessible, Interoperable, and Reusable) principles. It serves as a plugin for the Paul Drude Institute (PDI) and inherits from community or standard plugin:
+
+- [nomad-material-processing](https://github.com/FAIRmat-NFDI/nomad-material-processing)
+
+- [nomad-measurements](https://github.com/FAIRmat-NFDI/nomad-measurements)
 
 ## Supported Material Processing Techniques
 
@@ -8,22 +12,16 @@ Currently, this plugin supports the following material processing techniques:
 
 - **Synthesis from Gas Phase**:
   Supports different *Vapor Deposition* methods:
+
   ```bash
   Vapor Deposition
-  ├── Phyiscal Vapor Deposition (PVD)
-  │       ├── Molecular Beam Epitaxy (MBE)
-  │       ├── Pulsed Laser Deposition (PLD)
-  │       ├── Sputtering
-  │       └── Thermal Evaporation
-  │
-  └── Chemical Vapor Deposition (CVD)
-          └── Metalorganic Vapor Phase Epitaxy (MOVPE)
+  └── Phyiscal Vapor Deposition (PVD)
+          └── Molecular Beam Epitaxy (MBE)
+
   ```
 
 - **Synthesis from Solution**:
   Supports Solution Preparation
-
-Additional material processing techniques are actively being developed and will be included soon, including Synthesis from the Melt (bulk crystal growth), Synthesis by Assembly (e.g. polymerization).
 
 Stay tuned for updates as more methods become available!
 
