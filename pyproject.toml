@@ -93,6 +93,10 @@ select = [
 
 ignore = [
     "F403", # 'from module import *' used; unable to detect undefined names
+    "E501", # Line too long
+    "PLR0912", # Too many branches
+    "PLR0913", # Too many arguments in function definition
+    "PLR0915", # Too many statements
 ]
 
 fixable = ["ALL"]
@@ -127,6 +131,5 @@ characterization_schema = "pdi_nomad_plugin.characterization:schema"
 materials_schema = "pdi_nomad_plugin.mbe:materials_schema"
 instrument_schema = "pdi_nomad_plugin.mbe:instrument_schema"
 processes_schema = "pdi_nomad_plugin.mbe:processes_schema"
-# epic_mbe_parser = "pdi_nomad_plugin.mbe.epic_parser:epic_parser"
-config_mbe_parser = "pdi_nomad_plugin.mbe.epic_parser:config_parser"
+epic_mbe_parser = "pdi_nomad_plugin.mbe.epic_parser:epic_parser"
 mbe_app = "pdi_nomad_plugin.mbe.mbe_app:substrateapp"

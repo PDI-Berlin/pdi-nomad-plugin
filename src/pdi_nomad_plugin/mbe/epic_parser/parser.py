@@ -21,7 +21,6 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 from epic_scraper.epicfileimport.epic_module import (
     epiclog_read,
-    epiclog_read_batch,
     growth_time,
 )
 from nomad.datamodel.data import EntryData
@@ -98,7 +97,7 @@ class RawFileEPIC(EntryData):
     )
 
 
-class ParserConfigurationMbePDI(MatchingParser):
+class ParserEpicPDI(MatchingParser):
     def parse(self, mainfile: str, archive: EntryArchive, logger) -> None:
         filetype = 'yaml'
         data_file = mainfile.split('/')[-1]
@@ -395,15 +394,15 @@ class ParserConfigurationMbePDI(MatchingParser):
         # found_files = glob.glob(os.path.join(folder_path, '*.txt'))
 
 
-class ParserEpicPDI(MatchingParser):
-    def parse(self, mainfile: str, archive: EntryArchive, logger) -> None:
-        data_file = mainfile.split('/')[-1]
-        folder_name = mainfile.split('/')[-2]
-        upload_path = f"{mainfile.split('raw/')[0]}raw/"
-        dataframe_list = epiclog_read_batch(folder_name, upload_path)
-        filetype = 'yaml'
+# class ParserEpicPDI(MatchingParser):
+#     def parse(self, mainfile: str, archive: EntryArchive, logger) -> None:
+#         data_file = mainfile.split('/')[-1]
+#         folder_name = mainfile.split('/')[-2]
+#         upload_path = f"{mainfile.split('raw/')[0]}raw/"
+#         dataframe_list = epiclog_read_batch(folder_name, upload_path)
+#         filetype = 'yaml'
 
-        print(dataframe_list)
+#         print(dataframe_list)
 
-        archive.data = RawFileEPIC(name=data_file, epic_file=mainfile)
-        archive.metadata.entry_name = data_file.replace('.txt', '')
+#         archive.data = RawFileEPIC(name=data_file, epic_file=mainfile)
+#         archive.metadata.entry_name = data_file.replace('.txt', '')
