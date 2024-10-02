@@ -1,6 +1,6 @@
 # PDI NOMAD Plugin
 
-[Full documentation of the plugin]( https://pdi-berlin.github.io/pdi-nomad-plugin/)
+[Full documentation of the plugin](https://pdi-berlin.github.io/pdi-nomad-plugin/)
 
 Many classes are inherited from the NOMAD community plugins:
 
@@ -29,4 +29,4 @@ PDI-NOMAD-plugins/
 
 ## Installation
 
-This and other plugins are already loaded in the [Docker image](hhttps://github.com/PDI-Berlin/PDI-NOMAD-Oasis-image/pkgs/container/pdi-nomad-oasis-image) built for the PDI.
+This and other plugins are already loaded in the [Docker image](https://github.com/PDI-Berlin/PDI-NOMAD-Oasis-image/pkgs/container/pdi-nomad-oasis-image) built for the PDI.
