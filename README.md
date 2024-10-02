@@ -1,6 +1,8 @@
-# PDI Plugins
+# PDI NOMAD Plugin
 
-See also:
+[Full documentation of the plugin]( https://pdi-berlin.github.io/pdi-nomad-plugin/)
+
+Many classes are inherited from the NOMAD community plugins:
 
 [NOMAD Materials Processing plugin](https://github.com/FAIRmat-NFDI/nomad-material-processing)
 
