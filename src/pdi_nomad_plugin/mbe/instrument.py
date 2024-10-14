@@ -30,6 +30,7 @@ from nomad_material_processing.vapor_deposition.pvd.general import (
     PVDEvaporationSource,
     PVDSource,
     SourcePower,
+    ImpingingFlux,
 )
 from nomad_material_processing.vapor_deposition.pvd.thermal import (
     ThermalEvaporationHeater,
@@ -199,7 +200,7 @@ class SourcePDI(Device, EntryData):
     )
     epic_loop = Quantity(
         type=str,
-        description='The EPIC loop number.',
+        description='The EPIC loop string.',
     )
 
     primary_flux_species = SubSection(
@@ -319,6 +320,43 @@ class EffusionCellHeaterTemperature(ThermalEvaporationHeaterTemperature):
     value = Quantity(
         type=float,
         unit='kelvin',
+        shape=['*'],
+    )
+    time = Quantity(
+        type=Datetime,
+        description='The process time when each of the values were recorded.',
+        shape=['*'],
+    )
+
+
+class ImpingingFluxPDI(ImpingingFlux):
+    """
+    The flux that impinges the surface of the substrate.
+    """
+
+    m_def = Section(
+        a_eln={
+            'hide': [
+                'set_value',
+                'set_time',
+            ]
+        },
+    )
+    bep_to_flux = Quantity(
+        type=float,
+        description='The conversion factor from Beam Equivalent Pressure (BEP) to the flux.',
+        unit='mol **-1 * meter ** -2 * second * pascal ** -1',
+    )
+    t_0_parameter = Quantity(
+        type=float,
+        unit='kelvin',
+    )
+    a_parameter = Quantity(
+        type=float,
+    )
+    value = Quantity(
+        type=float,
+        unit='mol/meter ** 2/second',
         shape=['*'],
     )
     time = Quantity(

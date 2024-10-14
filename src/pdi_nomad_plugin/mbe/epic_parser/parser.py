@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import numpy as np
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -23,11 +24,13 @@ from epic_scraper.epicfileimport.epic_module import (
     epiclog_read,
     growth_time,
 )
+from nomad.units import ureg
 from nomad.datamodel.data import EntryData
 from nomad.datamodel.datamodel import EntryArchive, EntryMetadata
 from nomad.datamodel.metainfo.annotations import ELNAnnotation
 from nomad.datamodel.metainfo.basesections import (
     PubChemPureSubstanceSection,
+    PureSubstanceSection,
 )
 from nomad.metainfo import Quantity, Section
 from nomad.parsing import MatchingParser
@@ -45,6 +48,7 @@ from pdi_nomad_plugin.mbe.instrument import (
     RfGeneratorHeater,
     RfGeneratorHeaterPower,
     SingleFilamentEffusionCell,
+    ImpingingFluxPDI,
 )
 from pdi_nomad_plugin.mbe.processes import (
     ExperimentMbePDI,
@@ -136,9 +140,24 @@ class ParserEpicPDI(MatchingParser):
                 if line[1]['from'] == 'GC':
                     growth_endtime = line[0]
                     growth_duration = growth_endtime - growth_starttime
-                    print(
+                    logger.info(
                         f'Detected growth of {growth_object} started at {growth_starttime} and ended at {growth_endtime} with a duration of {growth_duration}'
                     )
+        # reading Fitting.txt
+        if config_sheet['flux calibration'][0]:
+            with open(
+                f"{folder_path}{config_sheet['flux calibration'][0]}",
+                'r',
+                encoding='utf-8',
+            ) as file:
+                fitting = {}
+                for line in file:
+                    if '#' in line:
+                        epic_loop = line.split('#')[1].strip()
+                        fitting[epic_loop] = {}
+                        for _ in range(4):
+                            key, value = file.readline().split('=')
+                            fitting[epic_loop][key] = value
 
         # filenames
         instrument_filename = f'{data_file}.InstrumentMbePDI.archive.{filetype}'
@@ -167,16 +186,19 @@ class ParserEpicPDI(MatchingParser):
             source_object = None
             if sources_row['source type'] == 'PLASMA':
                 # TODO check if file exists, everywhere
+                # read raw files
                 forward_power = epiclog_read(
                     f"{folder_path}{sources_row['f power']}.txt"
                 )
                 reflected_power = epiclog_read(
                     f"{folder_path}{sources_row['r power']}.txt"
                 )
+                # instantiate objects
                 source_object = PlasmaSourcePDI()
                 source_object.vapor_source = RfGeneratorHeater()
                 source_object.vapor_source.forward_power = RfGeneratorHeaterPower()
                 source_object.vapor_source.reflected_power = RfGeneratorHeaterPower()
+                # fill in quantities
                 source_object.type = 'RF plasma source (PLASMA)'
                 source_object.vapor_source.forward_power.value = forward_power.values
                 source_object.vapor_source.forward_power.time = list(
@@ -188,50 +210,90 @@ class ParserEpicPDI(MatchingParser):
                 source_object.vapor_source.reflected_power.time = list(
                     reflected_power.index
                 )
+
                 # TODO fill in dissipated power as the difference between forward and reflected power
-            if sources_row['source type'] == 'SFC':
+            if (
+                sources_row['source type'] == 'SFC'
+                or sources_row['source type'] == 'DFC'
+            ):
+                # read raw files
                 sfc_temperature = epiclog_read(
                     f"{folder_path}{sources_row['temp mv']}.txt"
                 )
                 sfc_power = epiclog_read(f"{folder_path}{sources_row['temp wop']}.txt")
-                source_object = SingleFilamentEffusionCell()
+                # instantiate objects
+                source_object = (
+                    SingleFilamentEffusionCell()
+                    if sources_row['source type'] == 'SFC'
+                    else DoubleFilamentEffusionCell()
+                )
+                source_object.impinging_flux = [ImpingingFluxPDI()]
                 source_object.vapor_source = EffusionCellHeater()
                 source_object.vapor_source.temperature = EffusionCellHeaterTemperature()
                 source_object.vapor_source.power = EffusionCellHeaterPower()
-                source_object.type = 'Single filament effusion cell (SFC)'
-                source_object.vapor_source.temperature.value = sfc_temperature.values
+                # fill in quantities
+                source_object.type = (
+                    'Single filament effusion cell (SFC)'
+                    if sources_row['source type'] == 'SFC'
+                    else 'Double filament effusion cell (DFC)'
+                )
+                unit = (
+                    '°C'
+                    if sources_row['temp mv unit'] == 'C'
+                    else sources_row['temp mv unit']
+                )
+                source_object.vapor_source.temperature.value = ureg.Quantity(
+                    sfc_temperature.values, ureg(unit)
+                )
                 source_object.vapor_source.temperature.time = list(
                     sfc_temperature.index
                 )
                 source_object.vapor_source.power.value = sfc_power.values
                 source_object.vapor_source.power.time = list(sfc_power.index)
+
+                if sources_row['EPIC loop']:
+                    source_object.epic_loop = sources_row['EPIC loop']
+                    if sources_row['EPIC loop'] in fitting.keys():
+                        a_param, t0_param = fitting[sources_row['EPIC loop']][
+                            'Coeff'
+                        ].split(',')
+                        bep_to_flux = fitting[sources_row['EPIC loop']]['BEPtoFlux']
+                        temperature = source_object.vapor_source.temperature.value.to(
+                            'K'
+                        ).magnitude
+                        impinging_flux = (
+                            float(bep_to_flux)
+                            * float(a_param)
+                            * np.exp(float(t0_param) / temperature)
+                        )
+                        source_object.impinging_flux[0].bep_to_flux = ureg.Quantity(
+                            float(bep_to_flux),
+                            ureg('mol **-1 * meter ** -2 * second * pascal ** -1'),
+                        )
+                        source_object.impinging_flux[0].t_0_parameter = ureg.Quantity(
+                            float(t0_param), ureg('°C')
+                        )
+                        source_object.impinging_flux[0].a_parameter = float(a_param)
+                        source_object.impinging_flux[0].value = impinging_flux
+                        source_object.impinging_flux[
+                            0
+                        ].time = source_object.vapor_source.temperature.time
+
             if sources_row['source type'] == 'DFC':
-                dfc_temperature = epiclog_read(
-                    f"{folder_path}{sources_row['temp mv']}.txt"
-                )
-                dfc_power = epiclog_read(f"{folder_path}{sources_row['temp wop']}.txt")
+                # read raw files
                 dfc_hl_temperature = epiclog_read(
                     f"{folder_path}{sources_row['hl temp mv']}.txt"
                 )
                 dfc_hl_power = epiclog_read(
                     f"{folder_path}{sources_row['hl temp wop']}.txt"
                 )
-                source_object = DoubleFilamentEffusionCell()
-                source_object.vapor_source = EffusionCellHeater()
-                source_object.vapor_source.temperature = EffusionCellHeaterTemperature()
-                source_object.vapor_source.power = EffusionCellHeaterPower()
+                # instantiate objects
                 source_object.vapor_source_hot_lip = EffusionCellHeater()
                 source_object.vapor_source_hot_lip.temperature = (
                     EffusionCellHeaterTemperature()
                 )
+                # fill in quantities
                 source_object.vapor_source_hot_lip.power = EffusionCellHeaterPower()
-                source_object.type = 'Double filament effusion cell (DFC)'
-                source_object.vapor_source.temperature.value = dfc_temperature.values
-                source_object.vapor_source.temperature.time = list(
-                    dfc_temperature.index
-                )
-                source_object.vapor_source.power.value = dfc_power.values
-                source_object.vapor_source.power.time = list(dfc_power.index)
                 source_object.vapor_source_hot_lip.temperature.value = (
                     dfc_hl_temperature.values
                 )
@@ -264,7 +326,9 @@ class ParserEpicPDI(MatchingParser):
                         substance_objs = []
                         for substance in substances:
                             substance_objs = [
-                                PubChemPureSubstanceSection(name=substance)
+                                PureSubstanceSection(
+                                    name=substance
+                                )  # TODO insert again PUBCHEM PubChemPureSubstanceSection(name=substance)
                             ]
                         setattr(source_object, attribute, substance_objs)
                 if sources_row['date'] and sources_row['time']:
@@ -293,12 +357,14 @@ class ParserEpicPDI(MatchingParser):
 
             # filling in growth process archive
             if sources_row['source type'] == 'SUB':
+                # read raw files
                 substrate_temperature = epiclog_read(
                     f"{folder_path}{sources_row['temp mv']}.txt"
                 )
                 substrate_power = epiclog_read(
                     f"{folder_path}{sources_row['temp wop']}.txt"
                 )
+                # instantiate objects
                 process_data = GrowthMbePDI()
                 process_data.name = f'{data_file} growth'
                 process_data.steps = [GrowthStepMbePDI()]
