@@ -366,6 +366,7 @@ class ParserEpicPDI(MatchingParser):
                 )
                 # instantiate objects
                 process_data = GrowthMbePDI()
+                process_data.m_context = archive.m_context  # for HDF5Dataset
                 process_data.name = f'{data_file} growth'
                 process_data.steps = [GrowthStepMbePDI()]
                 process_data.steps[0].sample_parameters = [SampleParametersMbe()]
@@ -379,7 +380,7 @@ class ParserEpicPDI(MatchingParser):
                 process_data.steps[0].sources = sources_list
                 process_data.steps[0].sample_parameters[
                     0
-                ].substrate_temperature.value = substrate_temperature.values
+                ].substrate_temperature.value = substrate_temperature.values.ravel()
                 process_data.steps[0].sample_parameters[
                     0
                 ].substrate_temperature.time = list(substrate_temperature.index)

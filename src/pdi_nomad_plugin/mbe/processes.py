@@ -17,6 +17,9 @@ from nomad.datamodel.metainfo.basesections import (
     System,
     SystemComponent,
 )
+
+from nomad.datamodel.hdf5 import HDF5Dataset
+
 from nomad.datamodel.metainfo.plot import PlotSection
 from nomad.datamodel.metainfo.workflow import (
     Link,
@@ -476,9 +479,9 @@ class SubstrateHeaterTemperature(TimeSeries):
         },
     )
     value = Quantity(
-        type=float,
+        type=HDF5Dataset,
         unit='kelvin',
-        shape=['*'],
+        shape=[],
     )
     time = Quantity(
         type=Datetime,
