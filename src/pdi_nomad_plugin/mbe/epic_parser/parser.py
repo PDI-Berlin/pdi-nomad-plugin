@@ -18,6 +18,7 @@
 import numpy as np
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from typing import Union, Dict, Iterable
 
 import pandas as pd
 from epic_scraper.epicfileimport.epic_module import (
@@ -102,7 +103,38 @@ class RawFileEPIC(EntryData):
 
 
 class ParserEpicPDI(MatchingParser):
-    def parse(self, mainfile: str, archive: EntryArchive, logger) -> None:
+    def is_mainfile(
+        self,
+        filename: str,
+        mime: str,
+        buffer: bytes,
+        decoded_buffer: str,
+        compression: str = None,
+    ) -> Union[bool, Iterable[str]]:
+        is_mainfile = super().is_mainfile(
+            filename=filename,
+            mime=mime,
+            buffer=buffer,
+            decoded_buffer=decoded_buffer,
+            compression=compression,
+        )
+        if is_mainfile:
+            try:
+                # try to resolve mainfile keys from parser
+                mainfile_keys = ['test_archive']
+                self.creates_children = True
+                return mainfile_keys
+            except Exception:
+                return is_mainfile
+        return is_mainfile
+
+    def parse(
+        self,
+        mainfile: str,
+        archive: EntryArchive,
+        child_archives: dict(test_archive=EntryArchive),
+        logger,
+    ) -> None:
         filetype = 'yaml'
         data_file = mainfile.split('/')[-1]
         upload_path = f"{mainfile.split('raw/')[0]}raw/"
@@ -378,9 +410,9 @@ class ParserEpicPDI(MatchingParser):
                 ].substrate_power = SubstrateHeaterPower()
 
                 process_data.steps[0].sources = sources_list
-                process_data.steps[0].sample_parameters[
-                    0
-                ].substrate_temperature.value = substrate_temperature.values.ravel()
+                # process_data.steps[0].sample_parameters[
+                #     0
+                # ].substrate_temperature.value = substrate_temperature.values.ravel()
                 process_data.steps[0].sample_parameters[
                     0
                 ].substrate_temperature.time = list(substrate_temperature.index)
@@ -390,6 +422,20 @@ class ParserEpicPDI(MatchingParser):
                 process_data.steps[0].sample_parameters[0].substrate_power.time = list(
                     substrate_power.index
                 )
+                child_archives['test_archive'].data = GrowthMbePDI()
+                child_archives['test_archive'].data.steps = [GrowthStepMbePDI()]
+                child_archives['test_archive'].data.steps[0].sample_parameters = [
+                    SampleParametersMbe()
+                ]
+                child_archives['test_archive'].data.steps[0].sample_parameters[
+                    0
+                ].substrate_temperature = SubstrateHeaterTemperature()
+                child_archives['test_archive'].data.steps[0].sample_parameters[
+                    0
+                ].substrate_temperature.value = substrate_temperature.values.ravel()
+                child_archives[
+                    'test_archive'
+                ].metadata.entry_name = f'TEST_{process_filename}'
 
         # creating instrument archive
         if archive.m_context.raw_path_exists(instrument_filename):

@@ -464,23 +464,23 @@ class SubstrateHeaterTemperature(TimeSeries):
     """
 
     m_def = Section(
-        a_plot=[
-            {
-                'label': 'measured temperature',
-                'x': 'time',
-                'y': ['value'],
-            },
-        ],
-        a_eln={
-            'hide': [
-                'set_value',
-                'set_time',
-            ]
-        },
+        # a_plot=[
+        #     {
+        #         'label': 'measured temperature',
+        #         'x': 'time',
+        #         'y': ['value'],
+        #     },
+        # ],
+        # a_eln={
+        #     'hide': [
+        #         'set_value',
+        #         'set_time',
+        #     ]
+        # },
     )
     value = Quantity(
         type=HDF5Dataset,
-        unit='kelvin',
+        # unit="kelvin",
         shape=[],
     )
     time = Quantity(
