@@ -121,7 +121,7 @@ class ParserEpicPDI(MatchingParser):
         if is_mainfile:
             try:
                 # try to resolve mainfile keys from parser
-                mainfile_keys = ['test_archive']
+                mainfile_keys = ['process_archive']
                 self.creates_children = True
                 return mainfile_keys
             except Exception:
@@ -132,7 +132,7 @@ class ParserEpicPDI(MatchingParser):
         self,
         mainfile: str,
         archive: EntryArchive,
-        child_archives: dict(test_archive=EntryArchive),
+        child_archives: dict(process_archive=EntryArchive),
         logger,
     ) -> None:
         filetype = 'yaml'
@@ -396,46 +396,39 @@ class ParserEpicPDI(MatchingParser):
                 substrate_power = epiclog_read(
                     f"{folder_path}{sources_row['temp wop']}.txt"
                 )
+
                 # instantiate objects
-                process_data = GrowthMbePDI()
-                process_data.m_context = archive.m_context  # for HDF5Dataset
-                process_data.name = f'{data_file} growth'
-                process_data.steps = [GrowthStepMbePDI()]
-                process_data.steps[0].sample_parameters = [SampleParametersMbe()]
-                process_data.steps[0].sample_parameters[
+                child_archives['process_archive'].data = GrowthMbePDI()
+                child_archives['process_archive'].data.steps = [GrowthStepMbePDI()]
+                child_archives['process_archive'].data.steps[0].sample_parameters = [
+                    SampleParametersMbe()
+                ]
+                child_archives['process_archive'].data.steps[0].sample_parameters[
                     0
                 ].substrate_temperature = SubstrateHeaterTemperature()
-                process_data.steps[0].sample_parameters[
+                child_archives['process_archive'].data.steps[0].sample_parameters[
                     0
                 ].substrate_power = SubstrateHeaterPower()
 
-                process_data.steps[0].sources = sources_list
-                # process_data.steps[0].sample_parameters[
-                #     0
-                # ].substrate_temperature.value = substrate_temperature.values.ravel()
-                process_data.steps[0].sample_parameters[
-                    0
-                ].substrate_temperature.time = list(substrate_temperature.index)
-                process_data.steps[0].sample_parameters[
-                    0
-                ].substrate_power.value = substrate_power.values
-                process_data.steps[0].sample_parameters[0].substrate_power.time = list(
-                    substrate_power.index
-                )
-                child_archives['test_archive'].data = GrowthMbePDI()
-                child_archives['test_archive'].data.steps = [GrowthStepMbePDI()]
-                child_archives['test_archive'].data.steps[0].sample_parameters = [
-                    SampleParametersMbe()
-                ]
-                child_archives['test_archive'].data.steps[0].sample_parameters[
-                    0
-                ].substrate_temperature = SubstrateHeaterTemperature()
-                child_archives['test_archive'].data.steps[0].sample_parameters[
+                # fill in quantities
+                child_archives['process_archive'].data.name = f'{data_file} growth'
+                child_archives['process_archive'].data.steps[0].sources = sources_list
+                child_archives['process_archive'].data.steps[0].sample_parameters[
                     0
                 ].substrate_temperature.value = substrate_temperature.values.ravel()
-                child_archives[
-                    'test_archive'
-                ].metadata.entry_name = f'TEST_{process_filename}'
+                child_archives['process_archive'].data.steps[0].sample_parameters[
+                    0
+                ].substrate_temperature.time = np.array(
+                    (substrate_temperature.index - growth_starttime).total_seconds()
+                )
+                child_archives['process_archive'].data.steps[0].sample_parameters[
+                    0
+                ].substrate_power.value = substrate_power.values.ravel()
+                child_archives['process_archive'].data.steps[0].sample_parameters[
+                    0
+                ].substrate_power.time = np.array(
+                    (substrate_power.index - growth_starttime).total_seconds()
+                )
 
         # creating instrument archive
         if archive.m_context.raw_path_exists(instrument_filename):
@@ -458,22 +451,22 @@ class ParserEpicPDI(MatchingParser):
                 logger,
             )
 
-        # creating process archive
-        if archive.m_context.raw_path_exists(process_filename):
-            print(f'Process archive already exists: {process_filename}')
-        else:
-            process_archive = EntryArchive(
-                data=process_data if process_data else GrowthMbePDI(),
-                # m_context=archive.m_context,
-                metadata=EntryMetadata(upload_id=archive.m_context.upload_id),
-            )
-            create_archive(
-                process_archive.m_to_dict(),
-                archive.m_context,
-                process_filename,
-                filetype,
-                logger,
-            )
+        # # creating process archive
+        # if archive.m_context.raw_path_exists(process_filename):
+        #     print(f'Process archive already exists: {process_filename}')
+        # else:
+        #     process_archive = EntryArchive(
+        #         data=process_data if process_data else GrowthMbePDI(),
+        #         # m_context=archive.m_context,
+        #         metadata=EntryMetadata(upload_id=archive.m_context.upload_id),
+        #     )
+        #     create_archive(
+        #         process_archive.m_to_dict(),
+        #         archive.m_context,
+        #         process_filename,
+        #         filetype,
+        #         logger,
+        #     )
 
         # creating experiment archive
         if archive.m_context.raw_path_exists(experiment_filename):
@@ -481,9 +474,9 @@ class ParserEpicPDI(MatchingParser):
         else:
             experiment_data = ExperimentMbePDI(
                 name=f'{data_file} experiment',
-                growth_run=GrowthMbePDIReference(
-                    reference=f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, process_filename)}#data',
-                ),
+                # growth_run=GrowthMbePDIReference(
+                #     reference=f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, process_filename)}#data',
+                # ),
             )
             experiment_archive = EntryArchive(
                 data=experiment_data if experiment_data else ExperimentMbePDI(),
@@ -497,6 +490,15 @@ class ParserEpicPDI(MatchingParser):
                 filetype,
                 logger,
             )
+
+        # creating experiment archive
+        # archive.data = ExperimentMbePDI(
+        #     name=f'{data_file} experiment',
+        #     # growth_run=GrowthMbePDIReference(
+        #     #     reference=f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, child_archives["process_archive"].metadata.entry_name)}#data',
+        #     # ),
+        # )
+
         archive.data = RawFileEPIC(
             name=data_file,
             epic_file=mainfile,

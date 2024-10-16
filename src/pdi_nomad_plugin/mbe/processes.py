@@ -1,6 +1,7 @@
 import json
-
 import numpy as np
+import plotly.graph_objects as go
+
 from nomad.config import config
 from nomad.datamodel.data import ArchiveSection, EntryData
 from nomad.datamodel.metainfo.annotations import (
@@ -20,7 +21,6 @@ from nomad.datamodel.metainfo.basesections import (
 
 from nomad.datamodel.hdf5 import HDF5Dataset
 
-from nomad.datamodel.metainfo.plot import PlotSection
 from nomad.datamodel.metainfo.workflow import (
     Link,
 )
@@ -31,6 +31,11 @@ from nomad.metainfo import (
     SchemaPackage,
     Section,
     SubSection,
+)
+
+from nomad.datamodel.metainfo.plot import (
+    PlotlyFigure,
+    PlotSection,
 )
 from nomad_material_processing.general import (
     TimeSeries,
@@ -432,33 +437,33 @@ class SubstrateHeaterPower(TimeSeries):
     """
 
     m_def = Section(
-        a_plot=[
-            {
-                'label': 'measured power',
-                'x': 'time',
-                'y': ['value'],
-            },
-        ],
-        a_eln={
-            'hide': [
-                'set_value',
-                'set_time',
-            ]
-        },
+        # a_plot=[
+        #     {
+        #         "label": "measured power",
+        #         "x": "time",
+        #         "y": ["value"],
+        #     },
+        # ],
+        # a_eln={
+        #     "hide": [
+        #         "set_value",
+        #         "set_time",
+        #     ]
+        # },
     )
     value = Quantity(
-        type=float,
-        unit='watt',
-        shape=['*'],
+        type=HDF5Dataset,
+        # unit="watt",
+        shape=[],
     )
     time = Quantity(
-        type=Datetime,
+        type=HDF5Dataset,
         description='The process time when each of the values were recorded.',
-        shape=['*'],
+        shape=[],
     )
 
 
-class SubstrateHeaterTemperature(TimeSeries):
+class SubstrateHeaterTemperature(TimeSeries, PlotSection):
     """
     The temperature of the heater during the deposition process.
     """
@@ -483,11 +488,121 @@ class SubstrateHeaterTemperature(TimeSeries):
         # unit="kelvin",
         shape=[],
     )
+    # time = Quantity(
+    #     type=Datetime,
+    #     description="The process time when each of the values were recorded.",
+    #     shape=["*"],
+    # )
     time = Quantity(
-        type=Datetime,
+        type=HDF5Dataset,
         description='The process time when each of the values were recorded.',
-        shape=['*'],
+        shape=[],
+        unit='second',
     )
+
+    def normalize(self, archive, logger):
+        super().normalize(archive, logger)
+        # with (
+        #     archive.data.steps[0]
+        #     .sample_parameters[0]
+        #     .substrate_power.time as time_array
+        # ):
+        with self.time as deserialized:
+            time_array = deserialized[:]
+        with self.value as deserialized:
+            value_array = deserialized[:]
+
+        #     serialized = archive.m_to_dict()
+        #     # serialized["data"]["steps"][0]["sample_parameters"][0]["substrate_temperature"]["value"]
+        #     deserialized = archive.m_from_dict(
+        #         serialized, m_context=self.m_root().m_context
+        #     )
+        #     with deserialized.data.steps[0].sample_parameters[
+        #         0
+        #     ].substrate_temperature.value as dataset:
+        #         print(dataset[:])
+
+        fig = go.Figure()
+        # x0 = None
+        # y0 = None
+        # y20 = None
+        # y30 = None
+        # shapes = []
+        # for step in self.steps:
+        #     x = step.environment.pressure.time.to('second').magnitude
+        #     y = step.environment.pressure.value.to('mbar').magnitude
+        #     y2 = step.sources[0].vapor_source.power.value.to('watt').magnitude
+        #     y3 = (
+        #         step.sample_parameters[0]
+        #         .substrate_temperature.value.to('celsius')
+        #         .magnitude
+        #     )
+        #     if x0 is not None:
+        #         x = np.insert(x, 0, x0)
+        #         y = np.insert(y, 0, y0)
+        #         y2 = np.insert(y2, 0, y20)
+        #         y3 = np.insert(y3, 0, y30)
+        fig.add_trace(
+            go.Scatter(
+                x=time_array,
+                y=value_array,
+                # name=step.name,
+                line=dict(color='#2A4CDF', width=3),
+                yaxis='y',
+            ),
+        )
+
+        # fig.update_layout(shapes=shapes)
+        fig.update_layout(
+            template='plotly_white',
+            # hovermode='closest',
+            dragmode='zoom',
+            xaxis=dict(
+                fixedrange=False,
+                autorange=True,
+                # rangeslider=dict(
+                #     autorange=True,
+                #     borderwidth=1,
+                # ),
+                title='Process time / s',
+                mirror='all',
+                showline=True,
+                gridcolor='#EAEDFC',
+            ),
+            yaxis=dict(
+                fixedrange=False,
+                # type="log",
+                # anchor="x",
+                title='Temperature / °C',
+                # domain=[0, 0.48],
+                # titlefont=dict(color="#2A4CDF"),
+                tickfont=dict(color='#2A4CDF'),
+                gridcolor='#EAEDFC',
+            ),
+        )
+
+        # figure1.update_traces(line=dict(width=10), marker=dict(size=10))
+        # figure1.update_yaxes(
+        #     ticks='outside',  # "",
+        #     showticklabels=True,
+        #     showline=True,
+        #     linewidth=1,
+        #     linecolor='black',
+        #     mirror=True,
+        #     row=[1, 2, 3, 4],
+        #     col=[1, 2],
+        # )
+        # figure1.update_xaxes(
+        #     ticks='outside',  # "",
+        #     showticklabels=True,
+        #     showline=True,
+        #     linewidth=1,
+        #     linecolor='black',
+        #     mirror=True,
+        #     row=[1, 2, 3, 4],
+        #     col=[1, 2],
+        # )
+        self.figures = [PlotlyFigure(label='figure 1', figure=fig.to_plotly_json())]
 
 
 class SubstrateHeaterCurrent(TimeSeries):
