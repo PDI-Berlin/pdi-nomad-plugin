@@ -121,7 +121,7 @@ class ParserEpicPDI(MatchingParser):
         if is_mainfile:
             try:
                 # try to resolve mainfile keys from parser
-                mainfile_keys = ['process_archive']
+                mainfile_keys = ['process']
                 self.creates_children = True
                 return mainfile_keys
             except Exception:
@@ -132,7 +132,7 @@ class ParserEpicPDI(MatchingParser):
         self,
         mainfile: str,
         archive: EntryArchive,
-        child_archives: dict(process_archive=EntryArchive),
+        child_archives: dict(process=EntryArchive),
         logger,
     ) -> None:
         filetype = 'yaml'
@@ -165,16 +165,15 @@ class ParserEpicPDI(MatchingParser):
             growth_events = growth_time(messages_df)
             for line in growth_events.iterrows():
                 if line[1]['to'] == 'GC':
-                    growth_object = line[1][
-                        'object'
-                    ]  # check TODO with Oliver which ID to write
+                    growth_id = line[1]['object']
                     growth_starttime = line[0]
                 if line[1]['from'] == 'GC':
                     growth_endtime = line[0]
                     growth_duration = growth_endtime - growth_starttime
                     logger.info(
-                        f'Detected growth of {growth_object} started at {growth_starttime} and ended at {growth_endtime} with a duration of {growth_duration}'
+                        f'Detected growth of {growth_id} started at {growth_starttime} and ended at {growth_endtime} with a duration of {growth_duration}'
                     )
+
         # reading Fitting.txt
         if config_sheet['flux calibration'][0]:
             with open(
@@ -196,26 +195,29 @@ class ParserEpicPDI(MatchingParser):
         process_filename = f'{data_file}.GrowthMbePDI.archive.{filetype}'
         experiment_filename = f'{data_file}.ExperimentMbePDI.archive.{filetype}'
 
-        etching_filename = f'TEST.InstrumentMbePDI.archive.{filetype}'
-        etching_data = EtchingPDI()
+        # etching_filename = f'TEST.InstrumentMbePDI.archive.{filetype}'
+        # etching_data = EtchingPDI()
 
-        etching_archive = EntryArchive(
-            data=etching_data if etching_data else EtchingPDI(),
-            # m_context=archive.m_context,
-            metadata=EntryMetadata(upload_id=archive.m_context.upload_id),
-        )
-        create_archive(
-            etching_archive.m_to_dict(),
-            archive.m_context,
-            etching_filename,
-            filetype,
-            logger,
-        )
+        # etching_archive = EntryArchive(
+        #     data=etching_data if etching_data else EtchingPDI(),
+        #     # m_context=archive.m_context,
+        #     metadata=EntryMetadata(upload_id=archive.m_context.upload_id),
+        # )
+        # create_archive(
+        #     etching_archive.m_to_dict(),
+        #     archive.m_context,
+        #     etching_filename,
+        #     filetype,
+        #     logger,
+        # )
+
         # filling in the sources objects list
         sources_list = []
         port_list = []
+        child_archives['process'].data = GrowthMbePDI()
+        child_archives['process'].data.steps = [GrowthStepMbePDI()]
+        child_archives['process'].data.steps[0].sources = []
         for sources_index, sources_row in sources_sheet.iterrows():
-            source_object = None
             if sources_row['source type'] == 'PLASMA':
                 # TODO check if file exists, everywhere
                 # read raw files
@@ -225,22 +227,33 @@ class ParserEpicPDI(MatchingParser):
                 reflected_power = epiclog_read(
                     f"{folder_path}{sources_row['r power']}.txt"
                 )
+                f_power_unit = sources_row['f power unit']
+                r_power_unit = sources_row['r power unit']
+
                 # instantiate objects
-                source_object = PlasmaSourcePDI()
+                child_archives['process'].data.steps[0].sources.append(
+                    PlasmaSourcePDI()
+                )
+                source_object = (
+                    child_archives['process'].data.steps[0].sources[sources_index]
+                )
                 source_object.vapor_source = RfGeneratorHeater()
                 source_object.vapor_source.forward_power = RfGeneratorHeaterPower()
                 source_object.vapor_source.reflected_power = RfGeneratorHeaterPower()
+
                 # fill in quantities
                 source_object.type = 'RF plasma source (PLASMA)'
-                source_object.vapor_source.forward_power.value = forward_power.values
-                source_object.vapor_source.forward_power.time = list(
-                    forward_power.index
+                source_object.vapor_source.forward_power.value = ureg.Quantity(
+                    forward_power.values.ravel(), ureg(f_power_unit)
                 )
-                source_object.vapor_source.reflected_power.value = (
-                    reflected_power.values
+                source_object.vapor_source.forward_power.time = np.array(
+                    (forward_power.index - growth_starttime).total_seconds()
                 )
-                source_object.vapor_source.reflected_power.time = list(
-                    reflected_power.index
+                source_object.vapor_source.reflected_power.value = ureg.Quantity(
+                    reflected_power.values.ravel(), ureg(r_power_unit)
+                )
+                source_object.vapor_source.reflected_power.time = np.array(
+                    (reflected_power.index - growth_starttime).total_seconds()
                 )
 
                 # TODO fill in dissipated power as the difference between forward and reflected power
@@ -253,35 +266,46 @@ class ParserEpicPDI(MatchingParser):
                     f"{folder_path}{sources_row['temp mv']}.txt"
                 )
                 sfc_power = epiclog_read(f"{folder_path}{sources_row['temp wop']}.txt")
+
+                temp_mv_unit = (
+                    '°C'
+                    if sources_row['temp mv unit'] == 'C'
+                    else sources_row['temp mv unit']
+                )
+
                 # instantiate objects
-                source_object = (
+                child_archives['process'].data.steps[0].sources.append(
                     SingleFilamentEffusionCell()
                     if sources_row['source type'] == 'SFC'
                     else DoubleFilamentEffusionCell()
+                )
+                source_object = (
+                    child_archives['process'].data.steps[0].sources[sources_index]
                 )
                 source_object.impinging_flux = [ImpingingFluxPDI()]
                 source_object.vapor_source = EffusionCellHeater()
                 source_object.vapor_source.temperature = EffusionCellHeaterTemperature()
                 source_object.vapor_source.power = EffusionCellHeaterPower()
+
                 # fill in quantities
                 source_object.type = (
                     'Single filament effusion cell (SFC)'
                     if sources_row['source type'] == 'SFC'
                     else 'Double filament effusion cell (DFC)'
                 )
-                unit = (
-                    '°C'
-                    if sources_row['temp mv unit'] == 'C'
-                    else sources_row['temp mv unit']
-                )
                 source_object.vapor_source.temperature.value = ureg.Quantity(
-                    sfc_temperature.values, ureg(unit)
+                    sfc_temperature.values.ravel(), ureg(temp_mv_unit)
                 )
-                source_object.vapor_source.temperature.time = list(
-                    sfc_temperature.index
+                mv_time = np.array(
+                    (sfc_temperature.index - growth_starttime).total_seconds()
                 )
-                source_object.vapor_source.power.value = sfc_power.values
-                source_object.vapor_source.power.time = list(sfc_power.index)
+                source_object.vapor_source.temperature.time = mv_time
+                source_object.vapor_source.power.value = (
+                    sfc_power.values.ravel()
+                )  # TODO insert units
+                source_object.vapor_source.power.time = np.array(
+                    (sfc_power.index - growth_starttime).total_seconds()
+                )
 
                 if sources_row['EPIC loop']:
                     source_object.epic_loop = sources_row['EPIC loop']
@@ -290,14 +314,12 @@ class ParserEpicPDI(MatchingParser):
                             'Coeff'
                         ].split(',')
                         bep_to_flux = fitting[sources_row['EPIC loop']]['BEPtoFlux']
-                        temperature = source_object.vapor_source.temperature.value.to(
-                            'K'
-                        ).magnitude
-                        impinging_flux = (
-                            float(bep_to_flux)
-                            * float(a_param)
-                            * np.exp(float(t0_param) / temperature)
-                        )
+                        temperature = source_object.vapor_source.temperature
+                        # impinging_flux = (
+                        #     float(bep_to_flux)
+                        #     * float(a_param)
+                        #     * np.exp(float(t0_param) / temperature)
+                        # )
                         source_object.impinging_flux[0].bep_to_flux = ureg.Quantity(
                             float(bep_to_flux),
                             ureg('mol **-1 * meter ** -2 * second * pascal ** -1'),
@@ -306,10 +328,11 @@ class ParserEpicPDI(MatchingParser):
                             float(t0_param), ureg('°C')
                         )
                         source_object.impinging_flux[0].a_parameter = float(a_param)
-                        source_object.impinging_flux[0].value = impinging_flux
+                        # source_object.impinging_flux[0].value = impinging_flux
+                        # TODO include impinging flux in the source object
                         source_object.impinging_flux[
                             0
-                        ].time = source_object.vapor_source.temperature.time
+                        ].time = mv_time  # TODO insert hdf5 link
 
             if sources_row['source type'] == 'DFC':
                 # read raw files
@@ -319,22 +342,32 @@ class ParserEpicPDI(MatchingParser):
                 dfc_hl_power = epiclog_read(
                     f"{folder_path}{sources_row['hl temp wop']}.txt"
                 )
+                hl_temp_mv_unit = (
+                    '°C'
+                    if sources_row['hl temp mv unit'] == 'C'
+                    else sources_row['hl temp mv unit']
+                )
+
                 # instantiate objects
                 source_object.vapor_source_hot_lip = EffusionCellHeater()
                 source_object.vapor_source_hot_lip.temperature = (
                     EffusionCellHeaterTemperature()
                 )
+
                 # fill in quantities
                 source_object.vapor_source_hot_lip.power = EffusionCellHeaterPower()
-                source_object.vapor_source_hot_lip.temperature.value = (
-                    dfc_hl_temperature.values
+                source_object.vapor_source_hot_lip.temperature.value = ureg.Quantity(
+                    dfc_hl_temperature.values, ureg(hl_temp_mv_unit)
                 )
-                source_object.vapor_source_hot_lip.temperature.time = list(
-                    dfc_hl_temperature.index
+                source_object.vapor_source_hot_lip.temperature.time = np.array(
+                    (dfc_hl_temperature.index - growth_starttime).total_seconds()
                 )
-                source_object.vapor_source_hot_lip.power.value = dfc_hl_power.values
-                source_object.vapor_source_hot_lip.power.time = list(dfc_hl_power.index)
-
+                source_object.vapor_source_hot_lip.power.value = (
+                    dfc_hl_power.values.ravel()
+                )
+                source_object.vapor_source_hot_lip.power.time = np.array(
+                    (dfc_hl_power.index - growth_starttime).total_seconds()
+                )
             # fill in quantities common to all sources
             # and create Source objects and Port objects lists
             if source_object:
@@ -354,13 +387,13 @@ class ParserEpicPDI(MatchingParser):
                 ]
                 for key, attribute in keys_and_attributes:
                     if sources_row[key]:
-                        substances = sources_row[key].split('+')
+                        substances = str(sources_row[key]).split('+')
                         substance_objs = []
                         for substance in substances:
                             substance_objs = [
                                 PureSubstanceSection(
                                     name=substance
-                                )  # TODO insert again PUBCHEM PubChemPureSubstanceSection(name=substance)
+                                )  # TODO insert here again PUBCHEM PubChemPureSubstanceSection(name=substance)
                             ]
                         setattr(source_object, attribute, substance_objs)
                 if sources_row['date'] and sources_row['time']:
@@ -383,9 +416,8 @@ class ParserEpicPDI(MatchingParser):
                 port_object.phi = fill_quantity(sources_row, 'phi')
                 port_list.append(port_object)
 
+                # reference the instrument.port_list into the process.sources
                 source_object.port = f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, instrument_filename)}#data/port_list/{sources_index}'
-
-                sources_list.append(source_object)
 
             # filling in growth process archive
             if sources_row['source type'] == 'SUB':
@@ -398,33 +430,36 @@ class ParserEpicPDI(MatchingParser):
                 )
 
                 # instantiate objects
-                child_archives['process_archive'].data = GrowthMbePDI()
-                child_archives['process_archive'].data.steps = [GrowthStepMbePDI()]
-                child_archives['process_archive'].data.steps[0].sample_parameters = [
+                child_archives['process'].data.steps[0].sample_parameters = [
                     SampleParametersMbe()
                 ]
-                child_archives['process_archive'].data.steps[0].sample_parameters[
+                child_archives['process'].data.steps[0].sample_parameters[
                     0
                 ].substrate_temperature = SubstrateHeaterTemperature()
-                child_archives['process_archive'].data.steps[0].sample_parameters[
+                child_archives['process'].data.steps[0].sample_parameters[
                     0
                 ].substrate_power = SubstrateHeaterPower()
 
                 # fill in quantities
-                child_archives['process_archive'].data.name = f'{data_file} growth'
-                child_archives['process_archive'].data.steps[0].sources = sources_list
-                child_archives['process_archive'].data.steps[0].sample_parameters[
+                child_archives[
+                    'process'
+                ].data.name = f'growth_{growth_id.replace("@", "_")}'
+                child_archives['process'].data.steps[0].sample_parameters[
                     0
-                ].substrate_temperature.value = substrate_temperature.values.ravel()
-                child_archives['process_archive'].data.steps[0].sample_parameters[
+                ].substrate_temperature.value = ureg.Quantity(
+                    substrate_temperature.values.ravel(), ureg(temp_mv_unit)
+                )
+                child_archives['process'].data.steps[0].sample_parameters[
                     0
                 ].substrate_temperature.time = np.array(
                     (substrate_temperature.index - growth_starttime).total_seconds()
                 )
-                child_archives['process_archive'].data.steps[0].sample_parameters[
+                child_archives['process'].data.steps[0].sample_parameters[
                     0
-                ].substrate_power.value = substrate_power.values.ravel()
-                child_archives['process_archive'].data.steps[0].sample_parameters[
+                ].substrate_power.value = ureg.Quantity(
+                    substrate_power.values.ravel(), ureg(temp_mv_unit)
+                )
+                child_archives['process'].data.steps[0].sample_parameters[
                     0
                 ].substrate_power.time = np.array(
                     (substrate_power.index - growth_starttime).total_seconds()
@@ -451,73 +486,29 @@ class ParserEpicPDI(MatchingParser):
                 logger,
             )
 
+        # creating experiment archive
+        archive.data = ExperimentMbePDI(
+            name=f'{data_file} experiment',
+            # growth_run=GrowthMbePDIReference(
+            #     reference=f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, child_archives["process"].metadata.entry_name)}#data',
+            # ),
+        )
+        # archive.metadata.entry_name = data_file.replace('.txt', '')
+
+        # # old way of creating archives as raw files
         # # creating process archive
         # if archive.m_context.raw_path_exists(process_filename):
         #     print(f'Process archive already exists: {process_filename}')
         # else:
-        #     process_archive = EntryArchive(
+        #     process = EntryArchive(
         #         data=process_data if process_data else GrowthMbePDI(),
         #         # m_context=archive.m_context,
         #         metadata=EntryMetadata(upload_id=archive.m_context.upload_id),
         #     )
         #     create_archive(
-        #         process_archive.m_to_dict(),
+        #         process.m_to_dict(),
         #         archive.m_context,
         #         process_filename,
         #         filetype,
         #         logger,
         #     )
-
-        # creating experiment archive
-        if archive.m_context.raw_path_exists(experiment_filename):
-            print(f'Experiment archive already exists: {experiment_filename}')
-        else:
-            experiment_data = ExperimentMbePDI(
-                name=f'{data_file} experiment',
-                # growth_run=GrowthMbePDIReference(
-                #     reference=f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, process_filename)}#data',
-                # ),
-            )
-            experiment_archive = EntryArchive(
-                data=experiment_data if experiment_data else ExperimentMbePDI(),
-                # m_context=archive.m_context,
-                metadata=EntryMetadata(upload_id=archive.m_context.upload_id),
-            )
-            create_archive(
-                experiment_archive.m_to_dict(),
-                archive.m_context,
-                experiment_filename,
-                filetype,
-                logger,
-            )
-
-        # creating experiment archive
-        # archive.data = ExperimentMbePDI(
-        #     name=f'{data_file} experiment',
-        #     # growth_run=GrowthMbePDIReference(
-        #     #     reference=f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, child_archives["process_archive"].metadata.entry_name)}#data',
-        #     # ),
-        # )
-
-        archive.data = RawFileEPIC(
-            name=data_file,
-            epic_file=mainfile,
-        )
-        archive.metadata.entry_name = data_file.replace('.txt', '')
-
-        # list files in folder:
-        # found_files = glob.glob(os.path.join(folder_path, '*.txt'))
-
-
-# class ParserEpicPDI(MatchingParser):
-#     def parse(self, mainfile: str, archive: EntryArchive, logger) -> None:
-#         data_file = mainfile.split('/')[-1]
-#         folder_name = mainfile.split('/')[-2]
-#         upload_path = f"{mainfile.split('raw/')[0]}raw/"
-#         dataframe_list = epiclog_read_batch(folder_name, upload_path)
-#         filetype = 'yaml'
-
-#         print(dataframe_list)
-
-#         archive.data = RawFileEPIC(name=data_file, epic_file=mainfile)
-#         archive.metadata.entry_name = data_file.replace('.txt', '')

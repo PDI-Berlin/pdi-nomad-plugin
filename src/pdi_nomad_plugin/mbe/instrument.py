@@ -5,6 +5,9 @@ from nomad.datamodel.metainfo.annotations import (
     ELNComponentEnum,
     SectionProperties,
 )
+
+
+from nomad.datamodel.hdf5 import HDF5Dataset
 from nomad.datamodel.metainfo.basesections import (
     EntityReference,
     Instrument,
@@ -276,24 +279,28 @@ class EffusionCellHeaterPower(SourcePower):
     """
 
     m_def = Section(
-        a_plot=[
-            {
-                'label': 'voltage_set',
-                'x': 'time',
-                'y': ['value'],
-            },
-        ],
-        a_eln={
-            'hide': [
-                'set_value',
-                'set_time',
-            ]
-        },
+        # a_plot=[
+        #     {
+        #         'label': 'voltage_set',
+        #         'x': 'time',
+        #         'y': ['value'],
+        #     },
+        # ],
+        # a_eln={
+        #     'hide': [
+        #         'set_value',
+        #         'set_time',
+        #     ]
+        # },
+    )
+    value = Quantity(
+        type=HDF5Dataset,
+        shape=[],
     )
     time = Quantity(
-        type=Datetime,
+        type=HDF5Dataset,
         description='The process time when each of the values were recorded.',
-        shape=['*'],
+        shape=[],
     )
 
 
@@ -303,29 +310,29 @@ class EffusionCellHeaterTemperature(ThermalEvaporationHeaterTemperature):
     """
 
     m_def = Section(
-        a_plot=[
-            {
-                'label': 'voltage_set',
-                'x': 'time',
-                'y': ['value'],
-            },
-        ],
-        a_eln={
-            'hide': [
-                'set_value',
-                'set_time',
-            ]
-        },
+        # a_plot=[
+        #     {
+        #         'label': 'voltage_set',
+        #         'x': 'time',
+        #         'y': ['value'],
+        #     },
+        # ],
+        # a_eln={
+        #     'hide': [
+        #         'set_value',
+        #         'set_time',
+        #     ]
+        # },
     )
     value = Quantity(
-        type=float,
-        unit='kelvin',
-        shape=['*'],
+        type=HDF5Dataset,
+        # unit='kelvin',
+        shape=[],
     )
     time = Quantity(
-        type=Datetime,
+        type=HDF5Dataset,
         description='The process time when each of the values were recorded.',
-        shape=['*'],
+        shape=[],
     )
 
 
@@ -335,12 +342,12 @@ class ImpingingFluxPDI(ImpingingFlux):
     """
 
     m_def = Section(
-        a_eln={
-            'hide': [
-                'set_value',
-                'set_time',
-            ]
-        },
+        # a_eln={
+        #     'hide': [
+        #         'set_value',
+        #         'set_time',
+        #     ]
+        # },
     )
     bep_to_flux = Quantity(
         type=float,
@@ -355,14 +362,14 @@ class ImpingingFluxPDI(ImpingingFlux):
         type=float,
     )
     value = Quantity(
-        type=float,
-        unit='mol/meter ** 2/second',
-        shape=['*'],
+        type=HDF5Dataset,
+        # unit='mol/meter ** 2/second',
+        shape=[],
     )
     time = Quantity(
-        type=Datetime,
+        type=HDF5Dataset,
         description='The process time when each of the values were recorded.',
-        shape=['*'],
+        shape=[],
     )
 
 
@@ -458,24 +465,28 @@ class RfGeneratorHeaterPower(SourcePower):
     """
 
     m_def = Section(
-        a_plot=[
-            {
-                'label': 'voltage_set',
-                'x': 'time',
-                'y': ['value'],
-            },
-        ],
-        a_eln={
-            'hide': [
-                'set_value',
-                'set_time',
-            ]
-        },
+        # a_plot=[
+        #     {
+        #         'label': 'voltage_set',
+        #         'x': 'time',
+        #         'y': ['value'],
+        #     },
+        # ],
+        # a_eln={
+        #     'hide': [
+        #         'set_value',
+        #         'set_time',
+        #     ]
+        # },
+    )
+    value = Quantity(
+        type=HDF5Dataset,
+        shape=[],
     )
     time = Quantity(
-        type=Datetime,
+        type=HDF5Dataset,
         description='The process time when each of the values were recorded.',
-        shape=['*'],
+        shape=[],
     )
 
 
