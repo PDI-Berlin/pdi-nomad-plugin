@@ -192,8 +192,6 @@ class ParserEpicPDI(MatchingParser):
 
         # filenames
         instrument_filename = f'{data_file}.InstrumentMbePDI.archive.{filetype}'
-        process_filename = f'{data_file}.GrowthMbePDI.archive.{filetype}'
-        experiment_filename = f'{data_file}.ExperimentMbePDI.archive.{filetype}'
 
         # etching_filename = f'TEST.InstrumentMbePDI.archive.{filetype}'
         # etching_data = EtchingPDI()
@@ -212,7 +210,6 @@ class ParserEpicPDI(MatchingParser):
         # )
 
         # filling in the sources objects list
-        sources_list = []
         port_list = []
         child_archives['process'].data = GrowthMbePDI()
         child_archives['process'].data.steps = [GrowthStepMbePDI()]
@@ -302,7 +299,7 @@ class ParserEpicPDI(MatchingParser):
                 source_object.vapor_source.temperature.time = mv_time
                 source_object.vapor_source.power.value = (
                     sfc_power.values.ravel()
-                )  # TODO insert units
+                )  # dimensionless
                 source_object.vapor_source.power.time = np.array(
                     (sfc_power.index - growth_starttime).total_seconds()
                 )
@@ -314,12 +311,23 @@ class ParserEpicPDI(MatchingParser):
                             'Coeff'
                         ].split(',')
                         bep_to_flux = fitting[sources_row['EPIC loop']]['BEPtoFlux']
-                        temperature = source_object.vapor_source.temperature
-                        # impinging_flux = (
-                        #     float(bep_to_flux)
-                        #     * float(a_param)
-                        #     * np.exp(float(t0_param) / temperature)
-                        # )
+                        # TODO remove print statements after checking the impinging flux magnitude
+                        print(a_param)
+                        print(t0_param)
+                        print(bep_to_flux)
+                        with (
+                            source_object.vapor_source.temperature.value as temperature
+                        ):
+                            print(temperature[:])
+                            impinging_flux = (
+                                float(bep_to_flux)
+                                * float(a_param)
+                                * np.exp(float(t0_param) / temperature[:])
+                            )
+                            bep_test = float(a_param) * np.exp(
+                                float(t0_param) / temperature[:]
+                            )
+                            print(f'BEP: {bep_test}')
                         source_object.impinging_flux[0].bep_to_flux = ureg.Quantity(
                             float(bep_to_flux),
                             ureg('mol **-1 * meter ** -2 * second * pascal ** -1'),
@@ -328,8 +336,7 @@ class ParserEpicPDI(MatchingParser):
                             float(t0_param), ureg('°C')
                         )
                         source_object.impinging_flux[0].a_parameter = float(a_param)
-                        # source_object.impinging_flux[0].value = impinging_flux
-                        # TODO include impinging flux in the source object
+                        source_object.impinging_flux[0].value = impinging_flux
                         source_object.impinging_flux[
                             0
                         ].time = mv_time  # TODO insert hdf5 link
@@ -364,7 +371,7 @@ class ParserEpicPDI(MatchingParser):
                 )
                 source_object.vapor_source_hot_lip.power.value = (
                     dfc_hl_power.values.ravel()
-                )
+                )  # dimensionless
                 source_object.vapor_source_hot_lip.power.time = np.array(
                     (dfc_hl_power.index - growth_starttime).total_seconds()
                 )
@@ -456,9 +463,9 @@ class ParserEpicPDI(MatchingParser):
                 )
                 child_archives['process'].data.steps[0].sample_parameters[
                     0
-                ].substrate_power.value = ureg.Quantity(
-                    substrate_power.values.ravel(), ureg(temp_mv_unit)
-                )
+                ].substrate_power.value = (
+                    substrate_power.values.ravel()
+                )  # dimensionless
                 child_archives['process'].data.steps[0].sample_parameters[
                     0
                 ].substrate_power.time = np.array(

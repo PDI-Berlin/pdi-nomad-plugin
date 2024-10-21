@@ -19,7 +19,7 @@ from nomad.datamodel.metainfo.basesections import (
     SystemComponent,
 )
 
-from nomad.datamodel.hdf5 import HDF5Dataset
+from nomad.datamodel.hdf5 import HDF5Dataset, HDF5Annotation
 
 from nomad.datamodel.metainfo.workflow import (
     Link,
@@ -433,27 +433,13 @@ class ChamberEnvironmentMbe(ChamberEnvironment):
 
 class SubstrateHeaterPower(TimeSeries):
     """
-    The power supplied to the substrate (watt).
+    The working output power measured from the substrate termocouple (dimensionless).
     """
 
-    m_def = Section(
-        # a_plot=[
-        #     {
-        #         "label": "measured power",
-        #         "x": "time",
-        #         "y": ["value"],
-        #     },
-        # ],
-        # a_eln={
-        #     "hide": [
-        #         "set_value",
-        #         "set_time",
-        #     ]
-        # },
-    )
+    m_def = Section(a_hdf5_dataset=HDF5Annotation(axes='time', signal='value'))
     value = Quantity(
         type=HDF5Dataset,
-        # unit="watt",
+        unit='dimensionless',
         shape=[],
     )
     time = Quantity(
@@ -468,31 +454,12 @@ class SubstrateHeaterTemperature(TimeSeries, PlotSection):
     The temperature of the heater during the deposition process.
     """
 
-    m_def = Section(
-        # a_plot=[
-        #     {
-        #         'label': 'measured temperature',
-        #         'x': 'time',
-        #         'y': ['value'],
-        #     },
-        # ],
-        # a_eln={
-        #     'hide': [
-        #         'set_value',
-        #         'set_time',
-        #     ]
-        # },
-    )
+    m_def = Section(a_hdf5_dataset=HDF5Annotation(axes='time', signal='value'))
     value = Quantity(
         type=HDF5Dataset,
-        # unit="kelvin",
+        unit='kelvin',
         shape=[],
     )
-    # time = Quantity(
-    #     type=Datetime,
-    #     description="The process time when each of the values were recorded.",
-    #     shape=["*"],
-    # )
     time = Quantity(
         type=HDF5Dataset,
         description='The process time when each of the values were recorded.',
@@ -500,109 +467,41 @@ class SubstrateHeaterTemperature(TimeSeries, PlotSection):
         unit='second',
     )
 
-    def normalize(self, archive, logger):
-        super().normalize(archive, logger)
-        # with (
-        #     archive.data.steps[0]
-        #     .sample_parameters[0]
-        #     .substrate_power.time as time_array
-        # ):
-        with self.time as deserialized:
-            time_array = deserialized[:]
-        with self.value as deserialized:
-            value_array = deserialized[:]
-
-        #     serialized = archive.m_to_dict()
-        #     # serialized["data"]["steps"][0]["sample_parameters"][0]["substrate_temperature"]["value"]
-        #     deserialized = archive.m_from_dict(
-        #         serialized, m_context=self.m_root().m_context
-        #     )
-        #     with deserialized.data.steps[0].sample_parameters[
-        #         0
-        #     ].substrate_temperature.value as dataset:
-        #         print(dataset[:])
-
-        fig = go.Figure()
-        # x0 = None
-        # y0 = None
-        # y20 = None
-        # y30 = None
-        # shapes = []
-        # for step in self.steps:
-        #     x = step.environment.pressure.time.to('second').magnitude
-        #     y = step.environment.pressure.value.to('mbar').magnitude
-        #     y2 = step.sources[0].vapor_source.power.value.to('watt').magnitude
-        #     y3 = (
-        #         step.sample_parameters[0]
-        #         .substrate_temperature.value.to('celsius')
-        #         .magnitude
-        #     )
-        #     if x0 is not None:
-        #         x = np.insert(x, 0, x0)
-        #         y = np.insert(y, 0, y0)
-        #         y2 = np.insert(y2, 0, y20)
-        #         y3 = np.insert(y3, 0, y30)
-        fig.add_trace(
-            go.Scatter(
-                x=time_array,
-                y=value_array,
-                # name=step.name,
-                line=dict(color='#2A4CDF', width=3),
-                yaxis='y',
-            ),
-        )
-
-        # fig.update_layout(shapes=shapes)
-        fig.update_layout(
-            template='plotly_white',
-            # hovermode='closest',
-            dragmode='zoom',
-            xaxis=dict(
-                fixedrange=False,
-                autorange=True,
-                # rangeslider=dict(
-                #     autorange=True,
-                #     borderwidth=1,
-                # ),
-                title='Process time / s',
-                mirror='all',
-                showline=True,
-                gridcolor='#EAEDFC',
-            ),
-            yaxis=dict(
-                fixedrange=False,
-                # type="log",
-                # anchor="x",
-                title='Temperature / °C',
-                # domain=[0, 0.48],
-                # titlefont=dict(color="#2A4CDF"),
-                tickfont=dict(color='#2A4CDF'),
-                gridcolor='#EAEDFC',
-            ),
-        )
-
-        # figure1.update_traces(line=dict(width=10), marker=dict(size=10))
-        # figure1.update_yaxes(
-        #     ticks='outside',  # "",
-        #     showticklabels=True,
-        #     showline=True,
-        #     linewidth=1,
-        #     linecolor='black',
-        #     mirror=True,
-        #     row=[1, 2, 3, 4],
-        #     col=[1, 2],
-        # )
-        # figure1.update_xaxes(
-        #     ticks='outside',  # "",
-        #     showticklabels=True,
-        #     showline=True,
-        #     linewidth=1,
-        #     linecolor='black',
-        #     mirror=True,
-        #     row=[1, 2, 3, 4],
-        #     col=[1, 2],
-        # )
-        self.figures = [PlotlyFigure(label='figure 1', figure=fig.to_plotly_json())]
+    # def normalize(self, archive, logger):
+    #     super().normalize(archive, logger)
+    #     with self.time as deserialized:
+    #         time_array = deserialized[:]
+    #     with self.value as deserialized:
+    #         value_array = deserialized[:]
+    #     fig = go.Figure()
+    #     fig.add_trace(
+    #         go.Scatter(
+    #             x=time_array,
+    #             y=value_array,
+    #             # name=step.name,
+    #             line=dict(color="#2A4CDF", width=3),
+    #             yaxis="y",
+    #         ),
+    #     )
+    #     fig.update_layout(
+    #         template="plotly_white",
+    #         dragmode="zoom",
+    #         xaxis=dict(
+    #             fixedrange=False,
+    #             autorange=True,
+    #             title="Process time / s",
+    #             mirror="all",
+    #             showline=True,
+    #             gridcolor="#EAEDFC",
+    #         ),
+    #         yaxis=dict(
+    #             fixedrange=False,
+    #             title="Temperature / °C",
+    #             tickfont=dict(color="#2A4CDF"),
+    #             gridcolor="#EAEDFC",
+    #         ),
+    #     )
+    #     self.figures = [PlotlyFigure(label="figure 1", figure=fig.to_plotly_json())]
 
 
 class SubstrateHeaterCurrent(TimeSeries):

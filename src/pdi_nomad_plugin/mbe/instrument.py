@@ -7,7 +7,7 @@ from nomad.datamodel.metainfo.annotations import (
 )
 
 
-from nomad.datamodel.hdf5 import HDF5Dataset
+from nomad.datamodel.hdf5 import HDF5Dataset, HDF5Annotation
 from nomad.datamodel.metainfo.basesections import (
     EntityReference,
     Instrument,
@@ -275,26 +275,13 @@ class Crucible(ArchiveSection):
 
 class EffusionCellHeaterPower(SourcePower):
     """
-    The power of the heater during the deposition process.
+    The working output power measured from the effusion cell termocouple (dimensionless).
     """
 
-    m_def = Section(
-        # a_plot=[
-        #     {
-        #         'label': 'voltage_set',
-        #         'x': 'time',
-        #         'y': ['value'],
-        #     },
-        # ],
-        # a_eln={
-        #     'hide': [
-        #         'set_value',
-        #         'set_time',
-        #     ]
-        # },
-    )
+    m_def = Section(a_hdf5_dataset=HDF5Annotation(axes='time', signal='value'))
     value = Quantity(
         type=HDF5Dataset,
+        unit='dimensionless',
         shape=[],
     )
     time = Quantity(
@@ -309,24 +296,10 @@ class EffusionCellHeaterTemperature(ThermalEvaporationHeaterTemperature):
     The temperature of the heater during the deposition process.
     """
 
-    m_def = Section(
-        # a_plot=[
-        #     {
-        #         'label': 'voltage_set',
-        #         'x': 'time',
-        #         'y': ['value'],
-        #     },
-        # ],
-        # a_eln={
-        #     'hide': [
-        #         'set_value',
-        #         'set_time',
-        #     ]
-        # },
-    )
+    m_def = Section(a_hdf5_dataset=HDF5Annotation(axes='time', signal='value'))
     value = Quantity(
         type=HDF5Dataset,
-        # unit='kelvin',
+        unit='kelvin',
         shape=[],
     )
     time = Quantity(
@@ -341,14 +314,7 @@ class ImpingingFluxPDI(ImpingingFlux):
     The flux that impinges the surface of the substrate.
     """
 
-    m_def = Section(
-        # a_eln={
-        #     'hide': [
-        #         'set_value',
-        #         'set_time',
-        #     ]
-        # },
-    )
+    m_def = Section(a_hdf5_dataset=HDF5Annotation(axes='time', signal='value'))
     bep_to_flux = Quantity(
         type=float,
         description='The conversion factor from Beam Equivalent Pressure (BEP) to the flux.',
@@ -363,7 +329,7 @@ class ImpingingFluxPDI(ImpingingFlux):
     )
     value = Quantity(
         type=HDF5Dataset,
-        # unit='mol/meter ** 2/second',
+        unit='mol/meter ** 2/second',
         shape=[],
     )
     time = Quantity(
@@ -464,23 +430,10 @@ class RfGeneratorHeaterPower(SourcePower):
     The power of the heater during the deposition process.
     """
 
-    m_def = Section(
-        # a_plot=[
-        #     {
-        #         'label': 'voltage_set',
-        #         'x': 'time',
-        #         'y': ['value'],
-        #     },
-        # ],
-        # a_eln={
-        #     'hide': [
-        #         'set_value',
-        #         'set_time',
-        #     ]
-        # },
-    )
+    m_def = Section(a_hdf5_dataset=HDF5Annotation(axes='time', signal='value'))
     value = Quantity(
         type=HDF5Dataset,
+        unit='watt',
         shape=[],
     )
     time = Quantity(
@@ -492,7 +445,8 @@ class RfGeneratorHeaterPower(SourcePower):
 
 class RfGeneratorHeater(PVDEvaporationSource):
     """
-    The RF generator used to create the plasma.
+    The reflected and dissipated power (watt) used in the radio frequency (RF)
+    generator to create the plasma.
     """
 
     m_def = Section(
