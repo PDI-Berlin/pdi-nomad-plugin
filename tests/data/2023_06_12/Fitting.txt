@@ -1,0 +1,62 @@
+'EPIC Fitting Config File
+
+# Ga
+Fit=AEF
+Order=1
+BEPtoFlux=4926000
+Coeff=4.614E00,-2.313E04
+
+# In
+Fit=AEF
+Order=1
+BEPtoFlux=5181300
+Coeff=5.566E00,-2.201E04
+
+# Mg
+Fit=AEF
+Order=1
+BEPtoFlux=5181300
+Coeff=1.195E00,-1.057E04
+
+# SiO
+Fit=AEF
+Order=1
+BEPtoFlux=1
+Coeff=-2.153E00,-1.964E04
+
+# Ni
+Fit=AEF
+Order=1
+BEPtoFlux=1
+Coeff=1.103E01,-4.820E04
+
+# Ge
+Fit=AEF
+Order=1
+BEPtoFlux=1
+Coeff=3.758E-01,-2.576E04
+
+# Ba
+Fit=AEF
+Order=1
+BEPtoFlux=5181300
+Coeff=-5.740E-01,-1.365E04
+
+# SnO
+Fit=AEF
+Order=1
+BEPtoFlux=1
+Coeff=6.899E00,-2.526E04
+
+# La
+Fit=AEF
+Order=1
+BEPtoFlux=1
+Coeff=4.059E00,-3.671E04
+
+# Ind
+Fit=AEF
+Order=1
+BEPtoFlux=1
+Coeff=6.813E00,-2.285E04
+

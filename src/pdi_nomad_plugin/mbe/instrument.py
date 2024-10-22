@@ -344,6 +344,10 @@ class EffusionCellHeater(ThermalEvaporationHeater):
     temperature = SubSection(
         section_def=EffusionCellHeaterTemperature,
     )
+    power = SubSection(
+        section_def=EffusionCellHeaterPower,
+        description='The power to the termocouple.',
+    )
 
 
 class EffusionCellSourcePDI(SourcePDI, ThermalEvaporationSource):
@@ -384,6 +388,9 @@ class EffusionCellSourcePDI(SourcePDI, ThermalEvaporationSource):
         """,
         repeats=True,
     )
+    vapor_source = SubSection(
+        section_def=EffusionCellHeater,
+    )
 
 
 class SingleFilamentEffusionCell(EffusionCellSourcePDI):
@@ -394,9 +401,6 @@ class SingleFilamentEffusionCell(EffusionCellSourcePDI):
 
     m_def = Section(
         label='Single Filament Effusion Cell',
-    )
-    vapor_source = SubSection(
-        section_def=EffusionCellHeater,
     )
 
 
@@ -416,9 +420,6 @@ class DoubleFilamentEffusionCell(EffusionCellSourcePDI):
                 ],
             ),
         ),
-    )
-    vapor_source = SubSection(
-        section_def=EffusionCellHeater,
     )
     vapor_source_hot_lip = SubSection(
         section_def=EffusionCellHeater,
