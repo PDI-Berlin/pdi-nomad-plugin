@@ -23,6 +23,7 @@ from nomad_material_processing.vapor_deposition.general import (
     FilledSubstrateHolder,
     FilledSubstrateHolderPosition,
     GasFlow,
+    VolumetricFlowRate,
     InsertReduction,
     SubstrateHolder,
     SubstrateHolderPosition,
@@ -468,6 +469,53 @@ class RfGeneratorHeater(PVDEvaporationSource):
     )
 
 
+class VolumetricFlowRatePDI(VolumetricFlowRate):
+    """
+    The volumetric flow rate of a gas at standard conditions, i.e. the equivalent rate
+    at a temperature of 0 °C (273.15 K) and a pressure of 1 atm (101325 Pa).
+    """
+
+    m_def = Section(
+        a_plot=dict(
+            # x=['time', 'set_time'],
+            # y=['value', 'set_value'],
+            x='time',
+            y='value',
+        ),
+    )
+    measurement_type = Quantity(
+        type=MEnum(
+            'Mass Flow Controller',
+            'Flow Meter',
+            'Other',
+        ),
+    )
+    value = Quantity(
+        type=HDF5Dataset,
+        unit='meter ** 3 / second',
+        shape=[],
+    )
+    time = Quantity(
+        type=HDF5Dataset,
+        description='The process time when each of the values were recorded.',
+        shape=[],
+    )
+
+
+class GasFlowPDI(GasFlow):
+    """
+    Section describing the flow of a gas.
+    """
+
+    m_def = Section()
+    gas = SubSection(
+        section_def=PubChemPureSubstanceSection,
+    )
+    flow_rate = SubSection(
+        section_def=VolumetricFlowRatePDI,
+    )
+
+
 class PlasmaSourcePDI(SourcePDI, PVDSource):
     """
     An RF plasma source for vapor deposition generates a plasma by applying
@@ -503,7 +551,7 @@ class PlasmaSourcePDI(SourcePDI, PVDSource):
         """,
     )
     gas_flow = SubSection(
-        section_def=GasFlow,
+        section_def=GasFlowPDI,
         repeats=True,
     )
     # material has been taken from VaporDepositionSource

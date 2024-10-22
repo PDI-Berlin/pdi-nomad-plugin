@@ -48,6 +48,8 @@ from pdi_nomad_plugin.mbe.instrument import (
     Port,
     RfGeneratorHeater,
     RfGeneratorHeaterPower,
+    GasFlowPDI,
+    VolumetricFlowRatePDI,
     SingleFilamentEffusionCell,
 )
 from pdi_nomad_plugin.mbe.processes import (
@@ -62,6 +64,16 @@ from pdi_nomad_plugin.utils import (
     create_archive,
     fill_quantity,
 )
+
+
+def fill_datetime(date: pd.Series, time: pd.Series) -> datetime.date:
+    return datetime.combine(
+        datetime.strptime(
+            date,
+            '%d/%m/%Y',
+        ),
+        datetime.strptime(time, '%H:%M:%S').time(),
+    ).replace(tzinfo=ZoneInfo('Europe/Berlin'))
 
 
 class RawFileConfigurationExcel(EntryData):
@@ -156,6 +168,14 @@ class ParserEpicPDI(MatchingParser):
         )
         sources_sheet.columns = sources_sheet.columns.str.strip()
 
+        # "MBE gas mixing" sheet
+        gasmixing_sheet = pd.read_excel(
+            xlsx,
+            'MBE gas mixing',
+            comment='#',
+        )
+        gasmixing_sheet.columns = gasmixing_sheet.columns.str.strip()
+
         # reading Messages.txt
         # TODO so far, nothing is done with this metadata
         if config_sheet['messages'][0]:
@@ -164,9 +184,9 @@ class ParserEpicPDI(MatchingParser):
             for line in growth_events.iterrows():
                 if line[1]['to'] == 'GC':
                     growth_id = line[1]['object']
-                    growth_starttime = line[0]
+                    growth_starttime = line[0].tz_localize('Europe/Berlin')
                 if line[1]['from'] == 'GC':
-                    growth_endtime = line[0]
+                    growth_endtime = line[0].tz_localize('Europe/Berlin')
                     growth_duration = growth_endtime - growth_starttime
                     logger.info(
                         f'Detected growth of {growth_id} started at {growth_starttime} and ended at {growth_endtime} with a duration of {growth_duration}'
@@ -189,22 +209,6 @@ class ParserEpicPDI(MatchingParser):
 
         # filenames
         instrument_filename = f'{data_file}.InstrumentMbePDI.archive.{filetype}'
-
-        # etching_filename = f'TEST.InstrumentMbePDI.archive.{filetype}'
-        # etching_data = EtchingPDI()
-
-        # etching_archive = EntryArchive(
-        #     data=etching_data if etching_data else EtchingPDI(),
-        #     # m_context=archive.m_context,
-        #     metadata=EntryMetadata(upload_id=archive.m_context.upload_id),
-        # )
-        # create_archive(
-        #     etching_archive.m_to_dict(),
-        #     archive.m_context,
-        #     etching_filename,
-        #     filetype,
-        #     logger,
-        # )
 
         # filling in the sources objects list
         port_list = []
@@ -241,16 +245,53 @@ class ParserEpicPDI(MatchingParser):
                     forward_power.values.ravel(), ureg(f_power_unit)
                 )
                 source_object.vapor_source.forward_power.time = np.array(
-                    (forward_power.index - growth_starttime).total_seconds()
+                    (
+                        forward_power.index.tz_localize('Europe/Berlin')
+                        - growth_starttime
+                    ).total_seconds()
                 )
                 source_object.vapor_source.reflected_power.value = ureg.Quantity(
                     reflected_power.values.ravel(), ureg(r_power_unit)
                 )
                 source_object.vapor_source.reflected_power.time = np.array(
-                    (reflected_power.index - growth_starttime).total_seconds()
+                    (
+                        reflected_power.index.tz_localize('Europe/Berlin')
+                        - growth_starttime
+                    ).total_seconds()
                 )
 
                 # TODO fill in dissipated power as the difference between forward and reflected power
+
+                # fill the gas mixing in the plasma source:
+                for gas_index in reversed(gasmixing_sheet.index):
+                    gas_row = gasmixing_sheet.loc[
+                        gas_index
+                    ]  # this allows to loop in reverse order. Use .iterrows() instead
+                    mfc_mv = epiclog_read(
+                        f"{folder_path}{gas_row['mfc_flow_EPIC_name']}.txt"
+                    )
+                    if gas_row['date'] and gas_row['time']:
+                        gasmixing_datetime = fill_datetime(
+                            gas_row['date'], gas_row['time']
+                        )
+                        if gasmixing_datetime > growth_starttime:
+                            continue
+                        else:
+                            print(f'this mixing was done at: {gasmixing_datetime}')
+                            print(f'growth started at: {growth_starttime}')
+                            source_object.gas_flow = [GasFlowPDI()]
+                            # source_object.gas_flow[0].flow_rate = VolumetricFlowRatePDI(
+                            #     value=mfc_mv.values.ravel(),
+                            #     time=np.array(
+                            #         (
+                            #             mfc_mv.index.tz_localize('Europe/Berlin')
+                            #             - growth_starttime
+                            #         ).total_seconds()
+                            #     ),
+                            # )
+                            # measurement_type ='Mass Flow Controller',
+                            # gas=
+
             if (
                 sources_row['source type'] == 'SFC'
                 or sources_row['source type'] == 'DFC'
@@ -291,14 +332,19 @@ class ParserEpicPDI(MatchingParser):
                     sfc_temperature.values.ravel(), ureg(temp_mv_unit)
                 )
                 mv_time = np.array(
-                    (sfc_temperature.index - growth_starttime).total_seconds()
+                    (
+                        sfc_temperature.index.tz_localize('Europe/Berlin')
+                        - growth_starttime
+                    ).total_seconds()
                 )
                 source_object.vapor_source.temperature.time = mv_time
                 source_object.vapor_source.power.value = (
                     sfc_power.values.ravel()
                 )  # dimensionless
                 source_object.vapor_source.power.time = np.array(
-                    (sfc_power.index - growth_starttime).total_seconds()
+                    (
+                        sfc_power.index.tz_localize('Europe/Berlin') - growth_starttime
+                    ).total_seconds()
                 )
 
                 if sources_row['EPIC loop']:
@@ -364,13 +410,19 @@ class ParserEpicPDI(MatchingParser):
                     dfc_hl_temperature.values, ureg(hl_temp_mv_unit)
                 )
                 source_object.vapor_source_hot_lip.temperature.time = np.array(
-                    (dfc_hl_temperature.index - growth_starttime).total_seconds()
+                    (
+                        dfc_hl_temperature.index.tz_localize('Europe/Berlin')
+                        - growth_starttime
+                    ).total_seconds()
                 )
                 source_object.vapor_source_hot_lip.power.value = (
                     dfc_hl_power.values.ravel()
                 )  # dimensionless
                 source_object.vapor_source_hot_lip.power.time = np.array(
-                    (dfc_hl_power.index - growth_starttime).total_seconds()
+                    (
+                        dfc_hl_power.index.tz_localize('Europe/Berlin')
+                        - growth_starttime
+                    ).total_seconds()
                 )
             # fill in quantities common to all sources
             # and create Source objects and Port objects lists
@@ -401,14 +453,9 @@ class ParserEpicPDI(MatchingParser):
                             ]
                         setattr(source_object, attribute, substance_objs)
                 if sources_row['date'] and sources_row['time']:
-                    source_object.datetime = datetime.combine(
-                        datetime.strptime(
-                            sources_row['date'],
-                            '%d.%m.%y',
-                        ),
-                        datetime.strptime(sources_row['time'], '%H:%M:%S').time(),
-                    ).replace(tzinfo=ZoneInfo('Europe/Berlin'))
-
+                    source_object.datetime = fill_datetime(
+                        sources_row['date'], sources_row['time']
+                    )
                 port_object = Port()
                 port_object.name = source_name
                 port_object.port_number = fill_quantity(sources_row, 'port number')
@@ -456,7 +503,10 @@ class ParserEpicPDI(MatchingParser):
                 child_archives['process'].data.steps[0].sample_parameters[
                     0
                 ].substrate_temperature.time = np.array(
-                    (substrate_temperature.index - growth_starttime).total_seconds()
+                    (
+                        substrate_temperature.index.tz_localize('Europe/Berlin')
+                        - growth_starttime
+                    ).total_seconds()
                 )
                 child_archives['process'].data.steps[0].sample_parameters[
                     0
@@ -466,7 +516,10 @@ class ParserEpicPDI(MatchingParser):
                 child_archives['process'].data.steps[0].sample_parameters[
                     0
                 ].substrate_power.time = np.array(
-                    (substrate_power.index - growth_starttime).total_seconds()
+                    (
+                        substrate_power.index.tz_localize('Europe/Berlin')
+                        - growth_starttime
+                    ).total_seconds()
                 )
 
         # creating instrument archive
