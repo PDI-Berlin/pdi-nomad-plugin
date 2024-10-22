@@ -15,46 +15,44 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import numpy as np
+from collections.abc import Iterable
 from datetime import datetime
+from typing import Union
 from zoneinfo import ZoneInfo
-from typing import Union, Dict, Iterable
 
+import numpy as np
 import pandas as pd
 from epic_scraper.epicfileimport.epic_module import (
     epiclog_read,
     growth_time,
 )
-from nomad.units import ureg
 from nomad.datamodel.data import EntryData
 from nomad.datamodel.datamodel import EntryArchive, EntryMetadata
 from nomad.datamodel.metainfo.annotations import ELNAnnotation
 from nomad.datamodel.metainfo.basesections import (
-    PubChemPureSubstanceSection,
     PureSubstanceSection,
 )
 from nomad.metainfo import Quantity, Section
 from nomad.parsing import MatchingParser
+from nomad.units import ureg
 from nomad.utils import hash
 
-from pdi_nomad_plugin.general.schema import EtchingPDI
 from pdi_nomad_plugin.mbe.instrument import (
     DoubleFilamentEffusionCell,
     EffusionCellHeater,
     EffusionCellHeaterPower,
     EffusionCellHeaterTemperature,
+    ImpingingFluxPDI,
     InstrumentMbePDI,
     PlasmaSourcePDI,
     Port,
     RfGeneratorHeater,
     RfGeneratorHeaterPower,
     SingleFilamentEffusionCell,
-    ImpingingFluxPDI,
 )
 from pdi_nomad_plugin.mbe.processes import (
     ExperimentMbePDI,
     GrowthMbePDI,
-    GrowthMbePDIReference,
     GrowthStepMbePDI,
     SampleParametersMbe,
     SubstrateHeaterPower,
@@ -178,7 +176,6 @@ class ParserEpicPDI(MatchingParser):
         if config_sheet['flux calibration'][0]:
             with open(
                 f"{folder_path}{config_sheet['flux calibration'][0]}",
-                'r',
                 encoding='utf-8',
             ) as file:
                 fitting = {}

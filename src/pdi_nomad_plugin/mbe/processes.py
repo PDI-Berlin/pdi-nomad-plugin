@@ -1,9 +1,9 @@
 import json
-import numpy as np
-import plotly.graph_objects as go
 
+import numpy as np
 from nomad.config import config
 from nomad.datamodel.data import ArchiveSection, EntryData
+from nomad.datamodel.hdf5 import HDF5Annotation, HDF5Dataset
 from nomad.datamodel.metainfo.annotations import (
     ELNAnnotation,
     ELNComponentEnum,
@@ -18,9 +18,9 @@ from nomad.datamodel.metainfo.basesections import (
     System,
     SystemComponent,
 )
-
-from nomad.datamodel.hdf5 import HDF5Dataset, HDF5Annotation
-
+from nomad.datamodel.metainfo.plot import (
+    PlotSection,
+)
 from nomad.datamodel.metainfo.workflow import (
     Link,
 )
@@ -31,11 +31,6 @@ from nomad.metainfo import (
     SchemaPackage,
     Section,
     SubSection,
-)
-
-from nomad.datamodel.metainfo.plot import (
-    PlotlyFigure,
-    PlotSection,
 )
 from nomad_material_processing.general import (
     TimeSeries,

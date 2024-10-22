@@ -1,13 +1,11 @@
 from nomad.config import config
 from nomad.datamodel.data import ArchiveSection, EntryData
+from nomad.datamodel.hdf5 import HDF5Annotation, HDF5Dataset
 from nomad.datamodel.metainfo.annotations import (
     ELNAnnotation,
     ELNComponentEnum,
     SectionProperties,
 )
-
-
-from nomad.datamodel.hdf5 import HDF5Dataset, HDF5Annotation
 from nomad.datamodel.metainfo.basesections import (
     EntityReference,
     Instrument,
@@ -30,10 +28,10 @@ from nomad_material_processing.vapor_deposition.general import (
     SubstrateHolderPosition,
 )
 from nomad_material_processing.vapor_deposition.pvd.general import (
+    ImpingingFlux,
     PVDEvaporationSource,
     PVDSource,
     SourcePower,
-    ImpingingFlux,
 )
 from nomad_material_processing.vapor_deposition.pvd.thermal import (
     ThermalEvaporationHeater,
