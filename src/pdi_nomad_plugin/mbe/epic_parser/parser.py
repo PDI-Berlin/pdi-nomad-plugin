@@ -238,6 +238,7 @@ class ParserEpicPDI(MatchingParser):
                 source_object.vapor_source = RfGeneratorHeater()
                 source_object.vapor_source.forward_power = RfGeneratorHeaterPower()
                 source_object.vapor_source.reflected_power = RfGeneratorHeaterPower()
+                source_object.gas_flow = []
 
                 # fill in quantities
                 source_object.type = 'RF plasma source (PLASMA)'
@@ -263,6 +264,7 @@ class ParserEpicPDI(MatchingParser):
                 # TODO fill in dissipated power as the difference between forward and reflected power
 
                 # fill the gas mixing in the plasma source:
+                i = 0
                 for gas_index in reversed(gasmixing_sheet.index):
                     gas_row = gasmixing_sheet.loc[
                         gas_index
@@ -279,16 +281,20 @@ class ParserEpicPDI(MatchingParser):
                         else:
                             print(f'this mixing was done at: {gasmixing_datetime}')
                             print(f'growth started at: {growth_starttime}')
-                            source_object.gas_flow = [GasFlowPDI()]
-                            # source_object.gas_flow[0].flow_rate = VolumetricFlowRatePDI(
-                            #     value=mfc_mv.values.ravel(),
-                            #     time=np.array(
-                            #         (
-                            #             mfc_mv.index.tz_localize('Europe/Berlin')
-                            #             - growth_starttime
-                            #         ).total_seconds()
-                            #     ),
-                            # )
+                            source_object.gas_flow.append(
+                                GasFlowPDI(flow_rate=VolumetricFlowRatePDI())
+                            )
+                            source_object.gas_flow[
+                                i
+                            ].flow_rate.value = mfc_mv.values.ravel()
+                            source_object.gas_flow[i].flow_rate.time = np.array(
+                                (
+                                    mfc_mv.index.tz_localize('Europe/Berlin')
+                                    - growth_starttime
+                                ).total_seconds()
+                            )
+                            i += 1
+
                             # measurement_type ='Mass Flow Controller',
                             # gas=
 

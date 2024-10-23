@@ -1,10 +1,11 @@
 from nomad.config import config
 from nomad.datamodel.data import ArchiveSection, EntryData
-from nomad.datamodel.hdf5 import HDF5Annotation, HDF5Dataset
+from nomad.datamodel.hdf5 import HDF5Dataset
 from nomad.datamodel.metainfo.annotations import (
     ELNAnnotation,
     ELNComponentEnum,
     SectionProperties,
+    H5WebAnnotation,
 )
 from nomad.datamodel.metainfo.basesections import (
     EntityReference,
@@ -277,7 +278,7 @@ class EffusionCellHeaterPower(SourcePower):
     The working output power measured from the effusion cell termocouple (dimensionless).
     """
 
-    m_def = Section(a_hdf5_dataset=HDF5Annotation(axes='time', signal='value'))
+    m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
     value = Quantity(
         type=HDF5Dataset,
         unit='dimensionless',
@@ -295,7 +296,7 @@ class EffusionCellHeaterTemperature(ThermalEvaporationHeaterTemperature):
     The temperature of the heater during the deposition process.
     """
 
-    m_def = Section(a_hdf5_dataset=HDF5Annotation(axes='time', signal='value'))
+    m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
     value = Quantity(
         type=HDF5Dataset,
         unit='kelvin',
@@ -313,7 +314,7 @@ class ImpingingFluxPDI(ImpingingFlux):
     The flux that impinges the surface of the substrate.
     """
 
-    m_def = Section(a_hdf5_dataset=HDF5Annotation(axes='time', signal='value'))
+    m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
     bep_to_flux = Quantity(
         type=float,
         description='The conversion factor from Beam Equivalent Pressure (BEP) to the flux.',
@@ -430,7 +431,7 @@ class RfGeneratorHeaterPower(SourcePower):
     The power of the heater during the deposition process.
     """
 
-    m_def = Section(a_hdf5_dataset=HDF5Annotation(axes='time', signal='value'))
+    m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
     value = Quantity(
         type=HDF5Dataset,
         unit='watt',
@@ -475,14 +476,7 @@ class VolumetricFlowRatePDI(VolumetricFlowRate):
     at a temperature of 0 °C (273.15 K) and a pressure of 1 atm (101325 Pa).
     """
 
-    m_def = Section(
-        a_plot=dict(
-            # x=['time', 'set_time'],
-            # y=['value', 'set_value'],
-            x='time',
-            y='value',
-        ),
-    )
+    m_def = Section()
     measurement_type = Quantity(
         type=MEnum(
             'Mass Flow Controller',

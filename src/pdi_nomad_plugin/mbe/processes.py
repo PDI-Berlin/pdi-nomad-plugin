@@ -3,11 +3,12 @@ import json
 import numpy as np
 from nomad.config import config
 from nomad.datamodel.data import ArchiveSection, EntryData
-from nomad.datamodel.hdf5 import HDF5Annotation, HDF5Dataset
+from nomad.datamodel.hdf5 import HDF5Dataset
 from nomad.datamodel.metainfo.annotations import (
     ELNAnnotation,
     ELNComponentEnum,
     SectionProperties,
+    H5WebAnnotation,
 )
 from nomad.datamodel.metainfo.basesections import (
     Component,
@@ -431,11 +432,14 @@ class SubstrateHeaterPower(TimeSeries):
     The working output power measured from the substrate termocouple (dimensionless).
     """
 
-    m_def = Section(a_hdf5_dataset=HDF5Annotation(axes='time', signal='value'))
+    m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
     value = Quantity(
         type=HDF5Dataset,
         unit='dimensionless',
         shape=[],
+        a_h5web=H5WebAnnotation(
+            long_name='power',
+        ),
     )
     time = Quantity(
         type=HDF5Dataset,
@@ -449,11 +453,14 @@ class SubstrateHeaterTemperature(TimeSeries, PlotSection):
     The temperature of the heater during the deposition process.
     """
 
-    m_def = Section(a_hdf5_dataset=HDF5Annotation(axes='time', signal='value'))
+    m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
     value = Quantity(
         type=HDF5Dataset,
         unit='kelvin',
         shape=[],
+        a_h5web=H5WebAnnotation(
+            long_name='temperature (K)',
+        ),
     )
     time = Quantity(
         type=HDF5Dataset,
@@ -564,7 +571,9 @@ class SubstrateHeaterVoltage(TimeSeries):
 
 
 class SampleParametersMbe(SampleParameters):
-    m_def = Section()
+    m_def = Section(
+        a_h5web=H5WebAnnotation(paths=['substrate_temperature', 'substrate_power']),
+    )
     name = Quantity(
         type=str,
         description="""
@@ -694,6 +703,12 @@ class GrowthMbePDI(VaporDeposition, EntryData):
         label_quantity='lab_id',
         categories=[PDIMBECategory],
         label='Growth Process',
+        a_h5web=H5WebAnnotation(
+            paths=[
+                'steps/0/sample_parameters/0/substrate_temperature',
+                'steps/0/sample_parameters/0/substrate_power',
+            ]
+        ),
     )
 
     # datetime
