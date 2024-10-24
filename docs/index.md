@@ -37,6 +37,4 @@ This documentation builds upon the general [NOMAD documentation](https://nomad-l
 
 NOMAD is an open-source data management platform tailored for materials science, designed to follow the FAIR principles. It offers a robust framework for managing and sharing materials data in a standardized and interoperable manner. To learn more about NOMAD, visit the [official homepage](https://nomad-lab.eu).
 
-
 We hope this documentation provides all the information you need to make the most of the NOMAD Measurements Plugin. Feel free to [contact](contact.md) us for further questions.
-

@@ -52,7 +52,12 @@ from nomad_material_processing.vapor_deposition.general import (
 from nomad_measurements.general import ActivityReference
 from nomad_measurements.xrd.schema import ELNXRayDiffraction
 
-from pdi_nomad_plugin.characterization.schema import AFMmeasurement, LightMicroscope
+from pdi_nomad_plugin.characterization.schema import (
+    AFMmeasurement,
+    LightMicroscope,
+    Pirometry,
+    LaserReflectance,
+)
 from pdi_nomad_plugin.general.schema import (
     PDIMBECategory,
     SampleCutPDI,
@@ -192,17 +197,32 @@ class PrecursorsPreparationPDIReference(ActivityReference):
     )
 
 
-class InSituMonitoringReference(SectionReference):
+class PirometryReference(SectionReference):
     """
-    A section used for referencing a InSituMonitoring.
+    A section used for referencing a pirometry.
     """
 
     reference = Quantity(
-        type=ArchiveSection,
-        description='A reference to a NOMAD `InSituMonitoring` entry.',
+        type=Pirometry,
+        description='A reference to a NOMAD `Pirometry` entry.',
         a_eln=ELNAnnotation(
             component='ReferenceEditQuantity',
-            label='In situ Monitoring Reference',
+            label='Pirometry Reference',
+        ),
+    )
+
+
+class LaserReflectanceReference(SectionReference):
+    """
+    A section used for referencing a LaserReflectance.
+    """
+
+    reference = Quantity(
+        type=LaserReflectance,
+        description='A reference to a NOMAD `LaserReflectance` entry.',
+        a_eln=ELNAnnotation(
+            component='ReferenceEditQuantity',
+            label='Laser Reflectance Reference',
         ),
     )
 
@@ -669,8 +689,11 @@ class GrowthStepMbePDI(VaporDepositionStep, PlotSection):
     environment = SubSection(
         section_def=ChamberEnvironmentMbe,
     )
-    in_situ_reflectance = SubSection(
-        section_def=InSituMonitoringReference,
+    pirometry = SubSection(
+        section_def=PirometryReference,
+    )
+    laser_reflectance = SubSection(
+        section_def=LaserReflectanceReference,
     )
 
 

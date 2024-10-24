@@ -193,9 +193,9 @@ class ParserEpicPDI(MatchingParser):
                     )
 
         # reading Fitting.txt
-        if config_sheet['flux calibration'][0]:
+        if config_sheet['flux_calibration'][0]:
             with open(
-                f"{folder_path}{config_sheet['flux calibration'][0]}",
+                f"{folder_path}{config_sheet['flux_calibration'][0]}",
                 encoding='utf-8',
             ) as file:
                 fitting = {}
@@ -216,17 +216,17 @@ class ParserEpicPDI(MatchingParser):
         child_archives['process'].data.steps = [GrowthStepMbePDI()]
         child_archives['process'].data.steps[0].sources = []
         for sources_index, sources_row in sources_sheet.iterrows():
-            if sources_row['source type'] == 'PLASMA':
+            if sources_row['source_type'] == 'PLASMA':
                 # TODO check if file exists, everywhere
                 # read raw files
                 forward_power = epiclog_read(
-                    f"{folder_path}{sources_row['f power']}.txt"
+                    f"{folder_path}{sources_row['f_power']}.txt"
                 )
                 reflected_power = epiclog_read(
-                    f"{folder_path}{sources_row['r power']}.txt"
+                    f"{folder_path}{sources_row['r_power']}.txt"
                 )
-                f_power_unit = sources_row['f power unit']
-                r_power_unit = sources_row['r power unit']
+                f_power_unit = sources_row['f_power_unit']
+                r_power_unit = sources_row['r_power_unit']
 
                 # instantiate objects
                 child_archives['process'].data.steps[0].sources.append(
@@ -269,9 +269,7 @@ class ParserEpicPDI(MatchingParser):
                     gas_row = gasmixing_sheet.loc[
                         gas_index
                     ]  # this allows to loop in reverse order. Use .iterrows() instead
-                    mfc_mv = epiclog_read(
-                        f"{folder_path}{gas_row['mfc_flow_EPIC_name']}.txt"
-                    )
+                    mfc_mv = epiclog_read(f"{folder_path}{gas_row['mfc_flow']}.txt")
                     if gas_row['date'] and gas_row['time']:
                         gasmixing_datetime = fill_datetime(
                             gas_row['date'], gas_row['time']
@@ -299,25 +297,25 @@ class ParserEpicPDI(MatchingParser):
                             # gas=
 
             if (
-                sources_row['source type'] == 'SFC'
-                or sources_row['source type'] == 'DFC'
+                sources_row['source_type'] == 'SFC'
+                or sources_row['source_type'] == 'DFC'
             ):
                 # read raw files
                 sfc_temperature = epiclog_read(
-                    f"{folder_path}{sources_row['temp mv']}.txt"
+                    f"{folder_path}{sources_row['temp_mv']}.txt"
                 )
-                sfc_power = epiclog_read(f"{folder_path}{sources_row['temp wop']}.txt")
+                sfc_power = epiclog_read(f"{folder_path}{sources_row['temp_wop']}.txt")
 
                 temp_mv_unit = (
                     '°C'
-                    if sources_row['temp mv unit'] == 'C'
-                    else sources_row['temp mv unit']
+                    if sources_row['temp_mv_unit'] == 'C'
+                    else sources_row['temp_mv_unit']
                 )
 
                 # instantiate objects
                 child_archives['process'].data.steps[0].sources.append(
                     SingleFilamentEffusionCell()
-                    if sources_row['source type'] == 'SFC'
+                    if sources_row['source_type'] == 'SFC'
                     else DoubleFilamentEffusionCell()
                 )
                 source_object = (
@@ -331,7 +329,7 @@ class ParserEpicPDI(MatchingParser):
                 # fill in quantities
                 source_object.type = (
                     'Single filament effusion cell (SFC)'
-                    if sources_row['source type'] == 'SFC'
+                    if sources_row['source_type'] == 'SFC'
                     else 'Double filament effusion cell (DFC)'
                 )
                 source_object.vapor_source.temperature.value = ureg.Quantity(
@@ -353,13 +351,13 @@ class ParserEpicPDI(MatchingParser):
                     ).total_seconds()
                 )
 
-                if sources_row['EPIC loop']:
-                    source_object.epic_loop = sources_row['EPIC loop']
-                    if sources_row['EPIC loop'] in fitting.keys():
-                        a_param, t0_param = fitting[sources_row['EPIC loop']][
+                if sources_row['EPIC_loop']:
+                    source_object.epic_loop = sources_row['EPIC_loop']
+                    if sources_row['EPIC_loop'] in fitting.keys():
+                        a_param, t0_param = fitting[sources_row['EPIC_loop']][
                             'Coeff'
                         ].split(',')
-                        bep_to_flux = fitting[sources_row['EPIC loop']]['BEPtoFlux']
+                        bep_to_flux = fitting[sources_row['EPIC_loop']]['BEPtoFlux']
                         # TODO remove print statements after checking the impinging flux magnitude
                         print(a_param)
                         print(t0_param)
@@ -390,18 +388,18 @@ class ParserEpicPDI(MatchingParser):
                             0
                         ].time = mv_time  # TODO insert hdf5 link
 
-            if sources_row['source type'] == 'DFC':
+            if sources_row['source_type'] == 'DFC':
                 # read raw files
                 dfc_hl_temperature = epiclog_read(
-                    f"{folder_path}{sources_row['hl temp mv']}.txt"
+                    f"{folder_path}{sources_row['hl_temp_mv']}.txt"
                 )
                 dfc_hl_power = epiclog_read(
-                    f"{folder_path}{sources_row['hl temp wop']}.txt"
+                    f"{folder_path}{sources_row['hl_temp_wop']}.txt"
                 )
                 hl_temp_mv_unit = (
                     '°C'
-                    if sources_row['hl temp mv unit'] == 'C'
-                    else sources_row['hl temp mv unit']
+                    if sources_row['hl_temp_mv_unit'] == 'C'
+                    else sources_row['hl_temp_mv_unit']
                 )
 
                 # instantiate objects
@@ -434,18 +432,18 @@ class ParserEpicPDI(MatchingParser):
             # and create Source objects and Port objects lists
             if source_object:
                 source_name = (
-                    str(fill_quantity(sources_row, 'source type'))
+                    str(fill_quantity(sources_row, 'source_type'))
                     + '_'
-                    + str(fill_quantity(sources_row, 'source material'))
+                    + str(fill_quantity(sources_row, 'source_material'))
                 )
                 source_object.name = source_name
                 # Define a list of tuples containing
                 # the columnd header of the xlsx sheet
                 # and the corresponding attribute name
                 keys_and_attributes = [
-                    ('primary flux species', 'primary_flux_species'),
-                    ('secondary flux species', 'secondary_flux_species'),
-                    ('source material', 'material'),
+                    ('primary_flux_species', 'primary_flux_species'),
+                    ('secondary_flux_species', 'secondary_flux_species'),
+                    ('source_material', 'material'),
                 ]
                 for key, attribute in keys_and_attributes:
                     if sources_row[key]:
@@ -464,7 +462,7 @@ class ParserEpicPDI(MatchingParser):
                     )
                 port_object = Port()
                 port_object.name = source_name
-                port_object.port_number = fill_quantity(sources_row, 'port number')
+                port_object.port_number = fill_quantity(sources_row, 'port_number')
                 port_object.flange_diameter = fill_quantity(sources_row, 'diameter')
                 port_object.flange_to_substrate_distance = fill_quantity(
                     sources_row, 'distance'
@@ -477,13 +475,13 @@ class ParserEpicPDI(MatchingParser):
                 source_object.port = f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, instrument_filename)}#data/port_list/{sources_index}'
 
             # filling in growth process archive
-            if sources_row['source type'] == 'SUB':
+            if sources_row['source_type'] == 'SUB':
                 # read raw files
                 substrate_temperature = epiclog_read(
-                    f"{folder_path}{sources_row['temp mv']}.txt"
+                    f"{folder_path}{sources_row['temp_mv']}.txt"
                 )
                 substrate_power = epiclog_read(
-                    f"{folder_path}{sources_row['temp wop']}.txt"
+                    f"{folder_path}{sources_row['temp_wop']}.txt"
                 )
 
                 # instantiate objects
