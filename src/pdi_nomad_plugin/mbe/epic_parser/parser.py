@@ -56,14 +56,21 @@ from pdi_nomad_plugin.mbe.processes import (
     ExperimentMbePDI,
     GrowthMbePDI,
     GrowthStepMbePDI,
+    GrowthMbePDIReference,
     SampleParametersMbe,
     SubstrateHeaterPower,
     SubstrateHeaterTemperature,
+)
+from pdi_nomad_plugin.characterization.schema import (
+    Pyrometry,
+    PyrometerTemperature,
 )
 from pdi_nomad_plugin.utils import (
     create_archive,
     fill_quantity,
 )
+
+timezone = 'Europe/Berlin'
 
 
 def fill_datetime(date: pd.Series, time: pd.Series) -> datetime.date:
@@ -73,43 +80,7 @@ def fill_datetime(date: pd.Series, time: pd.Series) -> datetime.date:
             '%d/%m/%Y',
         ),
         datetime.strptime(time, '%H:%M:%S').time(),
-    ).replace(tzinfo=ZoneInfo('Europe/Berlin'))
-
-
-class RawFileConfigurationExcel(EntryData):
-    m_def = Section(a_eln=None, label='Raw File Config Excel')
-    name = Quantity(
-        type=str,
-        a_eln=ELNAnnotation(
-            component='StringEditQuantity',
-        ),
-    )
-    excel_file = Quantity(
-        type=str,
-        a_eln=ELNAnnotation(
-            component='FileEditQuantity',
-        ),
-        a_browser={'adaptor': 'RawFileAdaptor'},
-        description='Configuration Excel file',
-    )
-
-
-class RawFileEPIC(EntryData):
-    m_def = Section(a_eln=None, label='Raw File EPIC')
-    name = Quantity(
-        type=str,
-        a_eln=ELNAnnotation(
-            component='StringEditQuantity',
-        ),
-    )
-    epic_file = Quantity(
-        type=str,
-        a_eln=ELNAnnotation(
-            component='FileEditQuantity',
-        ),
-        a_browser={'adaptor': 'RawFileAdaptor'},
-        description='EPIC log file list',
-    )
+    ).replace(tzinfo=ZoneInfo(timezone))
 
 
 class ParserEpicPDI(MatchingParser):
@@ -131,7 +102,7 @@ class ParserEpicPDI(MatchingParser):
         if is_mainfile:
             try:
                 # try to resolve mainfile keys from parser
-                mainfile_keys = ['process']
+                mainfile_keys = ['process', 'pyrometry']
                 self.creates_children = True
                 return mainfile_keys
             except Exception:
@@ -142,7 +113,7 @@ class ParserEpicPDI(MatchingParser):
         self,
         mainfile: str,
         archive: EntryArchive,
-        child_archives: dict(process=EntryArchive),
+        child_archives: dict(process=EntryArchive, pyrometry=EntryArchive),
         logger,
     ) -> None:
         filetype = 'yaml'
@@ -176,6 +147,14 @@ class ParserEpicPDI(MatchingParser):
         )
         gasmixing_sheet.columns = gasmixing_sheet.columns.str.strip()
 
+        # "pyrometry config" sheet
+        pyrometry_sheet = pd.read_excel(
+            xlsx,
+            'pyrometry config',
+            comment='#',
+        )
+        pyrometry_sheet.columns = pyrometry_sheet.columns.str.strip()
+
         # reading Messages.txt
         # TODO so far, nothing is done with this metadata
         if config_sheet['messages'][0]:
@@ -184,9 +163,9 @@ class ParserEpicPDI(MatchingParser):
             for line in growth_events.iterrows():
                 if line[1]['to'] == 'GC':
                     growth_id = line[1]['object']
-                    growth_starttime = line[0].tz_localize('Europe/Berlin')
+                    growth_starttime = line[0].tz_localize(timezone)
                 if line[1]['from'] == 'GC':
-                    growth_endtime = line[0].tz_localize('Europe/Berlin')
+                    growth_endtime = line[0].tz_localize(timezone)
                     growth_duration = growth_endtime - growth_starttime
                     logger.info(
                         f'Detected growth of {growth_id} started at {growth_starttime} and ended at {growth_endtime} with a duration of {growth_duration}'
@@ -210,6 +189,30 @@ class ParserEpicPDI(MatchingParser):
         # filenames
         instrument_filename = f'{data_file}.InstrumentMbePDI.archive.{filetype}'
 
+        # filling in the pyrometry archive
+        # read raw files
+        pyrometer_temp = epiclog_read(
+            f"{folder_path}{pyrometry_sheet['temperature'][0]}.txt"
+        )
+        pyrometer_temp_unit = (
+            '°C'
+            if pyrometry_sheet['temperature_unit'][0] == 'C'
+            else pyrometry_sheet['temperature_unit'][0]
+        )
+
+        # instantiate objects
+        child_archives['pyrometry'].data = Pyrometry()
+        child_archives['pyrometry'].data.pyrometer_temperature = PyrometerTemperature()
+
+        # fill in quantities
+        child_archives['pyrometry'].data.pyrometer_temperature.value = ureg.Quantity(
+            pyrometer_temp.values.ravel(), ureg(pyrometer_temp_unit)
+        )
+        child_archives['pyrometry'].data.pyrometer_temperature.time = np.array(
+            (
+                pyrometer_temp.index.tz_localize(timezone) - growth_starttime
+            ).total_seconds()
+        )
         # filling in the sources objects list
         port_list = []
         child_archives['process'].data = GrowthMbePDI()
@@ -247,8 +250,7 @@ class ParserEpicPDI(MatchingParser):
                 )
                 source_object.vapor_source.forward_power.time = np.array(
                     (
-                        forward_power.index.tz_localize('Europe/Berlin')
-                        - growth_starttime
+                        forward_power.index.tz_localize(timezone) - growth_starttime
                     ).total_seconds()
                 )
                 source_object.vapor_source.reflected_power.value = ureg.Quantity(
@@ -256,8 +258,7 @@ class ParserEpicPDI(MatchingParser):
                 )
                 source_object.vapor_source.reflected_power.time = np.array(
                     (
-                        reflected_power.index.tz_localize('Europe/Berlin')
-                        - growth_starttime
+                        reflected_power.index.tz_localize(timezone) - growth_starttime
                     ).total_seconds()
                 )
 
@@ -287,7 +288,7 @@ class ParserEpicPDI(MatchingParser):
                             ].flow_rate.value = mfc_mv.values.ravel()
                             source_object.gas_flow[i].flow_rate.time = np.array(
                                 (
-                                    mfc_mv.index.tz_localize('Europe/Berlin')
+                                    mfc_mv.index.tz_localize(timezone)
                                     - growth_starttime
                                 ).total_seconds()
                             )
@@ -337,8 +338,7 @@ class ParserEpicPDI(MatchingParser):
                 )
                 mv_time = np.array(
                     (
-                        sfc_temperature.index.tz_localize('Europe/Berlin')
-                        - growth_starttime
+                        sfc_temperature.index.tz_localize(timezone) - growth_starttime
                     ).total_seconds()
                 )
                 source_object.vapor_source.temperature.time = mv_time
@@ -347,7 +347,7 @@ class ParserEpicPDI(MatchingParser):
                 )  # dimensionless
                 source_object.vapor_source.power.time = np.array(
                     (
-                        sfc_power.index.tz_localize('Europe/Berlin') - growth_starttime
+                        sfc_power.index.tz_localize(timezone) - growth_starttime
                     ).total_seconds()
                 )
 
@@ -415,7 +415,7 @@ class ParserEpicPDI(MatchingParser):
                 )
                 source_object.vapor_source_hot_lip.temperature.time = np.array(
                     (
-                        dfc_hl_temperature.index.tz_localize('Europe/Berlin')
+                        dfc_hl_temperature.index.tz_localize(timezone)
                         - growth_starttime
                     ).total_seconds()
                 )
@@ -424,8 +424,7 @@ class ParserEpicPDI(MatchingParser):
                 )  # dimensionless
                 source_object.vapor_source_hot_lip.power.time = np.array(
                     (
-                        dfc_hl_power.index.tz_localize('Europe/Berlin')
-                        - growth_starttime
+                        dfc_hl_power.index.tz_localize(timezone) - growth_starttime
                     ).total_seconds()
                 )
             # fill in quantities common to all sources
@@ -508,7 +507,7 @@ class ParserEpicPDI(MatchingParser):
                     0
                 ].substrate_temperature.time = np.array(
                     (
-                        substrate_temperature.index.tz_localize('Europe/Berlin')
+                        substrate_temperature.index.tz_localize(timezone)
                         - growth_starttime
                     ).total_seconds()
                 )
@@ -521,8 +520,7 @@ class ParserEpicPDI(MatchingParser):
                     0
                 ].substrate_power.time = np.array(
                     (
-                        substrate_power.index.tz_localize('Europe/Berlin')
-                        - growth_starttime
+                        substrate_power.index.tz_localize(timezone) - growth_starttime
                     ).total_seconds()
                 )
 
@@ -550,9 +548,11 @@ class ParserEpicPDI(MatchingParser):
         # creating experiment archive
         archive.data = ExperimentMbePDI(
             name=f'{data_file} experiment',
-            # growth_run=GrowthMbePDIReference(
-            #     reference=f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, child_archives["process"].metadata.entry_name)}#data',
-            # ),
+            growth_run=GrowthMbePDIReference(
+                reference=child_archives['process'].data,
+                # f'/uploads/{archive.m_context.upload_id}/archive/{child_archives["process"].metadata.entry_id}#data',
+            ),
+            # f'/entries/{child_archives["process"].metadata.entry_id}/archive#data'
         )
         # archive.metadata.entry_name = data_file.replace('.txt', '')
 

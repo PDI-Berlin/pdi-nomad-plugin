@@ -55,7 +55,7 @@ from nomad_measurements.xrd.schema import ELNXRayDiffraction
 from pdi_nomad_plugin.characterization.schema import (
     AFMmeasurement,
     LightMicroscope,
-    Pirometry,
+    Pyrometry,
     LaserReflectance,
 )
 from pdi_nomad_plugin.general.schema import (
@@ -197,17 +197,17 @@ class PrecursorsPreparationPDIReference(ActivityReference):
     )
 
 
-class PirometryReference(SectionReference):
+class PyrometryReference(SectionReference):
     """
-    A section used for referencing a pirometry.
+    A section used for referencing a pyrometry.
     """
 
     reference = Quantity(
-        type=Pirometry,
-        description='A reference to a NOMAD `Pirometry` entry.',
+        type=Pyrometry,
+        description='A reference to a NOMAD `Pyrometry` entry.',
         a_eln=ELNAnnotation(
             component='ReferenceEditQuantity',
-            label='Pirometry Reference',
+            label='Pyrometry Reference',
         ),
     )
 
@@ -689,8 +689,8 @@ class GrowthStepMbePDI(VaporDepositionStep, PlotSection):
     environment = SubSection(
         section_def=ChamberEnvironmentMbe,
     )
-    pirometry = SubSection(
-        section_def=PirometryReference,
+    pyrometry = SubSection(
+        section_def=PyrometryReference,
     )
     laser_reflectance = SubSection(
         section_def=LaserReflectanceReference,
@@ -909,9 +909,9 @@ class GrowthMbePDIReference(ActivityReference):
     reference = Quantity(
         type=GrowthMbePDI,
         description='A reference to a NOMAD `GrowthMbePDI` entry.',
-        a_eln=ELNAnnotation(
-            component='ReferenceEditQuantity',
-        ),
+        # a_eln=ELNAnnotation(
+        #     component='ReferenceEditQuantity',
+        # ),
     )
 
 
