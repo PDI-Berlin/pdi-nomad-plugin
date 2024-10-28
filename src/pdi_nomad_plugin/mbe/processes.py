@@ -57,6 +57,8 @@ from pdi_nomad_plugin.characterization.schema import (
     LightMicroscope,
     Pyrometry,
     LaserReflectance,
+    MassSpectrometry,
+    RHEEDMeasurement,
 )
 from pdi_nomad_plugin.general.schema import (
     PDIMBECategory,
@@ -258,6 +260,36 @@ class AFMmeasurementReference(SectionReference):
     )
 
 
+class MassSpectrometryReference(SectionReference):
+    """
+    A section used for referencing a MassSpectrometry.
+    """
+
+    reference = Quantity(
+        type=MassSpectrometry,
+        description='A reference to a NOMAD `MassSpectrometry` entry.',
+        a_eln=ELNAnnotation(
+            component='ReferenceEditQuantity',
+            label='MassSpectrometry Measurement Reference',
+        ),
+    )
+
+
+class RHEEDReference(SectionReference):
+    """
+    RHEED measurement reference
+    """
+
+    reference = Quantity(
+        type=RHEEDMeasurement,
+        description='A reference to a NOMAD `RHEEDMeasurement` entry.',
+        a_eln=ELNAnnotation(
+            component='ReferenceEditQuantity',
+            label='RHEEDMeasurement Measurement Reference',
+        ),
+    )
+
+
 class LiMimeasurementReference(SectionReference):
     """
     A section used for referencing a LightMicroscope.
@@ -380,6 +412,21 @@ class XRDmeasurementReference(SectionReference):
                 logger,
                 overwrite=True,
             )
+
+
+class InSituCharacterizationMbePDI(ArchiveSection):
+    pyrometry = SubSection(
+        section_def=PyrometryReference,
+    )
+    laser_reflectance = SubSection(
+        section_def=LaserReflectanceReference,
+    )
+    mass_spectrometry = SubSection(
+        section_def=MassSpectrometryReference,
+    )
+    rheed = SubSection(
+        section_def=RHEEDReference,
+    )
 
 
 class CharacterizationMbePDI(ArchiveSection):
@@ -689,12 +736,8 @@ class GrowthStepMbePDI(VaporDepositionStep, PlotSection):
     environment = SubSection(
         section_def=ChamberEnvironmentMbe,
     )
-    pyrometry = SubSection(
-        section_def=PyrometryReference,
-    )
-    laser_reflectance = SubSection(
-        section_def=LaserReflectanceReference,
-    )
+
+    in_situ_characterization = SubSection(section_def=InSituCharacterizationMbePDI)
 
 
 class GrowthMbePDI(VaporDeposition, EntryData):
