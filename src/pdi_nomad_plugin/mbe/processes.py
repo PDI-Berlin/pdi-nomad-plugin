@@ -1,6 +1,7 @@
 import json
 
 import numpy as np
+import plotly.graph_objects as go
 from nomad.config import config
 from nomad.datamodel.data import ArchiveSection, EntryData
 from nomad.datamodel.hdf5 import HDF5Dataset
@@ -19,9 +20,7 @@ from nomad.datamodel.metainfo.basesections import (
     System,
     SystemComponent,
 )
-from nomad.datamodel.metainfo.plot import (
-    PlotSection,
-)
+from nomad.datamodel.metainfo.plot import PlotlyFigure, PlotSection
 from nomad.datamodel.metainfo.workflow import (
     Link,
 )
@@ -536,41 +535,41 @@ class SubstrateHeaterTemperature(TimeSeries, PlotSection):
         unit='second',
     )
 
-    # def normalize(self, archive, logger):
-    #     super().normalize(archive, logger)
-    #     with self.time as deserialized:
-    #         time_array = deserialized[:]
-    #     with self.value as deserialized:
-    #         value_array = deserialized[:]
-    #     fig = go.Figure()
-    #     fig.add_trace(
-    #         go.Scatter(
-    #             x=time_array,
-    #             y=value_array,
-    #             # name=step.name,
-    #             line=dict(color="#2A4CDF", width=3),
-    #             yaxis="y",
-    #         ),
-    #     )
-    #     fig.update_layout(
-    #         template="plotly_white",
-    #         dragmode="zoom",
-    #         xaxis=dict(
-    #             fixedrange=False,
-    #             autorange=True,
-    #             title="Process time / s",
-    #             mirror="all",
-    #             showline=True,
-    #             gridcolor="#EAEDFC",
-    #         ),
-    #         yaxis=dict(
-    #             fixedrange=False,
-    #             title="Temperature / °C",
-    #             tickfont=dict(color="#2A4CDF"),
-    #             gridcolor="#EAEDFC",
-    #         ),
-    #     )
-    #     self.figures = [PlotlyFigure(label="figure 1", figure=fig.to_plotly_json())]
+    def normalize(self, archive, logger):
+        super().normalize(archive, logger)
+        with self.time as deserialized:
+            time_array = deserialized[:]
+        with self.value as deserialized:
+            value_array = deserialized[:]
+        fig = go.Figure()
+        fig.add_trace(
+            go.Scatter(
+                x=time_array,
+                y=value_array,
+                # name=step.name,
+                line=dict(color='#2A4CDF', width=3),
+                yaxis='y',
+            ),
+        )
+        fig.update_layout(
+            template='plotly_white',
+            dragmode='zoom',
+            xaxis=dict(
+                fixedrange=False,
+                autorange=True,
+                title='Process time / s',
+                mirror='all',
+                showline=True,
+                gridcolor='#EAEDFC',
+            ),
+            yaxis=dict(
+                fixedrange=False,
+                title='Temperature / °C',
+                tickfont=dict(color='#2A4CDF'),
+                gridcolor='#EAEDFC',
+            ),
+        )
+        self.figures = [PlotlyFigure(label='figure 1', figure=fig.to_plotly_json())]
 
 
 class SubstrateHeaterCurrent(TimeSeries):
