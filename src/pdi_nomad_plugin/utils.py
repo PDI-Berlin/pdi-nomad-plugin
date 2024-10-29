@@ -18,6 +18,7 @@
 
 import json
 import math
+import os
 import numpy as np
 import pandas as pd
 import yaml
@@ -359,6 +360,7 @@ def epiclog_read_handle_empty(folder_path, dataframe, column_header):
     The dataframe can be a Dataframe or a Series.
     """
     data_array = None
+    string_filename = None
     if column_header in dataframe:
         if isinstance(
             dataframe[column_header],
@@ -366,14 +368,14 @@ def epiclog_read_handle_empty(folder_path, dataframe, column_header):
         ):
             if not dataframe[column_header].empty:
                 if pd.notna(dataframe[column_header].iloc[0]):
-                    data_array = epiclog_read(
-                        f'{folder_path}{dataframe[column_header].iloc[0].replace(".txt","")}.txt'
-                    )
+                    string_filename = dataframe[column_header].iloc[0]
         elif isinstance(dataframe[column_header], str):
             if dataframe[column_header] != '':
-                data_array = epiclog_read(
-                    f'{folder_path}{dataframe[column_header].replace(".txt","")}.txt'
-                )
+                string_filename = dataframe[column_header]
+        if string_filename is not None:
+            file_path = f'{folder_path}{string_filename.replace(".txt","")}.txt'
+            if os.path.exists(file_path):
+                data_array = epiclog_read(file_path)
     return data_array
 
 
