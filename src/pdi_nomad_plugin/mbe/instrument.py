@@ -4,8 +4,8 @@ from nomad.datamodel.hdf5 import HDF5Dataset
 from nomad.datamodel.metainfo.annotations import (
     ELNAnnotation,
     ELNComponentEnum,
-    SectionProperties,
     H5WebAnnotation,
+    SectionProperties,
 )
 from nomad.datamodel.metainfo.basesections import (
     EntityReference,
@@ -24,10 +24,10 @@ from nomad_material_processing.vapor_deposition.general import (
     FilledSubstrateHolder,
     FilledSubstrateHolderPosition,
     GasFlow,
-    VolumetricFlowRate,
     InsertReduction,
     SubstrateHolder,
     SubstrateHolderPosition,
+    VolumetricFlowRate,
 )
 from nomad_material_processing.vapor_deposition.pvd.general import (
     ImpingingFlux,

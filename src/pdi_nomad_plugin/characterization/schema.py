@@ -1,12 +1,12 @@
 import numpy as np
 from nomad.config import config
 from nomad.datamodel.data import ArchiveSection, EntryData
+from nomad.datamodel.hdf5 import HDF5Dataset
 from nomad.datamodel.metainfo.annotations import (
     ELNAnnotation,
     ELNComponentEnum,
     H5WebAnnotation,
 )
-from nomad.datamodel.hdf5 import HDF5Dataset
 from nomad.datamodel.metainfo.basesections import (
     Measurement,
     MeasurementResult,
