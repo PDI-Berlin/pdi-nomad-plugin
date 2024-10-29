@@ -18,7 +18,7 @@
 
 import json
 import math
-
+import numpy as np
 import pandas as pd
 import yaml
 from nomad.datamodel.context import ClientContext
@@ -26,6 +26,11 @@ from nomad.datamodel.metainfo.basesections import (
     ExperimentStep,
 )
 from nomad.units import ureg
+
+
+from epic_scraper.epicfileimport.epic_module import (
+    epiclog_read,
+)
 
 
 def get_reference(upload_id, entry_id):
@@ -344,3 +349,82 @@ def set_sample_status(
         logger.warn(
             f'Sample {sample_reference} is not a valid reference. Upload and reprocess to set the status.'
         )
+
+
+def epiclog_read_handle_empty(folder_path, dataframe, column_header):
+    """
+    Wrapper to epic_log method that accepts a dataframe cell containing the filename
+    to open and parse and handles the case where the cell is empty.
+
+    The dataframe can be a Dataframe or a Series.
+    """
+    data_array = None
+    if column_header in dataframe:
+        if isinstance(
+            dataframe[column_header],
+            pd.Series or isinstance(dataframe[column_header], pd.DataFrame),
+        ):
+            if not dataframe[column_header].empty:
+                if pd.notna(dataframe[column_header].iloc[0]):
+                    data_array = epiclog_read(
+                        f'{folder_path}{dataframe[column_header].iloc[0].replace(".txt","")}.txt'
+                    )
+        elif isinstance(dataframe[column_header], str):
+            if dataframe[column_header] != '':
+                data_array = epiclog_read(
+                    f'{folder_path}{dataframe[column_header].replace(".txt","")}.txt'
+                )
+    return data_array
+
+
+def epiclog_parse_timeseries(
+    timezone, growth_starttime, folder_path, dataframe, data_header, unit_header=None
+):
+    """
+    Wrapper to epic_log method that accepts a dataframe cell containing the filename
+    to open and parse and handles the case where the cell is empty.
+
+    It also handles the dataframe where the unit is stored.
+
+    A tuple with pint quantity and the time array is returned.
+
+    The dataframe can be a Dataframe or a Series.
+    """
+
+    # handle data array
+    data_array = epiclog_read_handle_empty(folder_path, dataframe, data_header)
+
+    # handle unit cell
+    unit_cell = dataframe.get(unit_header)
+    unit = None
+    if unit_cell is not None:
+        if isinstance(unit_cell, str):
+            if unit_cell == 'C':
+                unit = '°C'
+            elif unit_cell == 'sccm':
+                unit = 'meter ** 3 / second'
+            else:
+                unit = unit_cell
+        elif not unit_cell.empty and pd.notna(unit_cell.iloc[0]):
+            if unit_cell.iloc[0] == 'C':
+                unit = '°C'
+            elif unit_cell.iloc[0] == 'sccm':
+                unit = 'meter ** 3 / second'
+            else:
+                unit = unit_cell.iloc[0]
+
+    # create pint quantity
+    if data_array is not None:
+        pint_quantity = ureg.Quantity(data_array.values.ravel(), ureg(unit))
+    else:
+        pint_quantity = None
+
+    # handle time array
+    if data_array is not None:
+        relative_time_array = np.array(
+            (data_array.index.tz_localize(timezone) - growth_starttime).total_seconds()
+        )
+    else:
+        relative_time_array = None
+
+    return pint_quantity, relative_time_array
