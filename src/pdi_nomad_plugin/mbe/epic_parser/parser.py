@@ -20,6 +20,7 @@ from datetime import datetime
 from typing import Union
 from zoneinfo import ZoneInfo
 
+import os
 import numpy as np
 import pandas as pd
 from epic_scraper.epicfileimport.epic_module import (
@@ -166,27 +167,33 @@ class ParserEpicPDI(MatchingParser):
                 messages_df = epiclog_read_handle_empty(
                     folder_path, config_sheet, 'messages'
                 )
-                growth_events = growth_time(messages_df)
-                found_start = False  # TODO remove this flag
-                for line in growth_events.iterrows():
-                    if line[1]['to'] == 'GC':
-                        growth_id = line[1]['object']
-                        growth_starttime = line[0].tz_localize(timezone)
-                    if line[1]['from'] == 'GC':
-                        growth_endtime = line[0].tz_localize(timezone)
-                        growth_duration = growth_endtime - growth_starttime
-                        logger.info(
-                            f'Detected growth of {growth_id} started at {growth_starttime} and ended at {growth_endtime} with a duration of {growth_duration}'
-                        )
+                if messages_df is not None:
+                    growth_events = growth_time(messages_df)
+                    found_start = False  # TODO remove this flag
+                    for line in growth_events.iterrows():
+                        if line[1]['to'] == 'GC':
+                            growth_id = line[1]['object']
+                            growth_starttime = line[0].tz_localize(timezone)
+                        if line[1]['from'] == 'GC':
+                            growth_endtime = line[0].tz_localize(timezone)
+                            growth_duration = growth_endtime - growth_starttime
+                            logger.info(
+                                f'Detected growth of {growth_id} started at {growth_starttime} and ended at {growth_endtime} with a duration of {growth_duration}'
+                            )
+        exp_string = growth_id.replace('@', '_') if growth_id else None
 
         # reading Fitting.txt
+        fitting = None
         if (
             'flux_calibration' in config_sheet
             and not config_sheet['flux_calibration'].empty
         ):
-            if pd.notna(config_sheet['flux_calibration'].iloc[0]):
+            file_path = f"{folder_path}{config_sheet['flux_calibration'][0]}"
+            if pd.notna(config_sheet['flux_calibration'].iloc[0]) and os.path.exists(
+                file_path
+            ):
                 with open(
-                    f"{folder_path}{config_sheet['flux_calibration'][0]}",
+                    file_path,
                     encoding='utf-8',
                 ) as file:
                     fitting = {}
@@ -201,9 +208,10 @@ class ParserEpicPDI(MatchingParser):
         # reading Shutters.txt
         shutters = None
         if 'shutters' in config_sheet and not config_sheet['shutters'].empty:
-            if pd.notna(config_sheet['shutters'].iloc[0]):
+            file_path = f"{folder_path}{config_sheet['shutters'][0]}"
+            if pd.notna(config_sheet['shutters'].iloc[0]) and os.path.exists(file_path):
                 with open(
-                    f"{folder_path}{config_sheet['shutters'][0]}",
+                    file_path,
                     encoding='utf-8',
                 ) as file:
                     shutters = pd.read_csv(file, skiprows=2)
@@ -211,7 +219,6 @@ class ParserEpicPDI(MatchingParser):
         # filenames
         instrument_filename = f'{data_file}.InstrumentMbePDI.archive.{filetype}'
 
-        # filling in the pyrometry archive
         # read raw files
         epiclog_value, epiclog_time = epiclog_parse_timeseries(
             timezone,
@@ -235,10 +242,10 @@ class ParserEpicPDI(MatchingParser):
         child_archives['pyrometry'].data.pyrometer_temperature = PyrometerTemperature()
 
         # fill in quantities
-        child_archives['pyrometry'].data.name = f'{growth_id} pyrometry'
+        child_archives['pyrometry'].data.name = f'{exp_string} pyrometry'
         child_archives['pyrometry'].data.pyrometer_temperature.value = epiclog_value
         child_archives['pyrometry'].data.pyrometer_temperature.time = epiclog_time
-        child_archives['process'].data.name = f'{growth_id} process'
+        child_archives['process'].data.name = f'{exp_string} process'
         child_archives['process'].data.steps[
             0
         ].in_situ_characterization.pyrometry.reference = child_archives[
@@ -307,20 +314,24 @@ class ParserEpicPDI(MatchingParser):
                         gasmixing_datetime = fill_datetime(
                             gas_row['date'], gas_row['time']
                         )
-                        if gasmixing_datetime > growth_starttime:
-                            continue
-                        else:
-                            print(f'this mixing was done at: {gasmixing_datetime}')
-                            print(f'growth started at: {growth_starttime}')
-                            source_object.gas_flow.append(
-                                GasFlowPDI(flow_rate=VolumetricFlowRatePDI())
+                        if growth_starttime is None:
+                            logger.warning(
+                                'Growth start time not found. Possibly, Messages.txt file is missing.'
                             )
-                            source_object.gas_flow[i].flow_rate.value = epiclog_value
-                            source_object.gas_flow[i].flow_rate.time = epiclog_time
-                            i += 1
+                        elif gasmixing_datetime > growth_starttime:
+                            continue
 
-                            # measurement_type ='Mass Flow Controller',
-                            # gas=
+                        print(f'this mixing was done at: {gasmixing_datetime}')
+                        print(f'growth started at: {growth_starttime}')
+                        source_object.gas_flow.append(
+                            GasFlowPDI(flow_rate=VolumetricFlowRatePDI())
+                        )
+                        source_object.gas_flow[i].flow_rate.value = epiclog_value
+                        source_object.gas_flow[i].flow_rate.time = epiclog_time
+                        i += 1
+
+                        # measurement_type ='Mass Flow Controller',
+                        # gas=
 
             if (
                 sources_row['source_type'] == 'SFC'
@@ -368,7 +379,7 @@ class ParserEpicPDI(MatchingParser):
                 source_object.vapor_source.power.value = epiclog_value_p
                 source_object.vapor_source.power.time = epiclog_time_p
 
-                if sources_row['EPIC_loop']:
+                if sources_row['EPIC_loop'] and fitting is not None:
                     source_object.epic_loop = sources_row['EPIC_loop']
                     if sources_row['EPIC_loop'] in fitting.keys():
                         a_param, t0_param = fitting[sources_row['EPIC_loop']][
@@ -432,6 +443,10 @@ class ParserEpicPDI(MatchingParser):
                         source_object.impinging_flux[
                             0
                         ].time = epiclog_time  # TODO insert hdf5 link
+                elif fitting is None:
+                    logger.warning(
+                        'No fitting parameters found. Please provide a Fitting.txt file.'
+                    )
 
             if sources_row['source_type'] == 'DFC':
                 # read raw files
@@ -541,9 +556,6 @@ class ParserEpicPDI(MatchingParser):
                 ].substrate_power = SubstrateHeaterPower()
 
                 # fill in quantities
-                child_archives[
-                    'process'
-                ].data.name = f'growth_{growth_id.replace("@", "_")}'
                 child_archives['process'].data.steps[0].sample_parameters[
                     0
                 ].substrate_temperature.value = epiclog_value
@@ -580,7 +592,7 @@ class ParserEpicPDI(MatchingParser):
 
         # creating experiment archive
         archive.data = ExperimentMbePDI(
-            name=f'{data_file} experiment',
+            name=f'{exp_string} experiment',
             growth_run=GrowthMbePDIReference(
                 reference=child_archives['process'].data,
                 # f'/uploads/{archive.m_context.upload_id}/archive/{child_archives["process"].metadata.entry_id}#data',
