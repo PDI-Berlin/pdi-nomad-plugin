@@ -15,63 +15,60 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 from collections.abc import Iterable
 from datetime import datetime
 from typing import Union
 from zoneinfo import ZoneInfo
 
-import os
 import numpy as np
 import pandas as pd
 from epic_scraper.epicfileimport.epic_module import (
     growth_time,
 )
-from nomad.datamodel.data import EntryData
 from nomad.datamodel.datamodel import EntryArchive, EntryMetadata
-from nomad.datamodel.metainfo.annotations import ELNAnnotation
 from nomad.datamodel.metainfo.basesections import (
     PureSubstanceSection,
 )
-from nomad.metainfo import Quantity, Section
 from nomad.parsing import MatchingParser
 from nomad.units import ureg
 from nomad.utils import hash
 
+from pdi_nomad_plugin.characterization.schema import (
+    PyrometerTemperature,
+    Pyrometry,
+)
 from pdi_nomad_plugin.mbe.instrument import (
     DoubleFilamentEffusionCell,
     EffusionCellHeater,
     EffusionCellHeaterPower,
     EffusionCellHeaterTemperature,
+    GasFlowPDI,
     ImpingingFluxPDI,
     InstrumentMbePDI,
     PlasmaSourcePDI,
     Port,
     RfGeneratorHeater,
     RfGeneratorHeaterPower,
-    GasFlowPDI,
-    VolumetricFlowRatePDI,
     SingleFilamentEffusionCell,
+    VolumetricFlowRatePDI,
 )
 from pdi_nomad_plugin.mbe.processes import (
     ExperimentMbePDI,
     GrowthMbePDI,
-    GrowthStepMbePDI,
     GrowthMbePDIReference,
+    GrowthStepMbePDI,
+    InSituCharacterizationMbePDI,
+    PyrometryReference,
     SampleParametersMbe,
     SubstrateHeaterPower,
     SubstrateHeaterTemperature,
-    InSituCharacterizationMbePDI,
-    PyrometryReference,
-)
-from pdi_nomad_plugin.characterization.schema import (
-    Pyrometry,
-    PyrometerTemperature,
 )
 from pdi_nomad_plugin.utils import (
     create_archive,
-    fill_quantity,
-    epiclog_read_handle_empty,
     epiclog_parse_timeseries,
+    epiclog_read_handle_empty,
+    fill_quantity,
 )
 
 timezone = 'Europe/Berlin'
@@ -169,7 +166,7 @@ class ParserEpicPDI(MatchingParser):
                 )
                 if messages_df is not None:
                     growth_events = growth_time(messages_df)
-                    found_start = False  # TODO remove this flag
+                    # found_start = False  # TODO remove this flag
                     for line in growth_events.iterrows():
                         if line[1]['to'] == 'GC':
                             growth_id = line[1]['object']
@@ -405,7 +402,6 @@ class ParserEpicPDI(MatchingParser):
                                 float(t0_param) / temperature[:]
                             )
                             print(f'BEP: {bep_test}')
-                            #
 
                             # make shutter status a vector
                             shutter_vector = np.zeros(len(epiclog_time))

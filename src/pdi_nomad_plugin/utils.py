@@ -19,19 +19,18 @@
 import json
 import math
 import os
+
 import numpy as np
 import pandas as pd
 import yaml
+from epic_scraper.epicfileimport.epic_module import (
+    epiclog_read,
+)
 from nomad.datamodel.context import ClientContext
 from nomad.datamodel.metainfo.basesections import (
     ExperimentStep,
 )
 from nomad.units import ureg
-
-
-from epic_scraper.epicfileimport.epic_module import (
-    epiclog_read,
-)
 
 
 def get_reference(upload_id, entry_id):

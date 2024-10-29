@@ -7,8 +7,8 @@ from nomad.datamodel.hdf5 import HDF5Dataset
 from nomad.datamodel.metainfo.annotations import (
     ELNAnnotation,
     ELNComponentEnum,
-    SectionProperties,
     H5WebAnnotation,
+    SectionProperties,
 )
 from nomad.datamodel.metainfo.basesections import (
     Component,
@@ -54,10 +54,10 @@ from nomad_measurements.xrd.schema import ELNXRayDiffraction
 
 from pdi_nomad_plugin.characterization.schema import (
     AFMmeasurement,
-    LightMicroscope,
-    Pyrometry,
     LaserReflectance,
+    LightMicroscope,
     MassSpectrometry,
+    Pyrometry,
     RHEEDMeasurement,
 )
 from pdi_nomad_plugin.general.schema import (
