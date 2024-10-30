@@ -35,8 +35,8 @@ dependencies = [
     'nomad-lab>=1.3.1',
     'nomad-material-processing',
     'nomad-measurements',
-    'nomad-analysis',
-    'epic_scraper',
+    'nomad-analysis @ git+https://github.com/FAIRmat-NFDI/nomad-analysis.git@ada8b1638f7aa88d40f65b5536439e644cc79fe1',
+    'epic_scraper @ git+https://github.com/PDI-Berlin/EPIC_scraper@6fc9e58f559776357ab8e4b841dfa778d261dd49',
 ]
 [project.urls]
 "Homepage" = "https://github.com/PDI-Berlin/pdi-nomad-plugin"
