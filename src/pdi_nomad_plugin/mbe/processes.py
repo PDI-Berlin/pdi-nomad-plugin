@@ -866,17 +866,18 @@ class GrowthMbePDI(VaporDeposition, EntryData):
         #     substrate.normalize(archive, logger)
 
         for sample_holder in self.samples:
-            if self.sample_holder.reference:
-                for sample in self.sample_holder.reference.positions.substrate:
-                    set_sample_status(
-                        sample.reference,
-                        archive.m_context,
-                        logger,
-                        as_delivered=False,
-                        fresh=False,
-                        processed=True,
-                        grown=True,
-                    )
+            if sample_holder.reference:
+                for sample_holder_position in sample_holder.reference.positions:
+                    if sample_holder_position.substrate:
+                        set_sample_status(
+                            sample_holder_position.substrate.reference,
+                            archive.m_context,
+                            logger,
+                            as_delivered=False,
+                            fresh=False,
+                            processed=True,
+                            grown=True,
+                        )
 
         archive.workflow2 = None
         super().normalize(archive, logger)

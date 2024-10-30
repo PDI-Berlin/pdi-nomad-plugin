@@ -51,6 +51,7 @@ from pdi_nomad_plugin.mbe.instrument import (
     RfGeneratorHeater,
     RfGeneratorHeaterPower,
     SingleFilamentEffusionCell,
+    ColdLipEffusionCell,
     VolumetricFlowRatePDI,
 )
 from pdi_nomad_plugin.mbe.processes import (
@@ -333,6 +334,7 @@ class ParserEpicPDI(MatchingParser):
             if (
                 sources_row['source_type'] == 'SFC'
                 or sources_row['source_type'] == 'DFC'
+                or sources_row['source_type'] == 'CLC'
             ):
                 # read raw files
                 epiclog_value, epiclog_time = epiclog_parse_timeseries(
@@ -352,11 +354,18 @@ class ParserEpicPDI(MatchingParser):
                 )
 
                 # instantiate objects
-                child_archives['process'].data.steps[0].sources.append(
-                    SingleFilamentEffusionCell()
-                    if sources_row['source_type'] == 'SFC'
-                    else DoubleFilamentEffusionCell()
-                )
+                if sources_row['source_type'] == 'SFC':
+                    child_archives['process'].data.steps[0].sources.append(
+                        SingleFilamentEffusionCell()
+                    )
+                elif sources_row['source_type'] == 'DFC':
+                    child_archives['process'].data.steps[0].sources.append(
+                        DoubleFilamentEffusionCell()
+                    )
+                elif sources_row['source_type'] == 'CLC':
+                    child_archives['process'].data.steps[0].sources.append(
+                        ColdLipEffusionCell()
+                    )
                 source_object = (
                     child_archives['process'].data.steps[0].sources[sources_index]
                 )
@@ -366,11 +375,13 @@ class ParserEpicPDI(MatchingParser):
                 source_object.vapor_source.power = EffusionCellHeaterPower()
 
                 # fill in quantities
-                source_object.type = (
-                    'Single filament effusion cell (SFC)'
-                    if sources_row['source_type'] == 'SFC'
-                    else 'Double filament effusion cell (DFC)'
-                )
+                if sources_row['source_type'] == 'SFC':
+                    source_object.type = 'Single filament effusion cell (SFC)'
+                if sources_row['source_type'] == 'DFC':
+                    source_object.type = 'Double filament effusion cell (DFC)'
+                if sources_row['source_type'] == 'CLC':
+                    source_object.type = 'Cold lip cell (CLC)'
+
                 source_object.vapor_source.temperature.value = epiclog_value
                 source_object.vapor_source.temperature.time = epiclog_time
                 source_object.vapor_source.power.value = epiclog_value_p

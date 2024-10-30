@@ -324,7 +324,9 @@ def set_sample_status(
             and hasattr(sample_reference, 'grown')
         ):
             filename = sample_reference.m_parent.metadata.mainfile
-            with context.raw_file(filename, 'r') as file:
+            with context.raw_file(
+                filename, 'r'
+            ) as file:  # TODO it only works with a specific context
                 sample_dict = (
                     yaml.safe_load(file)
                     if filename.split('.')[-1] == 'yaml'

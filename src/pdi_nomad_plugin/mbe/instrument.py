@@ -170,6 +170,7 @@ class SourcePDI(Device, EntryData):
         type=MEnum(
             'RF plasma source (PLASMA)',
             'Single filament effusion cell (SFC)',
+            'Cold lip cell (CLC)',
             'Double filament effusion cell (DFC)',
             'other',
             'none',
@@ -401,6 +402,19 @@ class SingleFilamentEffusionCell(EffusionCellSourcePDI):
 
     m_def = Section(
         label='Single Filament Effusion Cell',
+    )
+
+
+class ColdLipEffusionCell(EffusionCellSourcePDI):
+    """
+    A single filament effusion cell is a thermal evaporation source
+    with a single filament that heats the material to the point of evaporation.
+
+    This is a Cold Lip version of a single filament effusion cell.
+    """
+
+    m_def = Section(
+        label='Cold Lip Effusion Cell',
     )
 
 
