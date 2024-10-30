@@ -36,7 +36,6 @@ dependencies = [
     'nomad-material-processing',
     'nomad-measurements',
     'nomad-analysis',
-    'lakeshore-nomad-plugin@git+https://github.com/IKZ-Berlin/lakeshore-nomad-plugin.git@main',
     'epic_scraper',
 ]
 [project.urls]
