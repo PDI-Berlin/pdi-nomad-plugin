@@ -37,7 +37,7 @@ dependencies = [
     'nomad-measurements',
     'nomad-analysis',
     'lakeshore-nomad-plugin@git+https://github.com/IKZ-Berlin/lakeshore-nomad-plugin.git@main',
-    'epic_scraper@git+https://github.com/PDI-Berlin/EPIC_scraper@main',
+    'epic_scraper',
 ]
 [project.urls]
 "Homepage" = "https://github.com/PDI-Berlin/pdi-nomad-plugin"
