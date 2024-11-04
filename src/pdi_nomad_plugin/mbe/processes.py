@@ -898,7 +898,9 @@ class GrowthMbePDI(VaporDeposition, EntryData):
                             logger,
                             as_delivered=False,
                             fresh=False,
-                            processed=True,
+                            processed=sample_holder_position.substrate.reference.grown
+                            if sample_holder_position.substrate.reference.grown
+                            else False,
                             grown=True,
                         )
 
