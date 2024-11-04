@@ -316,8 +316,8 @@ def set_sample_status(
     The Sample archive file is then overwritten.
     """
 
-    from nomad.datamodel.context import ServerContext
     from nomad.app.v1.routers.uploads import get_upload_with_read_access
+    from nomad.datamodel.context import ServerContext
     from nomad.datamodel.data import User
 
     context = ServerContext(
