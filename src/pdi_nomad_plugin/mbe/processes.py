@@ -415,7 +415,8 @@ class XRDmeasurementReference(SectionReference):
 
 class InSituCharacterizationMbePDI(ArchiveSection):
     pyrometry = SubSection(
-        section_def=PyrometryReference,
+        section_def=Pyrometry,
+        repeats=True,
     )
     laser_reflectance = SubSection(
         section_def=LaserReflectanceReference,

@@ -104,7 +104,7 @@ class ParserEpicPDI(MatchingParser):
         if is_mainfile:
             try:
                 # try to resolve mainfile keys from parser
-                mainfile_keys = ['process', 'pyrometry']
+                mainfile_keys = ['process']
                 self.creates_children = True
                 return mainfile_keys
             except Exception:
@@ -115,7 +115,7 @@ class ParserEpicPDI(MatchingParser):
         self,
         mainfile: str,
         archive: EntryArchive,
-        child_archives: dict(process=EntryArchive, pyrometry=EntryArchive),
+        child_archives: dict(process=EntryArchive),
         logger,
     ) -> None:
         filetype = 'yaml'
@@ -233,22 +233,23 @@ class ParserEpicPDI(MatchingParser):
         child_archives['process'].data.steps[
             0
         ].in_situ_characterization = InSituCharacterizationMbePDI()
-        child_archives['process'].data.steps[
+        child_archives['process'].data.steps[0].in_situ_characterization.pyrometry = [
+            Pyrometry()
+        ]
+        child_archives['process'].data.steps[0].in_situ_characterization.pyrometry[
             0
-        ].in_situ_characterization.pyrometry = PyrometryReference()
-        child_archives['pyrometry'].data = Pyrometry()
-        child_archives['pyrometry'].data.pyrometer_temperature = PyrometerTemperature()
+        ].pyrometer_temperature = PyrometerTemperature()
 
         # fill in quantities
-        child_archives['pyrometry'].data.name = f'{exp_string} pyrometry'
-        child_archives['pyrometry'].data.pyrometer_temperature.value = epiclog_value
-        child_archives['pyrometry'].data.pyrometer_temperature.time = epiclog_time
         child_archives['process'].data.name = f'{exp_string} process'
-        child_archives['process'].data.steps[
-            0
-        ].in_situ_characterization.pyrometry.reference = child_archives[
-            'pyrometry'
-        ].data
+        pyro_archive = (
+            child_archives['process']
+            .data.steps[0]
+            .in_situ_characterization.pyrometry[0]
+        )
+        pyro_archive.name = f'{exp_string} pyrometry'
+        pyro_archive.pyrometer_temperature.value = epiclog_value
+        pyro_archive.pyrometer_temperature.time = epiclog_time
 
         # filling in the sources objects list
         port_list = []
