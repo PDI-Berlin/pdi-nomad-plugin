@@ -152,7 +152,6 @@ class EtchingPDI(ProcessPDI, Etching):
             for sample in self.samples:
                 set_sample_status(
                     sample.reference,
-                    archive.m_context,
                     logger,
                     as_delivered=False,
                     fresh=False,
@@ -218,7 +217,6 @@ class AnnealingPDI(ProcessPDI, Annealing):
             for sample in self.samples:
                 set_sample_status(
                     sample.reference,
-                    archive.m_context,
                     logger,
                     as_delivered=False,
                     fresh=False,
@@ -247,7 +245,6 @@ class CleaningPDI(ProcessPDI, Cleaning):
             for sample in self.samples:
                 set_sample_status(
                     sample.reference,
-                    archive.m_context,
                     logger,
                     as_delivered=False,
                     fresh=False,
@@ -303,7 +300,6 @@ class BackSideCoatingPDI(ProcessPDI, Process, EntryData):
             for sample in self.samples:
                 set_sample_status(
                     sample.reference,
-                    archive.m_context,
                     logger,
                     as_delivered=False,
                     fresh=False,
@@ -449,7 +445,6 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
             for sample in self.children_samples:
                 set_sample_status(
                     sample.reference,
-                    archive.m_context,
                     logger,
                     as_delivered=False,
                     fresh=False,
@@ -459,7 +454,6 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
 
             set_sample_status(
                 self.parent_sample.reference,
-                archive.m_context,
                 logger,
                 as_delivered=False,
                 fresh=False,
