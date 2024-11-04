@@ -542,13 +542,34 @@ class SubstrateHeaterTemperature(TimeSeries, PlotSection):
             time_array = deserialized[:]
         with self.value as deserialized:
             value_array = deserialized[:]
+        with (
+            archive.data.steps[0]
+            .in_situ_characterization.pyrometry[0]
+            .pyrometer_temperature.value as deserialized
+        ):
+            pyrometer_temperature = deserialized[:]
+        with (
+            archive.data.steps[0]
+            .in_situ_characterization.pyrometry[0]
+            .pyrometer_temperature.time as deserialized
+        ):
+            pyrometer_time = deserialized[:]
         fig = go.Figure()
         fig.add_trace(
             go.Scatter(
                 x=time_array,
                 y=value_array,
-                # name=step.name,
-                line=dict(color='#2A4CDF', width=3),
+                name='Sub Temp',
+                line=dict(color='#2A4CDF', width=4),
+                yaxis='y',
+            ),
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=pyrometer_time,
+                y=pyrometer_temperature,
+                name='Pyro Temp',
+                line=dict(color='#90002C', width=2),
                 yaxis='y',
             ),
         )
@@ -569,6 +590,7 @@ class SubstrateHeaterTemperature(TimeSeries, PlotSection):
                 tickfont=dict(color='#2A4CDF'),
                 gridcolor='#EAEDFC',
             ),
+            showlegend=True,
         )
         self.figures = [PlotlyFigure(label='figure 1', figure=fig.to_plotly_json())]
 
