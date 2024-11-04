@@ -16,7 +16,6 @@
 # limitations under the License.
 #
 import os
-from time import sleep
 from collections.abc import Iterable
 from datetime import datetime
 from typing import Union
@@ -27,13 +26,12 @@ import pandas as pd
 from epic_scraper.epicfileimport.epic_module import (
     growth_time,
 )
-from nomad.datamodel.datamodel import EntryArchive, EntryMetadata
+from nomad.datamodel.datamodel import EntryArchive
 from nomad.datamodel.metainfo.basesections import (
     PureSubstanceSection,
 )
 from nomad.parsing import MatchingParser
 from nomad.units import ureg
-from nomad.utils import hash
 
 from pdi_nomad_plugin.characterization.schema import (
     PyrometerTemperature,
@@ -50,10 +48,10 @@ from pdi_nomad_plugin.mbe.instrument import (
     InstrumentMbePDI,
     PlasmaSourcePDI,
     Port,
-    SourceGeometry,
     RfGeneratorHeater,
     RfGeneratorHeaterPower,
     SingleFilamentEffusionCell,
+    SourceGeometry,
     VolumetricFlowRatePDI,
 )
 from pdi_nomad_plugin.mbe.processes import (
@@ -67,7 +65,6 @@ from pdi_nomad_plugin.mbe.processes import (
     SubstrateHeaterTemperature,
 )
 from pdi_nomad_plugin.utils import (
-    create_archive,
     epiclog_parse_timeseries,
     epiclog_read_handle_empty,
     fill_quantity,
@@ -119,7 +116,6 @@ class ParserEpicPDI(MatchingParser):
         child_archives: dict(process=EntryArchive, instrument=EntryArchive),
         logger,
     ) -> None:
-        filetype = 'yaml'
         data_file = mainfile.split('/')[-1]
         upload_path = f"{mainfile.split('raw/')[0]}raw/"
         folder_name = mainfile.split('/')[-2]
@@ -255,7 +251,6 @@ class ParserEpicPDI(MatchingParser):
         pyro_archive.pyrometer_temperature.time = epiclog_time
 
         # filling in the sources objects list
-        port_list = []
         for sources_index, sources_row in sources_sheet.iterrows():
             if sources_row['source_type'] == 'PLASMA':
                 # read raw files
