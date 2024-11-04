@@ -303,7 +303,6 @@ def fetch_substrate(archive, sample_id, substrate_id, logger):
 
 def set_sample_status(
     sample_reference,
-    context,
     logger,
     *,
     as_delivered=False,
@@ -316,6 +315,22 @@ def set_sample_status(
     in the sample reference file.
     The Sample archive file is then overwritten.
     """
+
+    from nomad.datamodel.context import ServerContext
+    from nomad.app.v1.routers.uploads import get_upload_with_read_access
+    from nomad.datamodel.data import User
+
+    context = ServerContext(
+        get_upload_with_read_access(
+            sample_reference.m_parent.metadata.m_context.upload_id,
+            User(
+                # is_admin=True,
+                user_id=sample_reference.m_parent.metadata.main_author.user_id,
+            ),
+            include_others=True,
+        )
+    )
+
     if sample_reference:
         if (
             hasattr(sample_reference, 'fresh')

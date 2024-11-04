@@ -894,7 +894,6 @@ class GrowthMbePDI(VaporDeposition, EntryData):
                     if sample_holder_position.substrate:
                         set_sample_status(
                             sample_holder_position.substrate.reference,
-                            archive.m_context,
                             logger,
                             as_delivered=False,
                             fresh=False,
