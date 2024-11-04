@@ -526,10 +526,10 @@ class ParserEpicPDI(MatchingParser):
                 port_object.name = source_name
                 port_object.port_number = fill_quantity(sources_row, 'port_number')
                 port_object.flange_diameter = fill_quantity(
-                    sources_row, 'port diameter'
+                    sources_row, 'port_diameter'
                 )
                 port_object.flange_to_substrate_distance = fill_quantity(
-                    sources_row, 'port to sub distance', read_unit='mm'
+                    sources_row, 'port_to_sub_distance', read_unit='mm'
                 )
                 port_object.theta = fill_quantity(sources_row, 'theta')
                 port_object.phi = fill_quantity(sources_row, 'phi')
@@ -540,10 +540,10 @@ class ParserEpicPDI(MatchingParser):
                     sources_index
                 ]
                 # f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, instrument_filename)}#data/port_list/{sources_index}'
-                if sources_row['source length']:
+                if sources_row['source_length']:
                     source_object.geometry = SourceGeometry()
                     source_object.geometry.source_length = fill_quantity(
-                        sources_row, 'source length', read_unit='mm'
+                        sources_row, 'source_length', read_unit='mm'
                     )
                     if hasattr(source_object.port, 'flange_to_substrate_distance'):
                         source_object.geometry.source_to_substrate_distance = (
