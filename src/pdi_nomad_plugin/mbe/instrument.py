@@ -147,12 +147,29 @@ class SourceGeometry(ArchiveSection):
     source_length = Quantity(
         type=float,
         description='The length of the source.',
-        unit='mm',
+        unit='m',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+            defaultDisplayUnit='millimeter',
+        ),
     )
     diameter = Quantity(
         type=float,
         description='The diameter of the crucible where material comes out.',
-        unit='mm',
+        unit='m',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+            defaultDisplayUnit='millimeter',
+        ),
+    )
+    source_to_substrate_distance = Quantity(
+        type=float,
+        description='The distance between the tip of the source and the substrate.',
+        unit='m',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+            defaultDisplayUnit='millimeter',
+        ),
     )
 
 

@@ -26,13 +26,12 @@ import pandas as pd
 from epic_scraper.epicfileimport.epic_module import (
     growth_time,
 )
-from nomad.datamodel.datamodel import EntryArchive, EntryMetadata
+from nomad.datamodel.datamodel import EntryArchive
 from nomad.datamodel.metainfo.basesections import (
     PureSubstanceSection,
 )
 from nomad.parsing import MatchingParser
 from nomad.units import ureg
-from nomad.utils import hash
 
 from pdi_nomad_plugin.characterization.schema import (
     PyrometerTemperature,
@@ -52,6 +51,7 @@ from pdi_nomad_plugin.mbe.instrument import (
     RfGeneratorHeater,
     RfGeneratorHeaterPower,
     SingleFilamentEffusionCell,
+    SourceGeometry,
     VolumetricFlowRatePDI,
 )
 from pdi_nomad_plugin.mbe.processes import (
@@ -65,7 +65,6 @@ from pdi_nomad_plugin.mbe.processes import (
     SubstrateHeaterTemperature,
 )
 from pdi_nomad_plugin.utils import (
-    create_archive,
     epiclog_parse_timeseries,
     epiclog_read_handle_empty,
     fill_quantity,
@@ -103,7 +102,7 @@ class ParserEpicPDI(MatchingParser):
         if is_mainfile:
             try:
                 # try to resolve mainfile keys from parser
-                mainfile_keys = ['process']
+                mainfile_keys = ['process', 'instrument']
                 self.creates_children = True
                 return mainfile_keys
             except Exception:
@@ -114,10 +113,9 @@ class ParserEpicPDI(MatchingParser):
         self,
         mainfile: str,
         archive: EntryArchive,
-        child_archives: dict(process=EntryArchive),
+        child_archives: dict(process=EntryArchive, instrument=EntryArchive),
         logger,
     ) -> None:
-        filetype = 'yaml'
         data_file = mainfile.split('/')[-1]
         upload_path = f"{mainfile.split('raw/')[0]}raw/"
         folder_name = mainfile.split('/')[-2]
@@ -213,8 +211,10 @@ class ParserEpicPDI(MatchingParser):
                 ) as file:
                     shutters = pd.read_csv(file, skiprows=2)
 
-        # filenames
-        instrument_filename = f'{data_file}.InstrumentMbePDI.archive.{filetype}'
+        # instrument archive
+        child_archives['instrument'].data = InstrumentMbePDI()
+        child_archives['instrument'].data.name = f'{data_file} instrument'
+        child_archives['instrument'].data.port_list = []
 
         # read raw files
         epiclog_value, epiclog_time = epiclog_parse_timeseries(
@@ -251,7 +251,6 @@ class ParserEpicPDI(MatchingParser):
         pyro_archive.pyrometer_temperature.time = epiclog_time
 
         # filling in the sources objects list
-        port_list = []
         for sources_index, sources_row in sources_sheet.iterrows():
             if sources_row['source_type'] == 'PLASMA':
                 # read raw files
@@ -521,16 +520,31 @@ class ParserEpicPDI(MatchingParser):
                 port_object = Port()
                 port_object.name = source_name
                 port_object.port_number = fill_quantity(sources_row, 'port_number')
-                port_object.flange_diameter = fill_quantity(sources_row, 'diameter')
+                port_object.flange_diameter = fill_quantity(
+                    sources_row, 'port_diameter'
+                )
                 port_object.flange_to_substrate_distance = fill_quantity(
-                    sources_row, 'distance'
+                    sources_row, 'port_to_sub_distance', read_unit='mm'
                 )
                 port_object.theta = fill_quantity(sources_row, 'theta')
                 port_object.phi = fill_quantity(sources_row, 'phi')
-                port_list.append(port_object)
+                child_archives['instrument'].data.port_list.append(port_object)
 
                 # reference the instrument.port_list into the process.sources
-                source_object.port = f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, instrument_filename)}#data/port_list/{sources_index}'
+                source_object.port = child_archives['instrument'].data.port_list[
+                    sources_index
+                ]
+                # f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, instrument_filename)}#data/port_list/{sources_index}'
+                if sources_row['source_length']:
+                    source_object.geometry = SourceGeometry()
+                    source_object.geometry.source_length = fill_quantity(
+                        sources_row, 'source_length', read_unit='mm'
+                    )
+                    if hasattr(source_object.port, 'flange_to_substrate_distance'):
+                        source_object.geometry.source_to_substrate_distance = (
+                            source_object.port.flange_to_substrate_distance
+                            - source_object.geometry.source_length
+                        )
 
             # filling in growth process archive
             if sources_row['source_type'] == 'SUB':
@@ -577,25 +591,26 @@ class ParserEpicPDI(MatchingParser):
                 ].substrate_power.time = epiclog_time_p
 
         # creating instrument archive
-        if archive.m_context.raw_path_exists(instrument_filename):
-            print(f'Instrument archive already exists: {instrument_filename}')
-        else:
-            instrument_data = InstrumentMbePDI()
-            instrument_data.name = f'{data_file} instrument'
-            instrument_data.port_list = port_list
+        # instrument_filename = f'{data_file}.InstrumentMbePDI.archive.{filetype}'
+        # if archive.m_context.raw_path_exists(instrument_filename):
+        #     print(f'Instrument archive already exists: {instrument_filename}')
+        # else:
+        #     instrument_data = InstrumentMbePDI()
+        #     instrument_data.name = f'{data_file} instrument'
+        #     instrument_data.port_list = port_list
 
-            instrument_archive = EntryArchive(
-                data=instrument_data if instrument_data else InstrumentMbePDI(),
-                # m_context=archive.m_context,
-                metadata=EntryMetadata(upload_id=archive.m_context.upload_id),
-            )
-            create_archive(
-                instrument_archive.m_to_dict(),
-                archive.m_context,
-                instrument_filename,
-                filetype,
-                logger,
-            )
+        #     instrument_archive = EntryArchive(
+        #         data=instrument_data if instrument_data else InstrumentMbePDI(),
+        #         # m_context=archive.m_context,
+        #         metadata=EntryMetadata(upload_id=archive.m_context.upload_id),
+        #     )
+        #     create_archive(
+        #         instrument_archive.m_to_dict(),
+        #         archive.m_context,
+        #         instrument_filename,
+        #         filetype,
+        #         logger,
+        #     )
 
         # creating experiment archive
         archive.data = ExperimentMbePDI(
