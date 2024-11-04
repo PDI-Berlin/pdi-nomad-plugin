@@ -39,6 +39,7 @@ from pdi_nomad_plugin.characterization.schema import (
     Pyrometry,
 )
 from pdi_nomad_plugin.mbe.instrument import (
+    ColdLipEffusionCell,
     DoubleFilamentEffusionCell,
     EffusionCellHeater,
     EffusionCellHeaterPower,
@@ -51,7 +52,6 @@ from pdi_nomad_plugin.mbe.instrument import (
     RfGeneratorHeater,
     RfGeneratorHeaterPower,
     SingleFilamentEffusionCell,
-    ColdLipEffusionCell,
     VolumetricFlowRatePDI,
 )
 from pdi_nomad_plugin.mbe.processes import (
@@ -60,7 +60,6 @@ from pdi_nomad_plugin.mbe.processes import (
     GrowthMbePDIReference,
     GrowthStepMbePDI,
     InSituCharacterizationMbePDI,
-    PyrometryReference,
     SampleParametersMbe,
     SubstrateHeaterPower,
     SubstrateHeaterTemperature,
