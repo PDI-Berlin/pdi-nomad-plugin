@@ -420,12 +420,15 @@ class InSituCharacterizationMbePDI(ArchiveSection):
     )
     laser_reflectance = SubSection(
         section_def=LaserReflectanceReference,
+        repeats=True,
     )
     mass_spectrometry = SubSection(
         section_def=MassSpectrometryReference,
+        repeats=True,
     )
     rheed = SubSection(
         section_def=RHEEDReference,
+        repeats=True,
     )
 
 

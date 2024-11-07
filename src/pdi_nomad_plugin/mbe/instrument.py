@@ -336,7 +336,7 @@ class ImpingingFluxPDI(ImpingingFlux):
     bep_to_flux = Quantity(
         type=float,
         description='The conversion factor from Beam Equivalent Pressure (BEP) to the flux.',
-        unit='mol **-1 * meter ** -2 * second * pascal ** -1',
+        unit='meter ** -2 * second * pascal ** -1',
     )
     t_0_parameter = Quantity(
         type=float,
@@ -347,7 +347,7 @@ class ImpingingFluxPDI(ImpingingFlux):
     )
     value = Quantity(
         type=HDF5Dataset,
-        unit='mol/meter ** 2/second',
+        unit='1/meter ** 2/second',
         shape=[],
     )
     time = Quantity(

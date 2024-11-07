@@ -32,7 +32,7 @@ epic_parser = ConfigurationParserEntryPoint(
     mainfile_mime_re='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     mainfile_contents_dict={
         'MBE sources': {'__has_all_keys': ['source_type', 'EPIC_loop']},
-        '__has_symbol': '#',
+        '__has_comment': '#',
     },
     # 'MBE gas mixing': {'__has_all_keys': ['mfc1_EPIC_name']},
 )

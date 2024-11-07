@@ -36,6 +36,8 @@ from nomad.units import ureg
 from pdi_nomad_plugin.characterization.schema import (
     PyrometerTemperature,
     Pyrometry,
+    LaserReflectance,
+    LaserReflectanceIntensity,
 )
 from pdi_nomad_plugin.mbe.instrument import (
     ColdLipEffusionCell,
@@ -154,6 +156,14 @@ class ParserEpicPDI(MatchingParser):
         )
         pyrometry_sheet.columns = pyrometry_sheet.columns.str.strip()
 
+        # "laser reflectance settings" sheet
+        lr_sheet = pd.read_excel(
+            xlsx,
+            'LR settings',
+            comment='#',
+        )
+        lr_sheet.columns = lr_sheet.columns.str.strip()
+
         # reading Messages.txt
         growth_starttime = None
         growth_id = None
@@ -216,7 +226,31 @@ class ParserEpicPDI(MatchingParser):
         child_archives['instrument'].data.name = f'{data_file} instrument'
         child_archives['instrument'].data.port_list = []
 
-        # read raw files
+        # instantiate objects
+        child_archives['process'].data = GrowthMbePDI()
+        child_archives['process'].data.steps = [GrowthStepMbePDI()]
+        child_archives['process'].data.steps[0].sources = []
+
+        child_archives['process'].data.name = f'{exp_string} process'
+
+        # in situ characterization
+        child_archives['process'].data.steps[
+            0
+        ].in_situ_characterization = InSituCharacterizationMbePDI()
+        # # pyrometry
+        child_archives['process'].data.steps[0].in_situ_characterization.pyrometry = [
+            Pyrometry()
+        ]
+        child_archives['process'].data.steps[0].in_situ_characterization.pyrometry[
+            0
+        ].pyrometer_temperature = PyrometerTemperature()
+        pyro_archive = (
+            child_archives['process']
+            .data.steps[0]
+            .in_situ_characterization.pyrometry[0]
+        )
+        pyro_archive.name = f'{exp_string} pyrometry'
+        # # # read pyrometry raw files
         epiclog_value, epiclog_time = epiclog_parse_timeseries(
             timezone,
             growth_starttime,
@@ -225,30 +259,33 @@ class ParserEpicPDI(MatchingParser):
             'temperature',
             'temperature_unit',
         )
-        # instantiate objects
-        child_archives['process'].data = GrowthMbePDI()
-        child_archives['process'].data.steps = [GrowthStepMbePDI()]
-        child_archives['process'].data.steps[0].sources = []
-        child_archives['process'].data.steps[
-            0
-        ].in_situ_characterization = InSituCharacterizationMbePDI()
-        child_archives['process'].data.steps[0].in_situ_characterization.pyrometry = [
-            Pyrometry()
-        ]
-        child_archives['process'].data.steps[0].in_situ_characterization.pyrometry[
-            0
-        ].pyrometer_temperature = PyrometerTemperature()
-
-        # fill in quantities
-        child_archives['process'].data.name = f'{exp_string} process'
-        pyro_archive = (
-            child_archives['process']
-            .data.steps[0]
-            .in_situ_characterization.pyrometry[0]
-        )
-        pyro_archive.name = f'{exp_string} pyrometry'
         pyro_archive.pyrometer_temperature.value = epiclog_value
         pyro_archive.pyrometer_temperature.time = epiclog_time
+        # # laser reflectance
+        child_archives['process'].data.steps[
+            0
+        ].in_situ_characterization.laser_reflectance = [LaserReflectance()]
+        child_archives['process'].data.steps[
+            0
+        ].in_situ_characterization.laser_reflectance[
+            0
+        ].laser_reflectance_intensity = LaserReflectanceIntensity()
+        lr_archive = (
+            child_archives['process']
+            .data.steps[0]
+            .in_situ_characterization.laser_reflectance[0]
+        )
+        lr_archive.name = f'{exp_string} laser reflectance'
+        # # # read laser reflectance raw files
+        epiclog_value, epiclog_time = epiclog_parse_timeseries(
+            timezone,
+            growth_starttime,
+            folder_path,
+            lr_sheet,
+            'intensity',
+        )
+        lr_archive.laser_reflectance_intensity.value = epiclog_value
+        lr_archive.laser_reflectance_intensity.time = epiclog_time
 
         # filling in the sources objects list
         for sources_index, sources_row in sources_sheet.iterrows():
@@ -445,7 +482,11 @@ class ParserEpicPDI(MatchingParser):
                             float(t0_param), ureg('°C')
                         )
                         source_object.impinging_flux[0].a_parameter = float(a_param)
-                        source_object.impinging_flux[0].value = impinging_flux
+                        source_object.impinging_flux[
+                            0
+                        ].value = (
+                            impinging_flux  # TODO this value is in nm -> convert to m
+                        )
                         source_object.impinging_flux[
                             0
                         ].time = epiclog_time  # TODO insert hdf5 link

@@ -194,71 +194,20 @@ class PyrometerTemperature(TimeSeries):
     )
 
 
-class LaserReflectanceCurrent(TimeSeries):
+class LaserReflectanceIntensity(TimeSeries):
     """
     The current measured during the pyrometry experiment.
     """
 
-    m_def = Section(
-        a_plot=[
-            {
-                'label': 'measured current',
-                'x': 'time',
-                'y': ['value'],
-            },
-        ],
-        a_eln={
-            'hide': [
-                'set_value',
-                'set_time',
-            ]
-        },
-    )
+    m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
     value = Quantity(
-        type=float,
-        unit='ampere',
-        shape=['*'],
+        type=HDF5Dataset,
+        shape=[],
     )
     time = Quantity(
-        type=Datetime,
+        type=HDF5Dataset,
         description='The process time when each of the values were recorded.',
-        shape=['*'],
-    )
-
-
-class CurrentVsTime(ArchiveSection):
-    """
-    The current vs time data.
-    """
-
-    m_def = Section()
-
-    wavelength = Quantity(
-        type=float,
-        unit='meter',
-        description="""
-        Wavelength of the light used for the pyrometry measurement.
-        """,
-        a_eln=ELNAnnotation(
-            component=ELNComponentEnum.NumberEditQuantity,
-            defaultDisplayUnit='nanometer',
-        ),
-    )
-
-    incidence_angle = Quantity(
-        type=float,
-        unit='degree',
-        description="""
-        The angle of incidence of the light used for the pyrometry measurement.
-        """,
-        a_eln=ELNAnnotation(
-            component=ELNComponentEnum.NumberEditQuantity,
-            defaultDisplayUnit='degree',
-        ),
-    )
-
-    current = SubSection(
-        section_def=LaserReflectanceCurrent,
+        shape=[],
     )
 
 
@@ -322,7 +271,28 @@ class LaserReflectance(Measurement, EntryData):
         type=str,
         a_eln={'component': 'StringEditQuantity'},
     )
-    current_curves = SubSection(
-        section_def=CurrentVsTime,
-        repeats=True,
+    wavelength = Quantity(
+        type=float,
+        unit='meter',
+        description="""
+        Wavelength of the light used for the pyrometry measurement.
+        """,
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+            defaultDisplayUnit='nanometer',
+        ),
+    )
+    incidence_angle = Quantity(
+        type=float,
+        unit='degree',
+        description="""
+        The angle of incidence of the light used for the pyrometry measurement.
+        """,
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+            defaultDisplayUnit='degree',
+        ),
+    )
+    laser_reflectance_intensity = SubSection(
+        section_def=LaserReflectanceIntensity,
     )
