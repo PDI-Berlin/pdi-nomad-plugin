@@ -621,22 +621,3 @@ class ParserEpicPDI(MatchingParser):
             ),
             # f'/entries/{child_archives["process"].metadata.entry_id}/archive#data'
         )
-        # archive.metadata.entry_name = data_file.replace('.txt', '')
-
-        # # old way of creating archives as raw files
-        # # creating process archive
-        # if archive.m_context.raw_path_exists(process_filename):
-        #     print(f'Process archive already exists: {process_filename}')
-        # else:
-        #     process = EntryArchive(
-        #         data=process_data if process_data else GrowthMbePDI(),
-        #         # m_context=archive.m_context,
-        #         metadata=EntryMetadata(upload_id=archive.m_context.upload_id),
-        #     )
-        #     create_archive(
-        #         process.m_to_dict(),
-        #         archive.m_context,
-        #         process_filename,
-        #         filetype,
-        #         logger,
-        #     )

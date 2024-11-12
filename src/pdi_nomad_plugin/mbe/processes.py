@@ -705,14 +705,6 @@ class GrowthStepMbePDI(VaporDepositionStep, PlotSection):
         # label='Growth Step Mbe 2',
         a_eln=None,
     )
-    # name
-    # step_index
-    # creates_new_thin_film
-    # duration
-    # sources
-    # sample_parameters
-    # environment
-    # description
 
     name = Quantity(
         type=str,
