@@ -33,6 +33,18 @@ from nomad.datamodel.metainfo.basesections import (
 from nomad.units import ureg
 
 
+def clean_name(name):
+    """
+    Utility function used to clean the filenames of the epic log files.
+    The filenames to be cleaned are found in the excel config file.
+    This function can handle both strings and pandas Series.
+    """
+    if isinstance(name, str):
+        return name.strip().replace(' ', '_').replace('.', '_')
+    elif isinstance(name, pd.Series):
+        return name[0].strip().replace(' ', '_').replace('.', '_')
+
+
 def get_reference(upload_id, entry_id):
     return f'../uploads/{upload_id}/archive/{entry_id}'
 
@@ -407,6 +419,17 @@ def epiclog_parse_timeseries(
     A tuple with pint quantity and the time array is returned.
 
     The dataframe can be a Dataframe or a Series.
+
+    Example function call:
+
+    epiclog_value, epiclog_time = epiclog_parse_timeseries(
+        timezone,
+        growth_starttime,
+        folder_path,
+        pyrometry_sheet,
+        "temperature",
+        "temperature_unit",
+    )
     """
 
     # handle data array
