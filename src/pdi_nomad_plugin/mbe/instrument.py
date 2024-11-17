@@ -1,6 +1,6 @@
 from nomad.config import config
 from nomad.datamodel.data import ArchiveSection, EntryData
-from nomad.datamodel.hdf5 import HDF5Dataset
+from nomad.datamodel.hdf5 import HDF5Reference
 from nomad.datamodel.metainfo.annotations import (
     ELNAnnotation,
     ELNComponentEnum,
@@ -298,12 +298,12 @@ class EffusionCellHeaterPower(SourcePower):
 
     m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
     value = Quantity(
-        type=HDF5Dataset,
+        type=HDF5Reference,
         unit='dimensionless',
         shape=[],
     )
     time = Quantity(
-        type=HDF5Dataset,
+        type=HDF5Reference,
         description='The process time when each of the values were recorded.',
         shape=[],
     )
@@ -316,12 +316,12 @@ class EffusionCellHeaterTemperature(ThermalEvaporationHeaterTemperature):
 
     m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
     value = Quantity(
-        type=HDF5Dataset,
+        type=HDF5Reference,
         unit='kelvin',
         shape=[],
     )
     time = Quantity(
-        type=HDF5Dataset,
+        type=HDF5Reference,
         description='The process time when each of the values were recorded.',
         shape=[],
     )
@@ -346,12 +346,12 @@ class ImpingingFluxPDI(ImpingingFlux):
         type=float,
     )
     value = Quantity(
-        type=HDF5Dataset,
+        type=HDF5Reference,
         unit='mol/meter ** 2/second',
         shape=[],
     )
     time = Quantity(
-        type=HDF5Dataset,
+        type=HDF5Reference,
         description='The process time when each of the values were recorded.',
         shape=[],
     )
@@ -464,12 +464,12 @@ class RfGeneratorHeaterPower(SourcePower):
 
     m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
     value = Quantity(
-        type=HDF5Dataset,
+        type=HDF5Reference,
         unit='watt',
         shape=[],
     )
     time = Quantity(
-        type=HDF5Dataset,
+        type=HDF5Reference,
         description='The process time when each of the values were recorded.',
         shape=[],
     )
@@ -516,12 +516,12 @@ class VolumetricFlowRatePDI(VolumetricFlowRate):
         ),
     )
     value = Quantity(
-        type=HDF5Dataset,
+        type=HDF5Reference,
         unit='meter ** 3 / second',
         shape=[],
     )
     time = Quantity(
-        type=HDF5Dataset,
+        type=HDF5Reference,
         description='The process time when each of the values were recorded.',
         shape=[],
     )

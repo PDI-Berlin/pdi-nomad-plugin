@@ -1,7 +1,7 @@
 import numpy as np
 from nomad.config import config
 from nomad.datamodel.data import ArchiveSection, EntryData
-from nomad.datamodel.hdf5 import HDF5Dataset
+from nomad.datamodel.hdf5 import HDF5Reference
 from nomad.datamodel.metainfo.annotations import (
     ELNAnnotation,
     ELNComponentEnum,
@@ -183,12 +183,12 @@ class PyrometerTemperature(TimeSeries):
 
     m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
     value = Quantity(
-        type=HDF5Dataset,
+        type=HDF5Reference,
         unit='kelvin',
         shape=[],
     )
     time = Quantity(
-        type=HDF5Dataset,
+        type=HDF5Reference,
         description='The process time when each of the values were recorded.',
         shape=[],
     )
