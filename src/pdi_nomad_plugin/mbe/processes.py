@@ -4,7 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 from nomad.config import config
 from nomad.datamodel.data import ArchiveSection, EntryData
-from nomad.datamodel.hdf5 import HDF5Dataset
+from nomad.datamodel.hdf5 import HDF5Reference
 from nomad.datamodel.metainfo.annotations import (
     ELNAnnotation,
     ELNComponentEnum,
@@ -504,7 +504,7 @@ class SubstrateHeaterPower(TimeSeries):
 
     m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
     value = Quantity(
-        type=HDF5Dataset,
+        type=HDF5Reference,
         unit='dimensionless',
         shape=[],
         a_h5web=H5WebAnnotation(
@@ -512,7 +512,7 @@ class SubstrateHeaterPower(TimeSeries):
         ),
     )
     time = Quantity(
-        type=HDF5Dataset,
+        type=HDF5Reference,
         description='The process time when each of the values were recorded.',
         shape=[],
     )
@@ -525,7 +525,7 @@ class SubstrateHeaterTemperature(TimeSeries, PlotSection):
 
     m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
     value = Quantity(
-        type=HDF5Dataset,
+        type=HDF5Reference,
         unit='kelvin',
         shape=[],
         a_h5web=H5WebAnnotation(
@@ -533,7 +533,7 @@ class SubstrateHeaterTemperature(TimeSeries, PlotSection):
         ),
     )
     time = Quantity(
-        type=HDF5Dataset,
+        type=HDF5Reference,
         description='The process time when each of the values were recorded.',
         shape=[],
         unit='second',
@@ -541,22 +541,37 @@ class SubstrateHeaterTemperature(TimeSeries, PlotSection):
 
     def normalize(self, archive, logger):
         super().normalize(archive, logger)
-        with self.time as deserialized:
-            time_array = deserialized[:]
-        with self.value as deserialized:
-            value_array = deserialized[:]
-        with (
+        # HDF5Dataset solution:
+        # with self.time as deserialized:
+        #     time_array = deserialized[:]
+        # with self.value as deserialized:
+        #     value_array = deserialized[:]
+        # with (
+        #     archive.data.steps[0]
+        #     .in_situ_characterization.pyrometry[0]
+        #     .pyrometer_temperature.value as deserialized
+        # ):
+        #     pyrometer_temperature = deserialized[:]
+        # with (
+        #     archive.data.steps[0]
+        #     .in_situ_characterization.pyrometry[0]
+        #     .pyrometer_temperature.time as deserialized
+        # ):
+        #     pyrometer_time = deserialized[:]
+        time_array = HDF5Reference.read_dataset(archive, self.time)
+        value_array = HDF5Reference.read_dataset(archive, self.value)
+        pyrometer_time = HDF5Reference.read_dataset(
+            archive,
             archive.data.steps[0]
             .in_situ_characterization.pyrometry[0]
-            .pyrometer_temperature.value as deserialized
-        ):
-            pyrometer_temperature = deserialized[:]
-        with (
+            .pyrometer_temperature.time,
+        )
+        pyrometer_temperature = HDF5Reference.read_dataset(
+            archive,
             archive.data.steps[0]
             .in_situ_characterization.pyrometry[0]
-            .pyrometer_temperature.time as deserialized
-        ):
-            pyrometer_time = deserialized[:]
+            .pyrometer_temperature.value,
+        )
         fig = go.Figure()
         fig.add_trace(
             go.Scatter(
