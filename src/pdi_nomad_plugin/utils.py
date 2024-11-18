@@ -407,6 +407,27 @@ def epiclog_read_handle_empty(folder_path, dataframe, column_header):
     return data_array
 
 
+def handle_unit(dataframe, unit_header):
+    unit_cell = dataframe.get(unit_header)
+    unit = None
+    if unit_cell is not None:
+        if isinstance(unit_cell, str):
+            if unit_cell == 'C':
+                unit = '°C'
+            elif unit_cell == 'sccm':
+                unit = 'meter ** 3 / second'
+            else:
+                unit = unit_cell
+        elif not unit_cell.empty and pd.notna(unit_cell.iloc[0]):
+            if unit_cell.iloc[0] == 'C':
+                unit = '°C'
+            elif unit_cell.iloc[0] == 'sccm':
+                unit = 'meter ** 3 / second'
+            else:
+                unit = unit_cell.iloc[0]
+    return unit
+
+
 def epiclog_parse_timeseries(
     timezone, growth_starttime, folder_path, dataframe, data_header, unit_header=None
 ):
@@ -436,23 +457,7 @@ def epiclog_parse_timeseries(
     data_array = epiclog_read_handle_empty(folder_path, dataframe, data_header)
 
     # handle unit cell
-    unit_cell = dataframe.get(unit_header)
-    unit = None
-    if unit_cell is not None:
-        if isinstance(unit_cell, str):
-            if unit_cell == 'C':
-                unit = '°C'
-            elif unit_cell == 'sccm':
-                unit = 'meter ** 3 / second'
-            else:
-                unit = unit_cell
-        elif not unit_cell.empty and pd.notna(unit_cell.iloc[0]):
-            if unit_cell.iloc[0] == 'C':
-                unit = '°C'
-            elif unit_cell.iloc[0] == 'sccm':
-                unit = 'meter ** 3 / second'
-            else:
-                unit = unit_cell.iloc[0]
+    unit = handle_unit(dataframe, unit_header)
 
     # create pint quantity
     if data_array is not None:
