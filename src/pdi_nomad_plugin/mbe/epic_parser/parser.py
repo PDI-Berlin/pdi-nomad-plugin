@@ -16,28 +16,29 @@
 # limitations under the License.
 #
 import os
-from collections.abc import Iterable
 from datetime import datetime
-from typing import Union
 from zoneinfo import ZoneInfo
-import h5py
 
+import h5py
 import numpy as np
 import pandas as pd
 from epic_scraper.epicfileimport.epic_module import (
+    epic_hdf5_exporter,
+    epiclog_read_batch,
+    extract_growth_messages,
     growth_time,
 )
+from nomad.datamodel.data import EntryData
 from nomad.datamodel.datamodel import EntryArchive
+from nomad.datamodel.hdf5 import HDF5Reference
 from nomad.datamodel.metainfo.basesections import (
     PureSubstanceSection,
 )
 from nomad.metainfo import Quantity
 from nomad.parsing import MatchingParser
 from nomad.units import ureg
-from nomad.datamodel.hdf5 import HDF5Reference
-from nomad.datamodel.data import ArchiveSection, EntryData
-
 from nomad.utils import hash
+
 from pdi_nomad_plugin.characterization.schema import (
     PyrometerTemperature,
     Pyrometry,
@@ -72,18 +73,11 @@ from pdi_nomad_plugin.mbe.processes import (
     SubstrateHeaterTemperature,
 )
 from pdi_nomad_plugin.utils import (
-    epiclog_parse_timeseries,
+    clean_name,
+    create_archive,
     epiclog_read_handle_empty,
     fill_quantity,
-    create_archive,
-    clean_name,
     handle_unit,
-)
-
-from epic_scraper.epicfileimport.epic_module import (
-    extract_growth_messages,
-    epic_hdf5_exporter,
-    epiclog_read_batch,
 )
 
 timezone = 'Europe/Berlin'
