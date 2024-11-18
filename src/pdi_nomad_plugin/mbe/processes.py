@@ -515,99 +515,130 @@ class SubstrateHeaterPower(TimeSeries):
     )
 
 
-class SubstrateHeaterTemperature(TimeSeries, PlotSection):
+class SubstrateHeaterTemperature(TimeSeries):  # , PlotSection):
     """
     The temperature of the heater during the deposition process.
     """
 
-    m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
+    m_def = Section(
+        a_h5web=H5WebAnnotation(
+            axes=['pyro_time'], signal='pyro_value', auxiliary_signals=['value']
+        ),
+        a_eln={
+            'hide': [
+                'pyro_value',
+                'pyro_time',
+            ]
+        },
+    )
+
     value = Quantity(
         type=HDF5Reference,
-        unit='kelvin',
         shape=[],
-        a_h5web=H5WebAnnotation(
-            long_name='temperature (K)',
-        ),
     )
     time = Quantity(
         type=HDF5Reference,
         description='The process time when each of the values were recorded.',
         shape=[],
-        unit='second',
     )
 
-    def normalize(self, archive, logger):
-        super().normalize(archive, logger)
-        # HDF5Dataset solution:
-        # with self.time as deserialized:
-        #     time_array = deserialized[:]
-        # with self.value as deserialized:
-        #     value_array = deserialized[:]
-        # with (
-        #     archive.data.steps[0]
-        #     .in_situ_characterization.pyrometry[0]
-        #     .pyrometer_temperature.value as deserialized
-        # ):
-        #     pyrometer_temperature = deserialized[:]
-        # with (
-        #     archive.data.steps[0]
-        #     .in_situ_characterization.pyrometry[0]
-        #     .pyrometer_temperature.time as deserialized
-        # ):
-        #     pyrometer_time = deserialized[:]
-        time_array = HDF5Reference.read_dataset(archive, self.time)
-        value_array = HDF5Reference.read_dataset(archive, self.value)
-        pyrometer_time = HDF5Reference.read_dataset(
-            archive,
-            archive.data.steps[0]
-            .in_situ_characterization.pyrometry[0]
-            .pyrometer_temperature.time,
-        )
-        pyrometer_temperature = HDF5Reference.read_dataset(
-            archive,
-            archive.data.steps[0]
-            .in_situ_characterization.pyrometry[0]
-            .pyrometer_temperature.value,
-        )
-        fig = go.Figure()
-        fig.add_trace(
-            go.Scatter(
-                x=time_array,
-                y=value_array,
-                name='Sub Temp',
-                line=dict(color='#2A4CDF', width=4),
-                yaxis='y',
-            ),
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=pyrometer_time,
-                y=pyrometer_temperature,
-                name='Pyro Temp',
-                line=dict(color='#90002C', width=2),
-                yaxis='y',
-            ),
-        )
-        fig.update_layout(
-            template='plotly_white',
-            dragmode='zoom',
-            xaxis=dict(
-                fixedrange=False,
-                autorange=True,
-                title='Process time / s',
-                mirror='all',
-                showline=True,
-                gridcolor='#EAEDFC',
-            ),
-            yaxis=dict(
-                fixedrange=False,
-                title='Temperature / °C',
-                tickfont=dict(color='#2A4CDF'),
-                gridcolor='#EAEDFC',
-            ),
-            showlegend=True,
-        )
-        self.figures = [PlotlyFigure(label='figure 1', figure=fig.to_plotly_json())]
+    pyro_value = Quantity(
+        type=HDF5Reference,
+        shape=[],
+    )
+    pyro_time = Quantity(
+        type=HDF5Reference,
+        shape=[],
+    )
+
+    # def normalize(self, archive, logger):
+    #     super().normalize(archive, logger)
+    #     #   plotly figure -----> HDF5Dataset solution:
+    #     # ###
+    #     with self.time as deserialized:
+    #         time_array = deserialized[:]
+    #     with self.value as deserialized:
+    #         value_array = deserialized[:]
+    #     with (
+    #         archive.data.steps[0]
+    #         .in_situ_characterization.pyrometry[0]
+    #         .pyrometer_temperature.value as deserialized
+    #     ):
+    #         pyrometer_temperature = deserialized[:]
+    #     with (
+    #         archive.data.steps[0]
+    #         .in_situ_characterization.pyrometry[0]
+    #         .pyrometer_temperature.time as deserialized
+    #     ):
+    #         pyrometer_time = deserialized[:]
+
+    #     # plotly figure -----> HDF5Reference solution:
+    #     # ###
+    #     time_array = HDF5Reference.read_dataset(archive, self.time)
+    #     value_array = HDF5Reference.read_dataset(archive, self.value)
+    #     pyrometer_time = HDF5Reference.read_dataset(
+    #         archive,
+    #         archive.data.steps[0]
+    #         .in_situ_characterization.pyrometry[0]
+    #         .pyrometer_temperature.time,
+    #     )
+    #     pyrometer_temperature = HDF5Reference.read_dataset(
+    #         archive,
+    #         archive.data.steps[0]
+    #         .in_situ_characterization.pyrometry[0]
+    #         .pyrometer_temperature.value,
+    #     )
+
+    #     # plotly figure
+    #     # ###
+    #     fig = go.Figure()
+    #     fig.add_trace(
+    #         go.Scatter(
+    #             x=time_array,
+    #             y=value_array,
+    #             name='Sub Temp',
+    #             line=dict(color='#2A4CDF', width=4),
+    #             yaxis='y',
+    #         ),
+    #     )
+    #     fig.add_trace(
+    #         go.Scatter(
+    #             x=pyrometer_time,
+    #             y=pyrometer_temperature,
+    #             name='Pyro Temp',
+    #             line=dict(color='#90002C', width=2),
+    #             yaxis='y',
+    #         ),
+    #     )
+    #     fig.update_layout(
+    #         template='plotly_white',
+    #         dragmode='zoom',
+    #         xaxis=dict(
+    #             fixedrange=False,
+    #             autorange=True,
+    #             title='Process time / s',
+    #             mirror='all',
+    #             showline=True,
+    #             gridcolor='#EAEDFC',
+    #         ),
+    #         yaxis=dict(
+    #             fixedrange=False,
+    #             title='Temperature / °C',
+    #             tickfont=dict(color='#2A4CDF'),
+    #             gridcolor='#EAEDFC',
+    #         ),
+    #         showlegend=True,
+    #     )
+    #     self.figures = [PlotlyFigure(label='figure 1', figure=fig.to_plotly_json())]
+
+    #             fixedrange=False,
+    #             title='Temperature / °C',
+    #             tickfont=dict(color='#2A4CDF'),
+    #             gridcolor='#EAEDFC',
+    #         ),
+    #         showlegend=True,
+    #     )
+    #     self.figures = [PlotlyFigure(label='figure 1', figure=fig.to_plotly_json())]
 
 
 class SubstrateHeaterCurrent(TimeSeries):
@@ -676,7 +707,7 @@ class SubstrateHeaterVoltage(TimeSeries):
 
 class SampleParametersMbe(SampleParameters):
     m_def = Section(
-        a_h5web=H5WebAnnotation(paths=['substrate_temperature', 'substrate_power']),
+        a_h5web=H5WebAnnotation(paths=['substrate_temperature']),
     )
     name = Quantity(
         type=str,
@@ -801,7 +832,6 @@ class GrowthMbePDI(VaporDeposition, EntryData):
         a_h5web=H5WebAnnotation(
             paths=[
                 'steps/0/sample_parameters/0/substrate_temperature',
-                'steps/0/sample_parameters/0/substrate_power',
             ]
         ),
     )

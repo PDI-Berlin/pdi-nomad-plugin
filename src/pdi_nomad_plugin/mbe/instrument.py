@@ -507,7 +507,7 @@ class VolumetricFlowRatePDI(VolumetricFlowRate):
     at a temperature of 0 °C (273.15 K) and a pressure of 1 atm (101325 Pa).
     """
 
-    m_def = Section()
+    m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
     measurement_type = Quantity(
         type=MEnum(
             'Mass Flow Controller',
