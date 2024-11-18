@@ -1,7 +1,6 @@
 import json
 
 import numpy as np
-import plotly.graph_objects as go
 from nomad.config import config
 from nomad.datamodel.data import ArchiveSection, EntryData
 from nomad.datamodel.hdf5 import HDF5Reference
@@ -20,7 +19,7 @@ from nomad.datamodel.metainfo.basesections import (
     System,
     SystemComponent,
 )
-from nomad.datamodel.metainfo.plot import PlotlyFigure, PlotSection
+from nomad.datamodel.metainfo.plot import PlotSection
 from nomad.datamodel.metainfo.workflow import (
     Link,
 )
