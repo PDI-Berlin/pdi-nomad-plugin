@@ -330,6 +330,10 @@ class EffusionCellHeaterTemperature(ThermalEvaporationHeaterTemperature):
 class ImpingingFluxPDI(ImpingingFlux):
     """
     The flux that impinges the surface of the substrate.
+    It is calculated from the effusion cell heater temperature as the following:
+
+    bep_to_flux * np.exp(a_parameter) * np.exp(t_0_parameter / temperature[:])
+
     """
 
     m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
@@ -346,7 +350,7 @@ class ImpingingFluxPDI(ImpingingFlux):
         type=float,
     )
     value = Quantity(
-        type=HDF5Dataset,
+        type=HDF5Reference,
         unit='1/meter ** 2/second',
         shape=[],
     )

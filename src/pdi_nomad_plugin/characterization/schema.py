@@ -201,11 +201,11 @@ class LaserReflectanceIntensity(TimeSeries):
 
     m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
     value = Quantity(
-        type=HDF5Dataset,
+        type=HDF5Reference,
         shape=[],
     )
     time = Quantity(
-        type=HDF5Dataset,
+        type=HDF5Reference,
         description='The process time when each of the values were recorded.',
         shape=[],
     )

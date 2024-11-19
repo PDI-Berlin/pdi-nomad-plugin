@@ -428,7 +428,7 @@ class ParserEpicPDI(MatchingParser):
                     )
                     impinging_flux = (
                         float(bep_to_flux)
-                        * float(a_param)
+                        * np.exp(float(a_param))
                         * np.exp(float(t0_param) / temperature[:])
                     )
 
