@@ -421,15 +421,25 @@ class ParserEpicPDI(MatchingParser):
                     a_param, t0_param = fitting[sources_row['EPIC_loop']][
                         'Coeff'
                     ].split(',')
-                    bep_to_flux = fitting[sources_row['EPIC_loop']]['BEPtoFlux']
+                    t0_param_pint = ureg.Quantity(float(t0_param), ureg('°C'))
+                    bep_to_flux_pint = ureg.Quantity(
+                        float(fitting[sources_row['EPIC_loop']]['BEPtoFlux']),
+                        ureg('nanometer ** -2 * second ** -1 * mbar ** -1'),
+                    )
                     # with source_object.vapor_source.temperature.value as temperature: # Native parsing mode
-                    temperature = HDF5Reference.read_dataset(
-                        archive, source_object.vapor_source.temperature.value
+                    temperature_pint = ureg.Quantity(
+                        HDF5Reference.read_dataset(
+                            archive, source_object.vapor_source.temperature.value
+                        )[:],
+                        ureg('°C'),
                     )
                     impinging_flux = (
-                        float(bep_to_flux)
+                        bep_to_flux_pint.magnitude
                         * np.exp(float(a_param))
-                        * np.exp(float(t0_param) / temperature[:])
+                        * np.exp(
+                            t0_param_pint.to('kelvin').magnitude
+                            / temperature_pint.to('kelvin').magnitude
+                        )
                     )
 
                     # make shutter status a vector
@@ -453,19 +463,14 @@ class ParserEpicPDI(MatchingParser):
                             group_name = f'{sources_row["EPIC_loop"]}_impinging_flux'
                             group = hdf.create_group(group_name)
                             value = group.create_dataset('value', data=impinging_flux)
-                            value.attrs['units'] = 'meter ** -2 * second * pascal ** -1'
+                            value.attrs['units'] = 'nanometer ** -2 * second ** -1'
                             hdf[f'/{group_name}/time'] = hdf[f'/{temp_mv_time}']
                             group.attrs['axes'] = 'time'
                             group.attrs['signal'] = 'value'
                             group.attrs['NX_class'] = 'NXdata'
 
-                    source_object.impinging_flux[0].bep_to_flux = ureg.Quantity(
-                        float(bep_to_flux),
-                        ureg('mol **-1 * meter ** -2 * second * pascal ** -1'),
-                    )
-                    source_object.impinging_flux[0].t_0_parameter = ureg.Quantity(
-                        float(t0_param), ureg('°C')
-                    )
+                    source_object.impinging_flux[0].bep_to_flux = bep_to_flux_pint
+                    source_object.impinging_flux[0].t_0_parameter = t0_param_pint
                     source_object.impinging_flux[0].a_parameter = float(a_param)
                     source_object.impinging_flux[
                         0

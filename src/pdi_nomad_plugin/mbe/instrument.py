@@ -317,7 +317,6 @@ class EffusionCellHeaterTemperature(ThermalEvaporationHeaterTemperature):
     m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
     value = Quantity(
         type=HDF5Reference,
-        unit='kelvin',
         shape=[],
     )
     time = Quantity(
@@ -340,7 +339,7 @@ class ImpingingFluxPDI(ImpingingFlux):
     bep_to_flux = Quantity(
         type=float,
         description='The conversion factor from Beam Equivalent Pressure (BEP) to the flux.',
-        unit='meter ** -2 * second * pascal ** -1',
+        unit='meter ** -2 * second ** -1 * pascal ** -1',
     )
     t_0_parameter = Quantity(
         type=float,
@@ -351,7 +350,6 @@ class ImpingingFluxPDI(ImpingingFlux):
     )
     value = Quantity(
         type=HDF5Reference,
-        unit='1/meter ** 2/second',
         shape=[],
     )
     time = Quantity(
