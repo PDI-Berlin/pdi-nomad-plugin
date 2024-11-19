@@ -453,9 +453,7 @@ class ParserEpicPDI(MatchingParser):
                             group_name = f'{sources_row["EPIC_loop"]}_impinging_flux'
                             group = hdf.create_group(group_name)
                             value = group.create_dataset('value', data=impinging_flux)
-                            value.attrs['units'] = (
-                                'mol **-1 * meter ** -2 * second * pascal ** -1'
-                            )
+                            value.attrs['units'] = 'meter ** -2 * second * pascal ** -1'
                             hdf[f'/{group_name}/time'] = hdf[f'/{temp_mv_time}']
                             group.attrs['axes'] = 'time'
                             group.attrs['signal'] = 'value'
