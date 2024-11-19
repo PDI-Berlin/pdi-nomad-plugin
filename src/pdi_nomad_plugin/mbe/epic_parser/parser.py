@@ -476,7 +476,7 @@ class ParserEpicPDI(MatchingParser):
 
                         source_object.impinging_flux[0].bep_to_flux = ureg.Quantity(
                             float(bep_to_flux),
-                            ureg('mol **-1 * meter ** -2 * second * pascal ** -1'),
+                            ureg('meter ** -2 * second * pascal ** -1'),
                         )
                         source_object.impinging_flux[0].t_0_parameter = ureg.Quantity(
                             float(t0_param), ureg('°C')
