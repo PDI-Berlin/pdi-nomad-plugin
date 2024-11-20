@@ -37,10 +37,14 @@ from nomad_material_processing.general import (
 from nomad_material_processing.vapor_deposition.cvd.general import (
     Rotation,
 )
+
+from nomad_material_processing.vapor_deposition.pvd.general import (
+    PVDSampleParameters,
+)
+
 from nomad_material_processing.vapor_deposition.general import (
     ChamberEnvironment,
     Pressure,
-    SampleParameters,
     SubstrateHeater,
     Temperature,
     VaporDeposition,
@@ -707,7 +711,7 @@ class SubstrateHeaterVoltage(TimeSeries):
     )
 
 
-class SampleParametersMbe(SampleParameters):
+class SampleParametersMbe(PVDSampleParameters):
     m_def = Section(
         a_h5web=H5WebAnnotation(paths=['substrate_temperature']),
     )
@@ -723,12 +727,13 @@ class SampleParametersMbe(SampleParameters):
     distance_to_source = Quantity(
         type=float,
         unit='meter',
-        a_eln={'component': 'NumberEditQuantity', 'defaultDisplayUnit': 'millimeter'},
         description="""
-        The distance between the substrate and the source.
-        It is an array because multiple sources can be used.
+        The distance between the substrate and all the sources.
+        In the case of multiple sources, the distances are listed in the same order
+        as the sources are listed in the parent `VaporDepositionStep` section.
         """,
-        shape=[1],
+        shape=['*'],
+        a_eln={'component': 'NumberEditQuantity', 'defaultDisplayUnit': 'millimeter'},
     )
     substrate_temperature = SubSection(
         section_def=SubstrateHeaterTemperature,
@@ -834,6 +839,7 @@ class GrowthMbePDI(VaporDeposition, EntryData):
         a_h5web=H5WebAnnotation(
             paths=[
                 'steps/0/sample_parameters/0/substrate_temperature',
+                'steps/0/sources/*/impinging_flux/0',
             ]
         ),
     )
@@ -1043,10 +1049,9 @@ class ExperimentMbePDI(Experiment, EntryData):
             component='StringEditQuantity',
         ),
     )
-    data_file = Quantity(
+    target_material = Quantity(
         type=str,
         shape=['*'],
-        description='Searchable tags for this entry. Use Explore tab for searching.',
         a_eln=ELNAnnotation(
             component='StringEditQuantity',
         ),
@@ -1057,6 +1062,13 @@ class ExperimentMbePDI(Experiment, EntryData):
         a_eln=ELNAnnotation(
             component='StringEditQuantity',
             label='Notes',
+        ),
+    )
+    growth_id = Quantity(
+        type=str,
+        description='ID of the growth process to be referenced in this experiment.',
+        a_eln=ELNAnnotation(
+            component='StringEditQuantity',
         ),
     )
     growth_run = SubSection(
@@ -1071,9 +1083,6 @@ class ExperimentMbePDI(Experiment, EntryData):
         section_def=ActivityReference,
         repeats=True,
     )
-    # growth_run_constant_parameters = SubSection(
-    #     section_def=GrowthMbe1PDIConstantParametersReference
-    # )
 
     def normalize(self, archive, logger):
         archive_sections = (

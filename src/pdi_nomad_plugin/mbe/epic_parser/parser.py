@@ -126,76 +126,50 @@ class ParserEpicPDI(MatchingParser):
         instrument_filename = f'{data_file[:-5]}.InstrumentMbePDI.archive.{filetype}'
         experiment_filename = f'{data_file[:-5]}.ExperimentMbePDI.archive.{filetype}'
 
+        # Define the sheets to read and process
+        sheets = [
+            'MBE config files',
+            'MBE sources',
+            'MBE gas mixing',
+            'pyrometry config',
+            'LR settings',
+        ]
+        # Read the sheets into a dictionary of DataFrames
+        sheets_dict = {
+            sheet: pd.read_excel(xlsx, sheet, comment='#').rename(
+                columns=lambda x: x.strip()
+            )
+            for sheet in sheets
+        }
+        # Access the individual DataFrames
+        config_sheet = sheets_dict['MBE config files']
+        sources_sheet = sheets_dict['MBE sources']
+        gasmixing_sheet = sheets_dict['MBE gas mixing']
+        pyrometry_sheet = sheets_dict['pyrometry config']
+        lr_sheet = sheets_dict['LR settings']
+
+        # read Messages.txt file
+        assert (
+            'messages' in config_sheet and not config_sheet['messages'].empty
+        ), 'Messages file not found. Provide a valid messages file in the configuration sheet.'
+        assert pd.notna(
+            config_sheet['messages'].iloc[0]
+        ), 'Messages file not found. Provide a valid messages file in the configuration sheet.'
+        (
+            growth_id,
+            growth_starttime,
+            growth_endtime,
+            growth_duration,
+            logger_msg,
+        ) = extract_growth_messages(folder_path, config_sheet['messages'].iloc[0])
+        exp_string = growth_id.replace('@', '_') if growth_id else None
+
         # create an hdf5 file
         dataframe_list = epiclog_read_batch(folder_name, upload_path)
-        growth_id, growth_starttime, logger_msg = extract_growth_messages(folder_path)
         hdf_filename = f'{data_file[:-5]}.h5'
         with archive.m_context.raw_file(hdf_filename, 'w') as newfile:
             epic_hdf5_exporter(newfile.name, dataframe_list, growth_starttime)
             logger.info(logger_msg)
-
-        # "MBE config files" sheet
-        config_sheet = pd.read_excel(
-            xlsx,
-            'MBE config files',
-            comment='#',
-        )
-        config_sheet.columns = config_sheet.columns.str.strip()
-
-        # "MBE sources" sheet
-        sources_sheet = pd.read_excel(
-            xlsx,
-            'MBE sources',
-            comment='#',
-        )
-        sources_sheet.columns = sources_sheet.columns.str.strip()
-
-        # "MBE gas mixing" sheet
-        gasmixing_sheet = pd.read_excel(
-            xlsx,
-            'MBE gas mixing',
-            comment='#',
-        )
-        gasmixing_sheet.columns = gasmixing_sheet.columns.str.strip()
-
-        # "pyrometry config" sheet
-        pyrometry_sheet = pd.read_excel(
-            xlsx,
-            'pyrometry config',
-            comment='#',
-        )
-        pyrometry_sheet.columns = pyrometry_sheet.columns.str.strip()
-
-        # "laser reflectance settings" sheet
-        lr_sheet = pd.read_excel(
-            xlsx,
-            'LR settings',
-            comment='#',
-        )
-        lr_sheet.columns = lr_sheet.columns.str.strip()
-
-        # reading Messages.txt
-        growth_starttime = None
-        growth_id = None
-        if 'messages' in config_sheet and not config_sheet['messages'].empty:
-            if pd.notna(config_sheet['messages'].iloc[0]):
-                messages_df = epiclog_read_handle_empty(
-                    folder_path, config_sheet, 'messages'
-                )
-                if messages_df is not None:
-                    growth_events = growth_time(messages_df)
-                    # found_start = False  # TODO remove this flag
-                    for line in growth_events.iterrows():
-                        if line[1]['to'] == 'GC':
-                            growth_id = line[1]['object']
-                            growth_starttime = line[0].tz_localize(timezone)
-                        if line[1]['from'] == 'GC':
-                            growth_endtime = line[0].tz_localize(timezone)
-                            growth_duration = growth_endtime - growth_starttime
-                            logger.info(
-                                f'Detected growth of {growth_id} started at {growth_starttime} and ended at {growth_endtime} with a duration of {growth_duration}'
-                            )
-        exp_string = growth_id.replace('@', '_') if growth_id else None
 
         # reading Fitting.txt
         fitting = None
@@ -230,6 +204,12 @@ class ParserEpicPDI(MatchingParser):
                     encoding='utf-8',
                 ) as file:
                     shutters = pd.read_csv(file, skiprows=2)
+                shutters["'Date&Time"] = pd.to_datetime(
+                    shutters["'Date&Time"], format='%d/%m/%Y %H:%M:%S.%f'
+                )
+                shutters['TimeDifference'] = (
+                    shutters["'Date&Time"].dt.tz_localize(timezone) - growth_starttime
+                ).dt.total_seconds()
 
         # instrument archive
         child_archives['instrument'].data = InstrumentMbePDI()
@@ -448,21 +428,26 @@ class ParserEpicPDI(MatchingParser):
                     )
                     shutter_vector = np.zeros(len(time_vector))
                     if shutters is not None:
-                        for shutter_status in shutters.iterrows():
-                            if shutter_status[1][f"{sources_row['EPIC_loop']}_Sh"]:
-                                for i in time_vector:
-                                    if time_vector < shutter_status["'Date&Time"]:
-                                        shutter_vector[i] = shutter_status[1][
-                                            f'{sources_row["EPIC_loop"]}_Sh'
-                                        ]
-                                    else:
-                                        break
+                        # Iterate over the shutters DataFrame
+                        for _, shutter_status in shutters.iterrows():
+                            shutter_change_time = shutter_status['TimeDifference']
+                            shutter_value = shutter_status[
+                                f'{sources_row["EPIC_loop"]}_Sh'
+                            ]
+
+                            # Find the index in time_vector where the shutter change occurs
+                            for i, time_value in enumerate(time_vector):
+                                if time_value >= shutter_change_time:
+                                    shutter_vector[i:] = shutter_value
+                                    break
+
+                    modulated_flux = impinging_flux * shutter_vector
 
                     with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
                         with h5py.File(newfile.name, 'a') as hdf:
                             group_name = f'{sources_row["EPIC_loop"]}_impinging_flux'
                             group = hdf.create_group(group_name)
-                            value = group.create_dataset('value', data=impinging_flux)
+                            value = group.create_dataset('value', data=modulated_flux)
                             value.attrs['units'] = 'nanometer ** -2 * second ** -1'
                             hdf[f'/{group_name}/time'] = hdf[f'/{temp_mv_time}']
                             group.attrs['axes'] = 'time'
@@ -662,23 +647,24 @@ class ParserEpicPDI(MatchingParser):
             logger,
         )
 
-        # creating experiment archive
-        # archive.data = ExperimentMbePDI(  # Native parsing mode
-        child_archives['experiment'].data = ExperimentMbePDI(
-            name=f'{exp_string} experiment',
-            growth_run=GrowthMbePDIReference(
-                reference=f'/uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, process_filename)}#data',
-                # reference=child_archives['process'].data, # Native parsing mode
-            ),
-        )
-
-        create_archive(
-            child_archives['experiment'].m_to_dict(),
-            archive.m_context,
-            experiment_filename,
-            filetype,
-            logger,
-        )
+        # it is deactivated so far because it is meant to be instantiate from the ELN
+        # # # #
+        # # creating experiment archive
+        # # archive.data = ExperimentMbePDI(  # Native parsing mode
+        # child_archives["experiment"].data = ExperimentMbePDI(
+        #     name=f"{exp_string} experiment",
+        #     growth_run=GrowthMbePDIReference(
+        #         reference=f"/uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, process_filename)}#data",
+        #         # reference=child_archives['process'].data, # Native parsing mode
+        #     ),
+        # )
+        # create_archive(
+        #     child_archives["experiment"].m_to_dict(),
+        #     archive.m_context,
+        #     experiment_filename,
+        #     filetype,
+        #     logger,
+        # )
 
         archive.data = ConfigFileMBE(file=mainfile)
 

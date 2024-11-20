@@ -58,6 +58,8 @@ class Device(ArchiveSection):
     - windows
     """
 
+    pass
+
 
 class Port(ArchiveSection):
     """
@@ -195,21 +197,6 @@ class SourcePDI(Device, EntryData):
         description='The type of the thermal evaporation source.',
         a_eln=ELNAnnotation(
             component=ELNComponentEnum.EnumEditQuantity,
-        ),
-    )
-    lab_id = Quantity(
-        type=str,
-        a_eln=ELNAnnotation(
-            component=ELNComponentEnum.StringEditQuantity,
-            label='Source ID',
-        ),
-    )
-    tags = Quantity(
-        type=str,
-        shape=['*'],
-        description='Searchable tags for this entry. Use Explore tab for searching.',
-        a_eln=ELNAnnotation(
-            component='StringEditQuantity',
         ),
     )
     port = Quantity(
@@ -395,7 +382,9 @@ class EffusionCellSourcePDI(SourcePDI, ThermalEvaporationSource):
             ),
             lane_width='600px',
         ),
+        a_h5web=H5WebAnnotation(paths=['impinging_flux/0']),
     )
+
     crucible = SubSection(
         section_def=Crucible,
     )
@@ -411,6 +400,13 @@ class EffusionCellSourcePDI(SourcePDI, ThermalEvaporationSource):
     vapor_source = SubSection(
         section_def=EffusionCellHeater,
     )
+    impinging_flux = SubSection(
+        section_def=ImpingingFluxPDI,
+        description="""
+        The deposition rate of the material onto the substrate (mol/area/time).
+        """,
+        repeats=True,
+    )
 
 
 class SingleFilamentEffusionCell(EffusionCellSourcePDI):
@@ -421,6 +417,7 @@ class SingleFilamentEffusionCell(EffusionCellSourcePDI):
 
     m_def = Section(
         label='Single Filament Effusion Cell',
+        a_h5web=H5WebAnnotation(paths=['impinging_flux/0']),
     )
 
 
@@ -434,6 +431,7 @@ class ColdLipEffusionCell(EffusionCellSourcePDI):
 
     m_def = Section(
         label='Cold Lip Effusion Cell',
+        a_h5web=H5WebAnnotation(paths=['impinging_flux/0']),
     )
 
 
@@ -453,6 +451,7 @@ class DoubleFilamentEffusionCell(EffusionCellSourcePDI):
                 ],
             ),
         ),
+        a_h5web=H5WebAnnotation(paths=['impinging_flux/0']),
     )
     vapor_source_hot_lip = SubSection(
         section_def=EffusionCellHeater,
@@ -570,6 +569,7 @@ class PlasmaSourcePDI(SourcePDI, PVDSource):
             ),
             lane_width='600px',
         ),
+        a_h5web=H5WebAnnotation(paths=['impinging_flux/0']),
     )
     vapor_source = SubSection(
         section_def=RfGeneratorHeater,
@@ -587,6 +587,13 @@ class PlasmaSourcePDI(SourcePDI, PVDSource):
         description="""
         The source of the material that is being evaporated.
         Example: A sputtering target, a powder in a crucible, etc.
+        """,
+        repeats=True,
+    )
+    impinging_flux = SubSection(
+        section_def=ImpingingFluxPDI,
+        description="""
+        The deposition rate of the material onto the substrate (mol/area/time).
         """,
         repeats=True,
     )
