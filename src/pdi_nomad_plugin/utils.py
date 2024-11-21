@@ -24,25 +24,13 @@ import numpy as np
 import pandas as pd
 import yaml
 from epic_scraper.epicfileimport.epic_module import (
-    epiclog_read,
+    epiclog_read,  # TODO maybe use epiclog_read_handle_empty instead
 )
 from nomad.datamodel.context import ClientContext
 from nomad.datamodel.metainfo.basesections import (
     ExperimentStep,
 )
 from nomad.units import ureg
-
-
-def clean_name(name):
-    """
-    Utility function used to clean the filenames of the epic log files.
-    The filenames to be cleaned are found in the excel config file.
-    This function can handle both strings and pandas Series.
-    """
-    if isinstance(name, str):
-        return name.strip().replace(' ', '_').replace('.', '_')
-    elif isinstance(name, pd.Series):
-        return name[0].strip().replace(' ', '_').replace('.', '_')
 
 
 def get_reference(upload_id, entry_id):

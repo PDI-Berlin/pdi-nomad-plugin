@@ -37,11 +37,6 @@ from nomad_material_processing.general import (
 from nomad_material_processing.vapor_deposition.cvd.general import (
     Rotation,
 )
-
-from nomad_material_processing.vapor_deposition.pvd.general import (
-    PVDSampleParameters,
-)
-
 from nomad_material_processing.vapor_deposition.general import (
     ChamberEnvironment,
     Pressure,
@@ -49,7 +44,9 @@ from nomad_material_processing.vapor_deposition.general import (
     Temperature,
     VaporDeposition,
     VaporDepositionStep,
-    VolumetricFlowRate,
+)
+from nomad_material_processing.vapor_deposition.pvd.general import (
+    PVDSampleParameters,
 )
 from nomad_measurements.general import ActivityReference
 from nomad_measurements.xrd.schema import ELNXRayDiffraction
@@ -482,15 +479,34 @@ class LayTecTemperature(Temperature):
     pass
 
 
+class PressurePDI(Pressure):
+    """
+    The pressure during the deposition process.
+    """
+
+    m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
+    value = Quantity(
+        type=HDF5Reference,
+        shape=[],
+    )
+    time = Quantity(
+        type=HDF5Reference,
+        shape=[],
+    )
+
+
 class ChamberEnvironmentMbe(ChamberEnvironment):
-    uniform_gas_flow_rate = SubSection(
-        section_def=VolumetricFlowRate,
-    )
     pressure = SubSection(
-        section_def=Pressure,
+        section_def=PressurePDI,
+        label='Pressure_1',
     )
-    throttle_valve = SubSection(
-        section_def=Pressure,
+    pressure_2 = SubSection(
+        section_def=PressurePDI,
+        label='Pressure_2',
+    )
+    bep = SubSection(
+        section_def=PressurePDI,
+        label='Beam Equivalent Pressure',
     )
     rotation = SubSection(
         section_def=Rotation,

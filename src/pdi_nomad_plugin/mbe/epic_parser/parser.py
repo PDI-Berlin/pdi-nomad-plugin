@@ -26,7 +26,9 @@ from epic_scraper.epicfileimport.epic_module import (
     epic_hdf5_exporter,
     epiclog_read_batch,
     extract_growth_messages,
-    growth_time,
+)
+from epic_scraper.epicfileimport.epic_module import (
+    filename_2_dataframename as fn2dfn,
 )
 from nomad.datamodel.data import EntryData
 from nomad.datamodel.datamodel import EntryArchive
@@ -42,8 +44,6 @@ from nomad.utils import hash
 from pdi_nomad_plugin.characterization.schema import (
     PyrometerTemperature,
     Pyrometry,
-    LaserReflectance,
-    LaserReflectanceIntensity,
 )
 from pdi_nomad_plugin.mbe.instrument import (
     ColdLipEffusionCell,
@@ -63,19 +63,17 @@ from pdi_nomad_plugin.mbe.instrument import (
     VolumetricFlowRatePDI,
 )
 from pdi_nomad_plugin.mbe.processes import (
-    ExperimentMbePDI,
+    ChamberEnvironmentMbe,
     GrowthMbePDI,
-    GrowthMbePDIReference,
     GrowthStepMbePDI,
     InSituCharacterizationMbePDI,
+    PressurePDI,
     SampleParametersMbe,
     SubstrateHeaterPower,
     SubstrateHeaterTemperature,
 )
 from pdi_nomad_plugin.utils import (
-    clean_name,
     create_archive,
-    epiclog_read_handle_empty,
     fill_quantity,
     handle_unit,
 )
@@ -124,13 +122,13 @@ class ParserEpicPDI(MatchingParser):
         filetype = 'yaml'
         process_filename = f'{data_file[:-5]}.GrowthMbePDI.archive.{filetype}'
         instrument_filename = f'{data_file[:-5]}.InstrumentMbePDI.archive.{filetype}'
-        experiment_filename = f'{data_file[:-5]}.ExperimentMbePDI.archive.{filetype}'
 
         # Define the sheets to read and process
         sheets = [
             'MBE config files',
             'MBE sources',
             'MBE gas mixing',
+            'MBE chamber env',
             'pyrometry config',
             'LR settings',
         ]
@@ -145,8 +143,9 @@ class ParserEpicPDI(MatchingParser):
         config_sheet = sheets_dict['MBE config files']
         sources_sheet = sheets_dict['MBE sources']
         gasmixing_sheet = sheets_dict['MBE gas mixing']
+        chamber_sheet = sheets_dict['MBE chamber env']
         pyrometry_sheet = sheets_dict['pyrometry config']
-        lr_sheet = sheets_dict['LR settings']
+        # lr_sheet = sheets_dict['LR settings']
 
         # read Messages.txt file
         assert (
@@ -163,13 +162,6 @@ class ParserEpicPDI(MatchingParser):
             logger_msg,
         ) = extract_growth_messages(folder_path, config_sheet['messages'].iloc[0])
         exp_string = growth_id.replace('@', '_') if growth_id else None
-
-        # create an hdf5 file
-        dataframe_list = epiclog_read_batch(folder_name, upload_path)
-        hdf_filename = f'{data_file[:-5]}.h5'
-        with archive.m_context.raw_file(hdf_filename, 'w') as newfile:
-            epic_hdf5_exporter(newfile.name, dataframe_list, growth_starttime)
-            logger.info(logger_msg)
 
         # reading Fitting.txt
         fitting = None
@@ -211,6 +203,13 @@ class ParserEpicPDI(MatchingParser):
                     shutters["'Date&Time"].dt.tz_localize(timezone) - growth_starttime
                 ).dt.total_seconds()
 
+        # # # # # HDF5 FILE CREATION # # # # #
+        dataframe_list = epiclog_read_batch(folder_name, upload_path)
+        hdf_filename = f'{data_file[:-5]}.h5'
+        with archive.m_context.raw_file(hdf_filename, 'w') as newfile:
+            epic_hdf5_exporter(newfile.name, dataframe_list, growth_starttime)
+            logger.info(logger_msg)
+
         # instrument archive
         child_archives['instrument'].data = InstrumentMbePDI()
         child_archives['instrument'].data.name = f'{data_file} instrument'
@@ -220,6 +219,10 @@ class ParserEpicPDI(MatchingParser):
         child_archives['process'].data = GrowthMbePDI()
         child_archives['process'].data.steps = [GrowthStepMbePDI()]
         child_archives['process'].data.steps[0].sources = []
+        child_archives['process'].data.steps[0].environment = ChamberEnvironmentMbe()
+        child_archives['process'].data.steps[0].environment.pressure = PressurePDI()
+        child_archives['process'].data.steps[0].environment.pressure_2 = PressurePDI()
+        child_archives['process'].data.steps[0].environment.bep = PressurePDI()
         child_archives['process'].data.steps[
             0
         ].in_situ_characterization = InSituCharacterizationMbePDI()
@@ -238,25 +241,61 @@ class ParserEpicPDI(MatchingParser):
             .in_situ_characterization.pyrometry[0]
         )
         pyro_archive.name = f'{exp_string} pyrometry'
-        pyrovalpath = f'/{clean_name(pyrometry_sheet["temperature"])}/value'
+        pyrovalpath = f'/{fn2dfn(pyrometry_sheet["temperature"])}/value'
         pyro_archive.pyrometer_temperature.value = (
             f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#{pyrovalpath}'
         )
-        pyrotimepath = f'/{clean_name(pyrometry_sheet["temperature"])}/time'
+        pyrotimepath = f'/{fn2dfn(pyrometry_sheet["temperature"])}/time'
         pyro_archive.pyrometer_temperature.time = (
             f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#{pyrotimepath}'
         )
+        child_archives['process'].data.steps[
+            0
+        ].environment.pressure.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(chamber_sheet["pressure_1"])}/value'
+        child_archives['process'].data.steps[
+            0
+        ].environment.pressure.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(chamber_sheet["pressure_1"])}/time'
+        child_archives['process'].data.steps[
+            0
+        ].environment.pressure_2.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(chamber_sheet["pressure_2"])}/value'
+        child_archives['process'].data.steps[
+            0
+        ].environment.pressure_2.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(chamber_sheet["pressure_2"])}/time'
+        child_archives['process'].data.steps[
+            0
+        ].environment.bep.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(chamber_sheet["bep"])}/value'
+        child_archives['process'].data.steps[
+            0
+        ].environment.bep.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(chamber_sheet["bep"])}/time'
 
         with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
             with h5py.File(newfile.name, 'a') as hdf:
-                hdf[f'{clean_name(pyrometry_sheet["temperature"])}/time'].attrs[
-                    'units'
-                ] = 's'
+                hdf[f'{fn2dfn(pyrometry_sheet["temperature"])}/time'].attrs['units'] = (
+                    's'
+                )
                 unit = handle_unit(pyrometry_sheet, 'temperature_unit')
                 if unit:
-                    hdf[f'{clean_name(pyrometry_sheet["temperature"])}/value'].attrs[
+                    hdf[f'{fn2dfn(pyrometry_sheet["temperature"])}/value'].attrs[
                         'units'
                     ] = unit
+
+                hdf[f'{fn2dfn(chamber_sheet["pressure_1"])}/time'].attrs['units'] = 's'
+                hdf[f'{fn2dfn(chamber_sheet["pressure_2"])}/time'].attrs['units'] = 's'
+                hdf[f'{fn2dfn(chamber_sheet["bep"])}/time'].attrs['units'] = 's'
+
+                unit = handle_unit(chamber_sheet, 'pressure_1_unit')
+                if unit:
+                    hdf[f'{fn2dfn(chamber_sheet["pressure_1"])}/value'].attrs[
+                        'units'
+                    ] = unit
+                unit = handle_unit(chamber_sheet, 'pressure_2_unit')
+                if unit:
+                    hdf[f'{fn2dfn(chamber_sheet["pressure_2"])}/value'].attrs[
+                        'units'
+                    ] = unit
+                unit = handle_unit(chamber_sheet, 'bep_unit')
+                if unit:
+                    hdf[f'{fn2dfn(chamber_sheet["bep"])}/value'].attrs['units'] = unit
 
         # filling in the sources objects list
         for sources_index, sources_row in sources_sheet.iterrows():
@@ -275,27 +314,27 @@ class ParserEpicPDI(MatchingParser):
 
                 # fill in quantities
                 source_object.type = 'RF plasma source (PLASMA)'
-                source_object.vapor_source.forward_power.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{clean_name(sources_row["f_power"])}/value'
-                source_object.vapor_source.forward_power.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{clean_name(sources_row["f_power"])}/time'
-                source_object.vapor_source.reflected_power.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{clean_name(sources_row["r_power"])}/value'
-                source_object.vapor_source.reflected_power.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{clean_name(sources_row["r_power"])}/time'
+                source_object.vapor_source.forward_power.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["f_power"])}/value'
+                source_object.vapor_source.forward_power.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["f_power"])}/time'
+                source_object.vapor_source.reflected_power.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["r_power"])}/value'
+                source_object.vapor_source.reflected_power.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["r_power"])}/time'
 
                 with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
                     with h5py.File(newfile.name, 'a') as hdf:
-                        hdf[f'{clean_name(sources_row["f_power"])}/time'].attrs[
-                            'units'
-                        ] = 's'
+                        hdf[f'{fn2dfn(sources_row["f_power"])}/time'].attrs['units'] = (
+                            's'
+                        )
                         unit = handle_unit(sources_row, 'f_power_unit')
                         if unit:
-                            hdf[f'{clean_name(sources_row["f_power"])}/value'].attrs[
+                            hdf[f'{fn2dfn(sources_row["f_power"])}/value'].attrs[
                                 'units'
                             ] = unit
-                        hdf[f'{clean_name(sources_row["r_power"])}/time'].attrs[
-                            'units'
-                        ] = 's'
+                        hdf[f'{fn2dfn(sources_row["r_power"])}/time'].attrs['units'] = (
+                            's'
+                        )
                         unit = handle_unit(sources_row, 'r_power_unit')
                         if unit:
-                            hdf[f'{clean_name(sources_row["r_power"])}/value'].attrs[
+                            hdf[f'{fn2dfn(sources_row["r_power"])}/value'].attrs[
                                 'units'
                             ] = unit
 
@@ -327,22 +366,22 @@ class ParserEpicPDI(MatchingParser):
 
                         source_object.gas_flow[
                             i
-                        ].flow_rate.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{clean_name(gas_row["mfc_flow"])}/value'
+                        ].flow_rate.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(gas_row["mfc_flow"])}/value'
                         source_object.gas_flow[
                             i
-                        ].flow_rate.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{clean_name(gas_row["mfc_flow"])}/time'
+                        ].flow_rate.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(gas_row["mfc_flow"])}/time'
                         i += 1
 
                         with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
                             with h5py.File(newfile.name, 'a') as hdf:
-                                hdf[f'{clean_name(gas_row["mfc_flow"])}/time'].attrs[
+                                hdf[f'{fn2dfn(gas_row["mfc_flow"])}/time'].attrs[
                                     'units'
                                 ] = 's'
                                 unit = handle_unit(gas_row, 'mfc_flow_unit')
                                 if unit:
-                                    hdf[
-                                        f'{clean_name(gas_row["mfc_flow"])}/value'
-                                    ].attrs['units'] = unit
+                                    hdf[f'{fn2dfn(gas_row["mfc_flow"])}/value'].attrs[
+                                        'units'
+                                    ] = unit
 
                         # measurement_type ='Mass Flow Controller',
                         # gas=
@@ -380,18 +419,18 @@ class ParserEpicPDI(MatchingParser):
                     source_object.type = 'Double filament effusion cell (DFC)'
                 if sources_row['source_type'] == 'CLC':
                     source_object.type = 'Cold lip cell (CLC)'
-                temp_mv_time = f'{clean_name(sources_row["temp_mv"])}/time'  # used later for impinging flux too
-                source_object.vapor_source.temperature.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{clean_name(sources_row["temp_mv"])}/value'
+                temp_mv_time = f'{fn2dfn(sources_row["temp_mv"])}/time'  # used later for impinging flux too
+                source_object.vapor_source.temperature.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["temp_mv"])}/value'
                 source_object.vapor_source.temperature.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{temp_mv_time}'
-                source_object.vapor_source.power.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{clean_name(sources_row["temp_wop"])}/value'
-                source_object.vapor_source.power.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{clean_name(sources_row["temp_wop"])}/time'
+                source_object.vapor_source.power.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["temp_wop"])}/value'
+                source_object.vapor_source.power.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["temp_wop"])}/time'
 
                 with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
                     with h5py.File(newfile.name, 'a') as hdf:
                         hdf[temp_mv_time].attrs['units'] = 's'
                         unit = handle_unit(sources_row, 'temp_mv_unit')
                         if unit:
-                            hdf[f'{clean_name(sources_row["temp_mv"])}/value'].attrs[
+                            hdf[f'{fn2dfn(sources_row["temp_mv"])}/value'].attrs[
                                 'units'
                             ] = unit
 
@@ -479,19 +518,19 @@ class ParserEpicPDI(MatchingParser):
                 # fill in quantities
                 source_object.vapor_source_hot_lip.power = EffusionCellHeaterPower()
 
-                source_object.vapor_source_hot_lip.temperature.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{clean_name(sources_row["hl_temp_mv"])}/value'
-                source_object.vapor_source_hot_lip.temperature.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{clean_name(sources_row["hl_temp_mv"])}/time'
-                source_object.vapor_source_hot_lip.power.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{clean_name(sources_row["hl_temp_wop"])}/value'
-                source_object.vapor_source_hot_lip.power.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{clean_name(sources_row["hl_temp_wop"])}/time'
+                source_object.vapor_source_hot_lip.temperature.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["hl_temp_mv"])}/value'
+                source_object.vapor_source_hot_lip.temperature.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["hl_temp_mv"])}/time'
+                source_object.vapor_source_hot_lip.power.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["hl_temp_wop"])}/value'
+                source_object.vapor_source_hot_lip.power.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["hl_temp_wop"])}/time'
 
                 with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
                     with h5py.File(newfile.name, 'a') as hdf:
-                        hdf[f'{clean_name(sources_row["hl_temp_mv"])}/time'].attrs[
+                        hdf[f'{fn2dfn(sources_row["hl_temp_mv"])}/time'].attrs[
                             'units'
                         ] = 's'
                         unit = handle_unit(sources_row, 'hl_temp_mv_unit')
                         if unit:
-                            hdf[f'{clean_name(sources_row["hl_temp_mv"])}/value'].attrs[
+                            hdf[f'{fn2dfn(sources_row["hl_temp_mv"])}/value'].attrs[
                                 'units'
                             ] = unit
 
@@ -569,19 +608,19 @@ class ParserEpicPDI(MatchingParser):
                 ].substrate_power = SubstrateHeaterPower()
 
                 # fill in quantities
-                tempvalpath = f'/{clean_name(sources_row["temp_mv"])}/value'
+                tempvalpath = f'/{fn2dfn(sources_row["temp_mv"])}/value'
                 child_archives['process'].data.steps[0].sample_parameters[
                     0
                 ].substrate_temperature.value = f'{hdf5_path}#{tempvalpath}'
-                temptimepath = f'/{clean_name(sources_row["temp_mv"])}/time'
+                temptimepath = f'/{fn2dfn(sources_row["temp_mv"])}/time'
                 child_archives['process'].data.steps[0].sample_parameters[
                     0
                 ].substrate_temperature.time = f'{hdf5_path}#{temptimepath}'
-                subpower_value = f'{clean_name(sources_row["temp_wop"])}/value'
+                subpower_value = f'{fn2dfn(sources_row["temp_wop"])}/value'
                 child_archives['process'].data.steps[0].sample_parameters[
                     0
                 ].substrate_power.value = f'{hdf5_path}#/{subpower_value}'
-                subpower_time = f'{clean_name(sources_row["temp_wop"])}/time'
+                subpower_time = f'{fn2dfn(sources_row["temp_wop"])}/time'
                 child_archives['process'].data.steps[0].sample_parameters[
                     0
                 ].substrate_power.time = f'{hdf5_path}#/{subpower_time}'
@@ -589,12 +628,12 @@ class ParserEpicPDI(MatchingParser):
                 with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
                     with h5py.File(newfile.name, 'a') as hdf:
                         # parsing units in hdf5 file
-                        hdf[f'{clean_name(sources_row["temp_mv"])}/time'].attrs[
-                            'units'
-                        ] = 's'
+                        hdf[f'{fn2dfn(sources_row["temp_mv"])}/time'].attrs['units'] = (
+                            's'
+                        )
                         unit = handle_unit(sources_row, 'temp_mv_unit')
                         if unit:
-                            hdf[f'{clean_name(sources_row["temp_mv"])}/value'].attrs[
+                            hdf[f'{fn2dfn(sources_row["temp_mv"])}/value'].attrs[
                                 'units'
                             ] = unit
 
@@ -651,6 +690,7 @@ class ParserEpicPDI(MatchingParser):
         # # # #
         # # creating experiment archive
         # # archive.data = ExperimentMbePDI(  # Native parsing mode
+        # experiment_filename = f'{data_file[:-5]}.ExperimentMbePDI.archive.{filetype}'
         # child_archives["experiment"].data = ExperimentMbePDI(
         #     name=f"{exp_string} experiment",
         #     growth_run=GrowthMbePDIReference(
