@@ -855,7 +855,6 @@ class GrowthMbePDI(VaporDeposition, EntryData):
         a_h5web=H5WebAnnotation(
             paths=[
                 'steps/0/sample_parameters/0/substrate_temperature',
-                'steps/0/sources/*/impinging_flux/0',
             ]
         ),
     )

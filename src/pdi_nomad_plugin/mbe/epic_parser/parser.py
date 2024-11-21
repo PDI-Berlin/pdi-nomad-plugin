@@ -26,8 +26,6 @@ from epic_scraper.epicfileimport.epic_module import (
     epic_hdf5_exporter,
     epiclog_read_batch,
     extract_growth_messages,
-)
-from epic_scraper.epicfileimport.epic_module import (
     filename_2_dataframename as fn2dfn,
 )
 from nomad.datamodel.data import EntryData

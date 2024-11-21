@@ -33,6 +33,18 @@ from nomad.datamodel.metainfo.basesections import (
 from nomad.units import ureg
 
 
+def clean_name(name):
+    """
+    Utility function used to clean the filenames of the epic log files.
+    The filenames to be cleaned are found in the excel config file.
+    This function can handle both strings and pandas Series.
+    """
+    if isinstance(name, str):
+        return name.strip().replace(' ', '_').replace('.', '_')
+    elif isinstance(name, pd.Series):
+        return name[0].strip().replace(' ', '_').replace('.', '_')
+
+
 def get_reference(upload_id, entry_id):
     return f'../uploads/{upload_id}/archive/{entry_id}'
 
