@@ -180,6 +180,9 @@ class SourcePDI(Device, EntryData):
     Some general information about the source recorded at PDI.
     """
 
+    m_def = Section(
+        label_quantity='name',
+    )
     datetime = Quantity(
         type=Datetime,
         description='The date and time of creation of this entry.',

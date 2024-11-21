@@ -434,7 +434,37 @@ class ParserEpicPDI(MatchingParser):
                                 'units'
                             ] = unit
 
-            if sources_row['EPIC_loop'] and fitting is not None:
+            if sources_row['source_type'] == 'DFC':
+                # instantiate objects
+                source_object.vapor_source_hot_lip = EffusionCellHeater()
+                source_object.vapor_source_hot_lip.temperature = (
+                    EffusionCellHeaterTemperature()
+                )
+
+                # fill in quantities
+                source_object.vapor_source_hot_lip.power = EffusionCellHeaterPower()
+
+                source_object.vapor_source_hot_lip.temperature.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["hl_temp_mv"])}/value'
+                source_object.vapor_source_hot_lip.temperature.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["hl_temp_mv"])}/time'
+                source_object.vapor_source_hot_lip.power.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["hl_temp_wop"])}/value'
+                source_object.vapor_source_hot_lip.power.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["hl_temp_wop"])}/time'
+
+                with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
+                    with h5py.File(newfile.name, 'a') as hdf:
+                        hdf[f'{fn2dfn(sources_row["hl_temp_mv"])}/time'].attrs[
+                            'units'
+                        ] = 's'
+                        unit = handle_unit(sources_row, 'hl_temp_mv_unit')
+                        if unit:
+                            hdf[f'{fn2dfn(sources_row["hl_temp_mv"])}/value'].attrs[
+                                'units'
+                            ] = unit
+
+            if (
+                sources_row['EPIC_loop']
+                and fitting is not None
+                and sources_row['source_type'] != 'SUB'
+            ):
                 source_object.epic_loop = sources_row['EPIC_loop']
                 if sources_row['EPIC_loop'] in fitting.keys():
                     a_param, t0_param = fitting[sources_row['EPIC_loop']][
@@ -508,39 +538,14 @@ class ParserEpicPDI(MatchingParser):
                     'No fitting parameters found. Please provide a Fitting.txt file.'
                 )
 
-            if sources_row['source_type'] == 'DFC':
-                # instantiate objects
-                source_object.vapor_source_hot_lip = EffusionCellHeater()
-                source_object.vapor_source_hot_lip.temperature = (
-                    EffusionCellHeaterTemperature()
-                )
-
-                # fill in quantities
-                source_object.vapor_source_hot_lip.power = EffusionCellHeaterPower()
-
-                source_object.vapor_source_hot_lip.temperature.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["hl_temp_mv"])}/value'
-                source_object.vapor_source_hot_lip.temperature.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["hl_temp_mv"])}/time'
-                source_object.vapor_source_hot_lip.power.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["hl_temp_wop"])}/value'
-                source_object.vapor_source_hot_lip.power.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["hl_temp_wop"])}/time'
-
-                with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
-                    with h5py.File(newfile.name, 'a') as hdf:
-                        hdf[f'{fn2dfn(sources_row["hl_temp_mv"])}/time'].attrs[
-                            'units'
-                        ] = 's'
-                        unit = handle_unit(sources_row, 'hl_temp_mv_unit')
-                        if unit:
-                            hdf[f'{fn2dfn(sources_row["hl_temp_mv"])}/value'].attrs[
-                                'units'
-                            ] = unit
-
             # fill in quantities common to all sources
             # and create Source objects and Port objects lists
             if source_object:
                 source_name = (
                     str(fill_quantity(sources_row, 'source_type'))
-                    + '_'
+                    + ' '
                     + str(fill_quantity(sources_row, 'source_material'))
+                    + f" (primary species: {fill_quantity(sources_row, 'primary_flux_species')})"
                 )
                 source_object.name = source_name
                 # Define a list of tuples containing
@@ -669,6 +674,8 @@ class ParserEpicPDI(MatchingParser):
                 child_archives['process'].data.steps[0].sample_parameters[
                     0
                 ].substrate_temperature.pyro_time = f'{hdf5_path}#/{pyro_time}'
+
+            source_object = None  # reset source object at the end of each iteration
 
         create_archive(
             child_archives['process'].m_to_dict(),
