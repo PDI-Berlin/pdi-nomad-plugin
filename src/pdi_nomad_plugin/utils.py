@@ -23,14 +23,25 @@ import os
 import numpy as np
 import pandas as pd
 import yaml
-from epic_scraper.epicfileimport.epic_module import (
-    epiclog_read,  # TODO maybe use epiclog_read_handle_empty instead
-)
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from structlog.stdlib import (
+        BoundLogger,
+    )
+from nomad.datamodel.data import ArchiveSection
+
 from nomad.datamodel.context import ClientContext
 from nomad.datamodel.metainfo.basesections import (
     ExperimentStep,
 )
+
 from nomad.units import ureg
+from nomad.utils import hash
+
+from epic_scraper.epicfileimport.epic_module import (
+    epiclog_read,  # TODO maybe use epiclog_read_handle_empty instead
+)
 
 
 def clean_name(name):
@@ -40,13 +51,13 @@ def clean_name(name):
     This function can handle both strings and pandas Series.
     """
     if isinstance(name, str):
-        return name.strip().replace(' ', '_').replace('.', '_')
+        return name.strip().replace(" ", "_").replace(".", "_")
     elif isinstance(name, pd.Series):
-        return name[0].strip().replace(' ', '_').replace('.', '_')
+        return name[0].strip().replace(" ", "_").replace(".", "_")
 
 
 def get_reference(upload_id, entry_id):
-    return f'../uploads/{upload_id}/archive/{entry_id}'
+    return f"../uploads/{upload_id}/archive/{entry_id}"
 
 
 def get_entry_id(upload_id, filename):
@@ -56,7 +67,7 @@ def get_entry_id(upload_id, filename):
 
 
 def get_hash_ref(upload_id, filename):
-    return f'{get_reference(upload_id, get_entry_id(upload_id, filename))}#data'
+    return f"{get_reference(upload_id, get_entry_id(upload_id, filename))}#data"
 
 
 def nan_equal(a, b):
@@ -105,21 +116,21 @@ def create_archive(
     if isinstance(context, ClientContext):
         return None
     if file_exists:
-        with context.raw_file(filename, 'r') as file:
+        with context.raw_file(filename, "r") as file:
             existing_dict = yaml.safe_load(file)
             dicts_are_equal = dict_nan_equal(existing_dict, entry_dict)
     if not file_exists or overwrite or dicts_are_equal:
-        with context.raw_file(filename, 'w') as newfile:
-            if file_type == 'json':
+        with context.raw_file(filename, "w") as newfile:
+            if file_type == "json":
                 json.dump(entry_dict, newfile)
-            elif file_type == 'yaml':
+            elif file_type == "yaml":
                 yaml.dump(entry_dict, newfile)
         context.upload.process_updated_raw_file(filename, allow_modify=True)
     elif file_exists and not overwrite and not dicts_are_equal:
         logger.error(
-            f'{filename} archive file already exists. '
-            f'You are trying to overwrite it with a different content. '
-            f'To do so, remove the existing archive and click reprocess again.'
+            f"{filename} archive file already exists. "
+            f"You are trying to overwrite it with a different content. "
+            f"To do so, remove the existing archive and click reprocess again."
         )
     return get_hash_ref(context.upload_id, filename)
 
@@ -137,18 +148,18 @@ def create_archive(
 
 
 def is_activity_section(section):
-    return any('Activity' in i.label for i in section.m_def.all_base_sections)
+    return any("Activity" in i.label for i in section.m_def.all_base_sections)
 
 
 def handle_section(section):
-    if hasattr(section, 'reference') and is_activity_section(section.reference):
+    if hasattr(section, "reference") and is_activity_section(section.reference):
         return [ExperimentStep(activity=section.reference, name=section.reference.name)]
-    if section.m_def.label == 'CharacterizationMbePDI':
+    if section.m_def.label == "CharacterizationMbePDI":
         sub_sect_list = []
         for sub_section in vars(section).values():
             if isinstance(sub_section, list):
                 for item in sub_section:
-                    if hasattr(item, 'reference') and is_activity_section(
+                    if hasattr(item, "reference") and is_activity_section(
                         item.reference
                     ):
                         sub_sect_list.append(
@@ -157,7 +168,7 @@ def handle_section(section):
                             )
                         )
         return sub_sect_list
-    if not hasattr(section, 'reference') and is_activity_section(section):
+    if not hasattr(section, "reference") and is_activity_section(section):
         return [ExperimentStep(activity=section, name=section.name)]
 
 
@@ -185,7 +196,7 @@ def fill_quantity(dataframe, column_header, read_unit=None, array=False):
     pint_value = None
     if read_unit is not None:
         try:
-            if value != '' and value is not None:
+            if value != "" and value is not None:
                 if not array:
                     pint_value = ureg.Quantity(
                         value,
@@ -200,12 +211,12 @@ def fill_quantity(dataframe, column_header, read_unit=None, array=False):
             else:
                 value = None
         except ValueError:
-            if hasattr(value, 'empty') and not value.empty():
+            if hasattr(value, "empty") and not value.empty():
                 pint_value = ureg.Quantity(
                     value,
                     ureg(read_unit),
                 )
-            elif value == '':
+            elif value == "":
                 pint_value = None
 
     return pint_value if read_unit is not None else value
@@ -218,7 +229,7 @@ def clean_col_names(growth_run_dataframe):
     growth_run_dataframe.columns = growth_run_dataframe.columns.str.strip()
     string = []
     for col_name in growth_run_dataframe.columns:
-        pre, sep, post = col_name.rpartition('.')
+        pre, sep, post = col_name.rpartition(".")
         if sep:
             string.append(pre)
         else:
@@ -249,7 +260,7 @@ def rename_block_cols(string, block_cols, initial_col):
 
     new_columns = []
     for index, chunk in enumerate(split_list):
-        bubbler = [f'{i}.{index}' for i in chunk if i in block_cols]
+        bubbler = [f"{i}.{index}" for i in chunk if i in block_cols]
         other_cols = [i for i in chunk if i not in block_cols]
         if bubbler:
             new_columns.extend(bubbler)
@@ -267,26 +278,26 @@ def fetch_substrate(archive, sample_id, substrate_id, logger):
 
     substrate_reference_str = None
     search_result = search(
-        owner='all',
+        owner="all",
         query={
-            'results.eln.sections:any': ['SubstrateMbe', 'Substrate'],
-            'results.eln.lab_ids:any': [substrate_id],
+            "results.eln.sections:any": ["SubstrateMbe", "Substrate"],
+            "results.eln.lab_ids:any": [substrate_id],
         },
         user_id=archive.metadata.main_author.user_id,
     )
     if not search_result.data:
         logger.warn(
-            f'Substrate entry [{substrate_id}] was not found, upload and reprocess to reference it in ThinFilmStack entry [{sample_id}]'
+            f"Substrate entry [{substrate_id}] was not found, upload and reprocess to reference it in ThinFilmStack entry [{sample_id}]"
         )
         return None
     if len(search_result.data) > 1:
         logger.warn(
-            f'Found {search_result.pagination.total} entries with lab_id: '
+            f"Found {search_result.pagination.total} entries with lab_id: "
             f'"{substrate_id}". Will use the first one found.'
         )
         return None
     if len(search_result.data) >= 1:
-        upload_id = search_result.data[0]['upload_id']
+        upload_id = search_result.data[0]["upload_id"]
         from nomad.app.v1.routers.uploads import get_upload_with_read_access
         from nomad.files import UploadFiles
 
@@ -311,6 +322,78 @@ def fetch_substrate(archive, sample_id, substrate_id, logger):
                 f"The path '../uploads/{search_result.data[0]['upload_id']}/archive/{search_result.data[0]['entry_id']}#data' is not a file, upload and reprocess to reference it in ThinFilmStack entry [{sample_id}]"
             )
             return None
+
+
+def link_experiment(archive, growth_id, growth_run_filename, reference_wrapper, logger):
+    from nomad.app.v1.models.models import User
+    from nomad.datamodel.context import ServerContext
+    from nomad.search import search
+
+    experiment_ref_path = None
+    search_result = search(
+        owner="all",
+        query={
+            "search_quantities": {
+                "id": "data.growth_id#pdi_nomad_plugin.mbe.processes.ExperimentMbePDI",
+                "str_value": growth_id,
+            }
+        },
+        user_id=archive.metadata.main_author.user_id,
+    )
+    if not search_result.data:
+        logger.warn(
+            f"{growth_id} Experiment not found. Link it manually after creating it."
+        )
+        return None
+    if len(search_result.data) > 1:
+        logger.warn(
+            f"Found {search_result.pagination.total} entries with growth_id: "
+            f'"{growth_id}". Will use the first one found.'
+        )
+        return None
+    if len(search_result.data) >= 1:
+        exp_upload_id = search_result.data[0]["upload_id"]
+        exp_mainfile = search_result.data[0]["mainfile"]
+
+        from nomad.app.v1.routers.uploads import get_upload_with_read_access
+        from nomad.files import UploadFiles
+
+        upload_files = UploadFiles.get(exp_upload_id)
+
+        exp_context = ServerContext(
+            get_upload_with_read_access(
+                exp_upload_id,
+                User(
+                    is_admin=True,
+                    user_id=archive.metadata.main_author.user_id,
+                ),
+                include_others=True,
+            )
+        )
+        with exp_context.raw_file(exp_mainfile, "r") as file:
+            updated_file = (
+                yaml.safe_load(file)
+                if exp_mainfile.split(".")[-1] == "yaml"
+                else json.load(file)
+            )
+            updated_file["data"]["growth_run"] = reference_wrapper(
+                reference=f"../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, growth_run_filename)}#data",
+            ).m_to_dict()
+        with exp_context.raw_file(exp_mainfile, "w") as newfile:
+            if exp_mainfile.split(".")[-1] == "json":
+                json.dump(updated_file, newfile)
+            elif exp_mainfile.split(".")[-1] == "yaml":
+                yaml.dump(updated_file, newfile)
+        exp_context.upload.process_updated_raw_file(exp_mainfile, allow_modify=True)
+
+        # if upload_files.raw_path_is_file(growth_run_context.raw_path()):
+        #     experiment_ref_path = f"../uploads/{search_result.data[0]['upload_id']}/archive/{search_result.data[0]['entry_id']}#data"
+        #     return experiment_ref_path
+        # else:
+        #     logger.warn(
+        #         f"The path '../uploads/{search_result.data[0]['upload_id']}/archive/{search_result.data[0]['entry_id']}#data' is not a file, upload and reprocess to reference it in ThinFilmStack entry [{sample_id}]"
+        #     )
+        #     return None
 
 
 def set_sample_status(
@@ -345,38 +428,38 @@ def set_sample_status(
 
     if sample_reference:
         if (
-            hasattr(sample_reference, 'fresh')
-            and hasattr(sample_reference, 'as_delivered')
-            and hasattr(sample_reference, 'processed')
-            and hasattr(sample_reference, 'grown')
+            hasattr(sample_reference, "fresh")
+            and hasattr(sample_reference, "as_delivered")
+            and hasattr(sample_reference, "processed")
+            and hasattr(sample_reference, "grown")
         ):
             filename = sample_reference.m_parent.metadata.mainfile
             with context.raw_file(
-                filename, 'r'
+                filename, "r"
             ) as file:  # TODO it only works with a specific context
                 sample_dict = (
                     yaml.safe_load(file)
-                    if filename.split('.')[-1] == 'yaml'
+                    if filename.split(".")[-1] == "yaml"
                     else json.load(file)
                 )
-                sample_dict['data']['fresh'] = fresh
-                sample_dict['data']['as_delivered'] = as_delivered
-                sample_dict['data']['processed'] = processed
-                sample_dict['data']['grown'] = grown
-            with context.raw_file(filename, 'w') as newfile:
-                if filename.split('.')[-1] == 'json':
+                sample_dict["data"]["fresh"] = fresh
+                sample_dict["data"]["as_delivered"] = as_delivered
+                sample_dict["data"]["processed"] = processed
+                sample_dict["data"]["grown"] = grown
+            with context.raw_file(filename, "w") as newfile:
+                if filename.split(".")[-1] == "json":
                     json.dump(sample_dict, newfile)
-                elif filename.split('.')[-1] == 'yaml':
+                elif filename.split(".")[-1] == "yaml":
                     yaml.dump(sample_dict, newfile)
             context.upload.process_updated_raw_file(filename, allow_modify=True)
         else:
             logger.warn(
-                f'Sample {filename} with entry_id {sample_reference.m_parent.metadata.entry_id} does not have status attribute. Please use a sample class with status.'
+                f"Sample {filename} with entry_id {sample_reference.m_parent.metadata.entry_id} does not have status attribute. Please use a sample class with status."
             )
             return
     else:
         logger.warn(
-            f'Sample {sample_reference} is not a valid reference. Upload and reprocess to set the status.'
+            f"Sample {sample_reference} is not a valid reference. Upload and reprocess to set the status."
         )
 
 
@@ -398,7 +481,7 @@ def epiclog_read_handle_empty(folder_path, dataframe, column_header):
                 if pd.notna(dataframe[column_header].iloc[0]):
                     string_filename = dataframe[column_header].iloc[0]
         elif isinstance(dataframe[column_header], str):
-            if dataframe[column_header] != '':
+            if dataframe[column_header] != "":
                 string_filename = dataframe[column_header]
         if string_filename is not None:
             file_path = f'{folder_path}{string_filename.replace(".txt","")}.txt'
@@ -412,17 +495,17 @@ def handle_unit(dataframe, unit_header):
     unit = None
     if unit_cell is not None:
         if isinstance(unit_cell, str):
-            if unit_cell == 'C':
-                unit = '°C'
-            elif unit_cell == 'sccm':
-                unit = 'meter ** 3 / second'
+            if unit_cell == "C":
+                unit = "°C"
+            elif unit_cell == "sccm":
+                unit = "meter ** 3 / second"
             else:
                 unit = unit_cell
         elif not unit_cell.empty and pd.notna(unit_cell.iloc[0]):
-            if unit_cell.iloc[0] == 'C':
-                unit = '°C'
-            elif unit_cell.iloc[0] == 'sccm':
-                unit = 'meter ** 3 / second'
+            if unit_cell.iloc[0] == "C":
+                unit = "°C"
+            elif unit_cell.iloc[0] == "sccm":
+                unit = "meter ** 3 / second"
             else:
                 unit = unit_cell.iloc[0]
     return unit
@@ -474,3 +557,58 @@ def epiclog_parse_timeseries(
         relative_time_array = None
 
     return pint_quantity, relative_time_array
+
+
+def merge_sections(  # noqa: PLR0912
+    section: "ArchiveSection",
+    update: "ArchiveSection",
+    logger: "BoundLogger" = None,
+) -> None:
+    if update is None:
+        return
+    if section is None:
+        section = update.m_copy()
+        return
+    # if not isinstance(section, type(update)):
+    #     raise TypeError(
+    #         'Cannot merge sections of different types: '
+    #         f'{type(section)} and {type(update)}'
+    #     )
+    for name, quantity in update.m_def.all_quantities.items():
+        if name in ("name", "datetime", "substrate_holder"):
+            continue
+        if not update.m_is_set(quantity):
+            continue
+        if not section.m_is_set(quantity):
+            section.m_set(quantity, update.m_get(quantity))
+        elif (
+            quantity.is_scalar
+            and section.m_get(quantity) != update.m_get(quantity)
+            or quantity.repeats
+            and (section.m_get(quantity) != update.m_get(quantity)).any()
+        ):
+            warning = f'Merging sections with different values for quantity "{name}".'
+            if logger:
+                logger.warning(warning)
+            else:
+                print(warning)
+    for name, sub_section_def in update.m_def.all_sub_sections.items():
+        count = section.m_sub_section_count(sub_section_def)
+        if count == 0:
+            for update_sub_section in update.m_get_sub_sections(sub_section_def):
+                section.m_add_sub_section(sub_section_def, update_sub_section)
+        elif count == update.m_sub_section_count(sub_section_def):
+            for i in range(count):
+                merge_sections(
+                    section.m_get_sub_section(sub_section_def, i),
+                    update.m_get_sub_section(sub_section_def, i),
+                    logger,
+                )
+        elif update.m_sub_section_count(sub_section_def) > 0:
+            warning = (
+                f'Merging sections with different number of "{name}" sub sections.'
+            )
+            if logger:
+                logger.warning(warning)
+            else:
+                print(warning)
