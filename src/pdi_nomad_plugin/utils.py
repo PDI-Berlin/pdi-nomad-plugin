@@ -19,29 +19,26 @@
 import json
 import math
 import os
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
 import yaml
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from structlog.stdlib import (
         BoundLogger,
     )
-from nomad.datamodel.data import ArchiveSection
-
-from nomad.datamodel.context import ClientContext
-from nomad.datamodel.metainfo.basesections import (
-    ExperimentStep,
-)
-
-from nomad.units import ureg
-from nomad.utils import hash
-
 from epic_scraper.epicfileimport.epic_module import (
     epiclog_read,  # TODO maybe use epiclog_read_handle_empty instead
 )
+from nomad.datamodel.context import ClientContext
+from nomad.datamodel.data import ArchiveSection
+from nomad.datamodel.metainfo.basesections import (
+    ExperimentStep,
+)
+from nomad.units import ureg
+from nomad.utils import hash
 
 
 def clean_name(name):
@@ -329,7 +326,7 @@ def link_experiment(archive, growth_id, growth_run_filename, reference_wrapper, 
     from nomad.datamodel.context import ServerContext
     from nomad.search import search
 
-    experiment_ref_path = None
+    # experiment_ref_path = None
     search_result = search(
         owner="all",
         query={
@@ -356,9 +353,8 @@ def link_experiment(archive, growth_id, growth_run_filename, reference_wrapper, 
         exp_mainfile = search_result.data[0]["mainfile"]
 
         from nomad.app.v1.routers.uploads import get_upload_with_read_access
-        from nomad.files import UploadFiles
 
-        upload_files = UploadFiles.get(exp_upload_id)
+        # upload_files = UploadFiles.get(exp_upload_id)
 
         exp_context = ServerContext(
             get_upload_with_read_access(

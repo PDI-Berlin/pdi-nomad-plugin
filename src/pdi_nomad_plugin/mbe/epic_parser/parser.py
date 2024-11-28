@@ -65,8 +65,8 @@ from pdi_nomad_plugin.mbe.instrument import (
 from pdi_nomad_plugin.mbe.processes import (
     ChamberEnvironmentMbe,
     GrowthMbePDI,
-    GrowthStepMbePDI,
     GrowthMbePDIReference,
+    GrowthStepMbePDI,
     InSituCharacterizationMbePDI,
     PressurePDI,
     SampleParametersMbe,
