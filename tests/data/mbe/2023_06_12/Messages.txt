@@ -1,7 +1,6 @@
 'EPIC Message Log File
 
 'Date&Time,CallerID,Message,Color
-12/06/2023 00:04:48.551,Location Tab,Mirror moved from MC_manip to GC,-16777216
 12/06/2023 00:12:00.661,Location Tab,EMPTY in MC_manip status changed to: New,-16777216
 12/06/2023 00:13:06.903,Location Tab,M8abcd moved from MC_manip to GC,-16777216
-12/06/2023 02:13:44.156,Location Tab,M8abcd moved from GC to MC_manip,-16777216
+12/06/2023 14:13:44.156,Location Tab,M8abcd moved from GC to MC_manip,-16777216
