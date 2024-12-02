@@ -45,6 +45,10 @@ from pdi_nomad_plugin.general.schema import (
     PDIMBECategory,
 )
 
+from pdi_nomad_plugin.utils import (
+    merge_sections,
+)
+
 configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:instrument_schema')
 
 m_package = SchemaPackage()
@@ -681,10 +685,18 @@ class FilledSubstrateHolderPositionPDI(FilledSubstrateHolderPosition):
     )
 
 
-class FilledSubstrateHolderPDI(FilledSubstrateHolder, EntryData):
+class FilledSubstrateHolderPDI(SubstrateHolderPDI, EntryData):
     m_def = Section(
         label='SubstrateHolder (Filled)',
         categories=[PDIMBECategory],
+    )
+    substrate_holder = Quantity(
+        type=SubstrateHolderPDI,
+        description='A reference to an empty substrate holder.',
+        a_eln=ELNAnnotation(
+            component='ReferenceEditQuantity',
+            label='Empty Substrate Holder Reference',
+        ),
     )
     positions = SubSection(
         section_def=FilledSubstrateHolderPositionPDI,
@@ -698,6 +710,11 @@ class FilledSubstrateHolderPDI(FilledSubstrateHolder, EntryData):
             component='StringEditQuantity',
         ),
     )
+
+    def normalize(self, archive, logger):
+        super().normalize(archive, logger)
+        if self.substrate_holder is not None:
+            merge_sections(self, self.substrate_holder, logger)
 
 
 class FilledSubstrateHolderPDIReference(EntityReference):
