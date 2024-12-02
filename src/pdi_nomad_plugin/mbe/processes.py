@@ -1036,9 +1036,9 @@ class GrowthMbePDIReference(ActivityReference):
     reference = Quantity(
         type=GrowthMbePDI,
         description='A reference to a NOMAD `GrowthMbePDI` entry.',
-        # a_eln=ELNAnnotation(
-        #     component='ReferenceEditQuantity',
-        # ),
+        a_eln=ELNAnnotation(
+            component='ReferenceEditQuantity',
+        ),
     )
 
 
