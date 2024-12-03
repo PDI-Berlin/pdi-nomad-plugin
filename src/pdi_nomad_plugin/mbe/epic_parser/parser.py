@@ -93,6 +93,16 @@ def fill_datetime(date: pd.Series, time: pd.Series) -> datetime.date:
     ).replace(tzinfo=ZoneInfo(timezone))
 
 
+def set_dataset_unit(hdf_file, dataset_name, attribute_value):
+    """
+    Set the unit attribute for a dataset in an HDF5 file.
+
+    """
+    if dataset_name in hdf_file:
+        dataset = hdf_file[dataset_name]
+        dataset.attrs['units'] = attribute_value
+
+
 class ConfigFileMBE(EntryData):
     file = Quantity(
         type=str,
@@ -110,9 +120,16 @@ class ParserEpicPDI(MatchingParser):
         logger,
     ) -> None:
         data_file = mainfile.split('/')[-1]
-        upload_path = f"{mainfile.split('raw/')[0]}raw/"
+
         folder_name = mainfile.split('/')[-2]
-        folder_path = f'{upload_path}{folder_name}/'
+        if (
+            folder_name == 'raw'
+        ):  # some zipping procedures do not include the folder in the path
+            upload_path = f"{mainfile.split('raw/')[0]}"
+            folder_path = f'{upload_path}'
+        else:
+            upload_path = f"{mainfile.split('raw/')[0]}raw/"
+            folder_path = f'{upload_path}{folder_name}/'
         xlsx = pd.ExcelFile(mainfile)
 
         child_archives = {
@@ -273,35 +290,41 @@ class ParserEpicPDI(MatchingParser):
 
         with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
             with h5py.File(newfile.name, 'a') as hdf:
-                hdf[f'{fn2dfn(pyrometry_sheet["temperature"])}/time'].attrs['units'] = (
-                    's'
+                set_dataset_unit(
+                    hdf, f'{fn2dfn(pyrometry_sheet["temperature"])}/time', 's'
                 )
+
                 unit = handle_unit(pyrometry_sheet, 'temperature_unit')
                 if unit:
-                    hdf[f'{fn2dfn(pyrometry_sheet["temperature"])}/value'].attrs[
-                        'units'
-                    ] = unit
+                    set_dataset_unit(
+                        hdf, f'{fn2dfn(pyrometry_sheet["temperature"])}/value', unit
+                    )
 
-                hdf[f'{fn2dfn(chamber_sheet["pressure_1"])}/time'].attrs['units'] = 's'
-                hdf[f'{fn2dfn(chamber_sheet["pressure_2"])}/time'].attrs['units'] = 's'
-                hdf[f'{fn2dfn(chamber_sheet["bep"])}/time'].attrs['units'] = 's'
+                set_dataset_unit(
+                    hdf, f'{fn2dfn(chamber_sheet["pressure_1"])}/time', 's'
+                )
+                set_dataset_unit(
+                    hdf, f'{fn2dfn(chamber_sheet["pressure_2"])}/time', 's'
+                )
+                set_dataset_unit(hdf, f'{fn2dfn(chamber_sheet["bep"])}/time', 's')
 
                 unit = handle_unit(chamber_sheet, 'pressure_1_unit')
                 if unit:
-                    hdf[f'{fn2dfn(chamber_sheet["pressure_1"])}/value'].attrs[
-                        'units'
-                    ] = unit
+                    set_dataset_unit(
+                        hdf, f'{fn2dfn(chamber_sheet["pressure_1"])}/value', unit
+                    )
                 unit = handle_unit(chamber_sheet, 'pressure_2_unit')
                 if unit:
-                    hdf[f'{fn2dfn(chamber_sheet["pressure_2"])}/value'].attrs[
-                        'units'
-                    ] = unit
+                    set_dataset_unit(
+                        hdf, f'{fn2dfn(chamber_sheet["pressure_2"])}/value', unit
+                    )
                 unit = handle_unit(chamber_sheet, 'bep_unit')
                 if unit:
-                    hdf[f'{fn2dfn(chamber_sheet["bep"])}/value'].attrs['units'] = unit
+                    set_dataset_unit(hdf, f'{fn2dfn(chamber_sheet["bep"])}/value', unit)
 
         # filling in the sources objects list
         for sources_index, sources_row in sources_sheet.iterrows():
+            source_object = None  # set source object at the start of each iteration
             if sources_row['source_type'] == 'PLASMA':
                 # instantiate objects
                 child_archives['process'].data.steps[0].sources.append(
@@ -324,22 +347,22 @@ class ParserEpicPDI(MatchingParser):
 
                 with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
                     with h5py.File(newfile.name, 'a') as hdf:
-                        hdf[f'{fn2dfn(sources_row["f_power"])}/time'].attrs['units'] = (
-                            's'
+                        set_dataset_unit(
+                            hdf, f'{fn2dfn(sources_row["f_power"])}/time', 's'
                         )
                         unit = handle_unit(sources_row, 'f_power_unit')
                         if unit:
-                            hdf[f'{fn2dfn(sources_row["f_power"])}/value'].attrs[
-                                'units'
-                            ] = unit
-                        hdf[f'{fn2dfn(sources_row["r_power"])}/time'].attrs['units'] = (
-                            's'
+                            set_dataset_unit(
+                                hdf, f'{fn2dfn(sources_row["f_power"])}/value', unit
+                            )
+                        set_dataset_unit(
+                            hdf, f'{fn2dfn(sources_row["r_power"])}/time', 's'
                         )
                         unit = handle_unit(sources_row, 'r_power_unit')
                         if unit:
-                            hdf[f'{fn2dfn(sources_row["r_power"])}/value'].attrs[
-                                'units'
-                            ] = unit
+                            set_dataset_unit(
+                                hdf, f'{fn2dfn(sources_row["r_power"])}/value', unit
+                            )
 
                 # TODO fill in dissipated power as the difference between forward and reflected power
 
@@ -377,14 +400,16 @@ class ParserEpicPDI(MatchingParser):
 
                         with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
                             with h5py.File(newfile.name, 'a') as hdf:
-                                hdf[f'{fn2dfn(gas_row["mfc_flow"])}/time'].attrs[
-                                    'units'
-                                ] = 's'
+                                set_dataset_unit(
+                                    hdf, f'{fn2dfn(gas_row["mfc_flow"])}/time', 's'
+                                )
                                 unit = handle_unit(gas_row, 'mfc_flow_unit')
                                 if unit:
-                                    hdf[f'{fn2dfn(gas_row["mfc_flow"])}/value'].attrs[
-                                        'units'
-                                    ] = unit
+                                    set_dataset_unit(
+                                        hdf,
+                                        f'{fn2dfn(gas_row["mfc_flow"])}/value',
+                                        unit,
+                                    )
 
                         # measurement_type ='Mass Flow Controller',
                         # gas=
@@ -430,12 +455,12 @@ class ParserEpicPDI(MatchingParser):
 
                 with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
                     with h5py.File(newfile.name, 'a') as hdf:
-                        hdf[temp_mv_time].attrs['units'] = 's'
+                        set_dataset_unit(hdf, temp_mv_time, 's')
                         unit = handle_unit(sources_row, 'temp_mv_unit')
                         if unit:
-                            hdf[f'{fn2dfn(sources_row["temp_mv"])}/value'].attrs[
-                                'units'
-                            ] = unit
+                            set_dataset_unit(
+                                hdf, f'{fn2dfn(sources_row["temp_mv"])}/value', unit
+                            )
 
             if sources_row['source_type'] == 'DFC':
                 # instantiate objects
@@ -454,14 +479,14 @@ class ParserEpicPDI(MatchingParser):
 
                 with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
                     with h5py.File(newfile.name, 'a') as hdf:
-                        hdf[f'{fn2dfn(sources_row["hl_temp_mv"])}/time'].attrs[
-                            'units'
-                        ] = 's'
+                        set_dataset_unit(
+                            hdf, f'{fn2dfn(sources_row["hl_temp_mv"])}/time', 's'
+                        )
                         unit = handle_unit(sources_row, 'hl_temp_mv_unit')
                         if unit:
-                            hdf[f'{fn2dfn(sources_row["hl_temp_mv"])}/value'].attrs[
-                                'units'
-                            ] = unit
+                            set_dataset_unit(
+                                hdf, f'{fn2dfn(sources_row["hl_temp_mv"])}/value', unit
+                            )
 
             if (
                 sources_row['EPIC_loop']
@@ -636,14 +661,14 @@ class ParserEpicPDI(MatchingParser):
                 with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
                     with h5py.File(newfile.name, 'a') as hdf:
                         # parsing units in hdf5 file
-                        hdf[f'{fn2dfn(sources_row["temp_mv"])}/time'].attrs['units'] = (
-                            's'
+                        set_dataset_unit(
+                            hdf, f'{fn2dfn(sources_row["temp_mv"])}/time', 's'
                         )
                         unit = handle_unit(sources_row, 'temp_mv_unit')
                         if unit:
-                            hdf[f'{fn2dfn(sources_row["temp_mv"])}/value'].attrs[
-                                'units'
-                            ] = unit
+                            set_dataset_unit(
+                                hdf, f'{fn2dfn(sources_row["temp_mv"])}/value', unit
+                            )
 
                         # creating link for pyro vs. substrate temperature plot
                         hdf['/pyro_vs_subtemp/pyrometer_value'] = hdf[pyrovalpath]
