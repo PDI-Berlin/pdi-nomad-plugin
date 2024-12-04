@@ -331,7 +331,7 @@ def link_experiment(archive, growth_id, growth_run_filename, reference_wrapper, 
         owner='all',
         query={
             'search_quantities': {
-                'id': 'data.growth_id#pdi_nomad_plugin.mbe.processes.ExperimentMbePDI',
+                'id': 'data.lab_id#pdi_nomad_plugin.mbe.processes.ExperimentMbePDI',
                 'str_value': growth_id,
             }
         },

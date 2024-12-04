@@ -954,12 +954,20 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
         a_eln={'component': 'StringEditQuantity'},
         label='Notes',
     )
-    recipe_id = Quantity(
+    lab_id = Quantity(
         type=str,
-        description='the ID from RTG',
-        a_tabular={'name': 'GrowthRun/Recipe Name'},
-        a_eln={'component': 'StringEditQuantity', 'label': 'Recipe ID'},
+        description="""
+        The ID found in Messages.txt raw file.
+        It is composed by the Growth Run ID and the Sample Holder ID.
+        """,
+        a_eln=dict(component='StringEditQuantity', label='Growth process ID'),
     )
+    # recipe_id = Quantity(
+    #     type=str,
+    #     description='the ID from RTG',
+    #     a_tabular={'name': 'GrowthRun/Recipe Name'},
+    #     a_eln={'component': 'StringEditQuantity', 'label': 'Recipe ID'},
+    # )
     susceptor = Quantity(
         type=str,
         description="""
@@ -1174,8 +1182,19 @@ class ExperimentMbePDI(Experiment, EntryData):
         # a_eln={"hide": ["steps"]},
         categories=[PDIMBECategory],
         label='Experiment MBE',
+        a_eln=ELNAnnotation(
+            properties=SectionProperties(
+                order=[
+                    'name',
+                    'lab_id',
+                ]
+            ),
+            hide=[
+                'datetime',
+            ],
+        ),
     )
-    # lab_id
+
     method = Quantity(
         type=str,
     )
@@ -1192,14 +1211,6 @@ class ExperimentMbePDI(Experiment, EntryData):
         shape=['*'],
         a_eln=ELNAnnotation(
             component='StringEditQuantity',
-        ),
-    )
-    description = Quantity(
-        type=str,
-        description='description',
-        a_eln=ELNAnnotation(
-            component='StringEditQuantity',
-            label='Notes',
         ),
     )
     lab_id = Quantity(
