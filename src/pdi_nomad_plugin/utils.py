@@ -370,7 +370,7 @@ def link_experiment(archive, growth_id, growth_run_filename, reference_wrapper, 
                 if exp_mainfile.split('.')[-1] == 'yaml'
                 else json.load(file)
             )
-            updated_file['data']['growth_run'] = reference_wrapper(
+            updated_file['data']['growth_run_logfiles'] = reference_wrapper(
                 reference=f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, growth_run_filename)}#data',
             ).m_to_dict()
         with exp_context.raw_file(exp_mainfile, 'w') as newfile:
