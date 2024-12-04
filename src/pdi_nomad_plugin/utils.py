@@ -570,7 +570,10 @@ def merge_sections(  # noqa: PLR0912
     if section is None:
         section = update.m_copy()
         return
-    if update.m_def not in section.m_def.all_base_sections:
+    if update.m_def not in [
+        section.m_def,
+        *section.m_def.all_base_sections,
+    ] and section.m_def not in [update.m_def, *update.m_def.all_base_sections]:
         # if not isinstance(
         #     update.m_def, tuple([type(mdef) for mdef in section.m_def.all_base_sections])
         # ):
