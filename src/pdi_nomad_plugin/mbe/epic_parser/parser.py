@@ -323,8 +323,11 @@ class ParserEpicPDI(MatchingParser):
                     set_dataset_unit(hdf, f'{fn2dfn(chamber_sheet["bep"])}/value', unit)
 
         # filling in the sources objects list
-        for sources_index, sources_row in sources_sheet.iterrows():
+        sources_index = -1
+        for _, sources_row in sources_sheet.iterrows():
             source_object = None  # set source object at the start of each iteration
+            if sources_row['source_type'] != 'SUB':
+                sources_index += 1
             if sources_row['source_type'] == 'PLASMA':
                 # instantiate objects
                 child_archives['process'].data.steps[0].sources.append(
@@ -670,38 +673,38 @@ class ParserEpicPDI(MatchingParser):
                                 hdf, f'{fn2dfn(sources_row["temp_mv"])}/value', unit
                             )
 
-                        # creating link for pyro vs. substrate temperature plot
-                        hdf['/pyro_vs_subtemp/pyrometer_value'] = hdf[pyrovalpath]
-                        hdf['/pyro_vs_subtemp/pyrometer_value'].attrs['long_name'] = (
-                            'Pyrometer T vs. Substrate T (°C)'
-                        )
-                        hdf['/pyro_vs_subtemp/pyrometer_time'] = hdf[pyrotimepath]
-                        hdf['/pyro_vs_subtemp/pyrometer_time'].attrs['long_name'] = (
-                            'time (s)'
-                        )
-                        hdf['/pyro_vs_subtemp/substrate_temp_value'] = hdf[tempvalpath]
-                        hdf['/pyro_vs_subtemp/substrate_temp_value'].attrs[
-                            'long_name'
-                        ] = 'Substrate T (°C)'
-                        hdf['/pyro_vs_subtemp/substrate_temp_time'] = hdf[temptimepath]
-                        hdf['/pyro_vs_subtemp/substrate_temp_time'].attrs[
-                            'long_name'
-                        ] = 'time (s)'
-                        hdf['/pyro_vs_subtemp'].attrs['axes'] = 'pyrometer_time'
-                        hdf['/pyro_vs_subtemp'].attrs['signal'] = 'pyrometer_value'
-                        hdf['/pyro_vs_subtemp'].attrs['auxiliary_signals'] = [
-                            'substrate_temp_value'
-                        ]
-                        hdf['/pyro_vs_subtemp'].attrs['NX_class'] = 'NXdata'
+                        # # creating link for pyro vs. substrate temperature plot
+                        # hdf["/pyro_vs_subtemp/pyrometer_value"] = hdf[pyrovalpath]
+                        # hdf["/pyro_vs_subtemp/pyrometer_value"].attrs["long_name"] = (
+                        #     "Pyrometer T vs. Substrate T (°C)"
+                        # )
+                        # hdf["/pyro_vs_subtemp/pyrometer_time"] = hdf[pyrotimepath]
+                        # hdf["/pyro_vs_subtemp/pyrometer_time"].attrs["long_name"] = (
+                        #     "time (s)"
+                        # )
+                        # hdf["/pyro_vs_subtemp/substrate_temp_value"] = hdf[tempvalpath]
+                        # hdf["/pyro_vs_subtemp/substrate_temp_value"].attrs[
+                        #     "long_name"
+                        # ] = "Substrate T (°C)"
+                        # hdf["/pyro_vs_subtemp/substrate_temp_time"] = hdf[temptimepath]
+                        # hdf["/pyro_vs_subtemp/substrate_temp_time"].attrs[
+                        #     "long_name"
+                        # ] = "time (s)"
+                        # hdf["/pyro_vs_subtemp"].attrs["axes"] = "pyrometer_time"
+                        # hdf["/pyro_vs_subtemp"].attrs["signal"] = "pyrometer_value"
+                        # hdf["/pyro_vs_subtemp"].attrs["auxiliary_signals"] = [
+                        #     "substrate_temp_value"
+                        # ]
+                        # hdf["/pyro_vs_subtemp"].attrs["NX_class"] = "NXdata"
 
-                pyro_value = 'pyro_vs_subtemp/pyrometer_value'
-                child_archives['process'].data.steps[0].sample_parameters[
-                    0
-                ].substrate_temperature.pyro_value = f'{hdf5_path}#/{pyro_value}'
-                pyro_time = 'pyro_vs_subtemp/pyrometer_time'
-                child_archives['process'].data.steps[0].sample_parameters[
-                    0
-                ].substrate_temperature.pyro_time = f'{hdf5_path}#/{pyro_time}'
+                # pyro_value = "pyro_vs_subtemp/pyrometer_value"
+                # child_archives["process"].data.steps[0].sample_parameters[
+                #     0
+                # ].substrate_temperature.pyro_value = f"{hdf5_path}#/{pyro_value}"
+                # pyro_time = "pyro_vs_subtemp/pyrometer_time"
+                # child_archives["process"].data.steps[0].sample_parameters[
+                #     0
+                # ].substrate_temperature.pyro_time = f"{hdf5_path}#/{pyro_time}"
 
             source_object = None  # reset source object at the end of each iteration
 
