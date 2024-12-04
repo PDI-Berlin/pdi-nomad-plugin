@@ -21,7 +21,6 @@ from nomad.metainfo import (
     SubSection,
 )
 from nomad_material_processing.vapor_deposition.general import (
-    FilledSubstrateHolder,
     FilledSubstrateHolderPosition,
     GasFlow,
     InsertReduction,
@@ -44,7 +43,6 @@ from nomad_material_processing.vapor_deposition.pvd.thermal import (
 from pdi_nomad_plugin.general.schema import (
     PDIMBECategory,
 )
-
 from pdi_nomad_plugin.utils import (
     merge_sections,
 )
