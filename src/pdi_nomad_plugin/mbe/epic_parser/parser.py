@@ -255,6 +255,7 @@ class ParserEpicPDI(MatchingParser):
 
         # fill in quantities
         child_archives['process'].data.name = f'{exp_string} process'
+        child_archives['process'].data.lab_id = f'{growth_id}'
         pyro_archive = (
             child_archives['process']
             .data.steps[0]
