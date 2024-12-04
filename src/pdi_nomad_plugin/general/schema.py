@@ -36,7 +36,7 @@ from nomad_material_processing.general import (
     Recipe,
 )
 
-from pdi_nomad_plugin.utils import create_archive, set_sample_status
+from pdi_nomad_plugin.utils import create_archive, set_sample_status, merge_sections
 
 configuration = config.get_plugin_entry_point('pdi_nomad_plugin.general:schema')
 
@@ -148,6 +148,11 @@ class EtchingPDI(ProcessPDI, Etching):
         """
         super().normalize(archive, logger)
 
+        # merge recipe
+        if self.recipe is not None:
+            merge_sections(self, self.recipe, logger)
+
+        # set sample status
         if self.samples:
             for sample in self.samples:
                 set_sample_status(
@@ -160,7 +165,7 @@ class EtchingPDI(ProcessPDI, Etching):
                 )
 
 
-class EtchingRecipePDI(EtchingRecipe):
+class EtchingRecipePDI(EtchingPDI, EtchingRecipe):
     """
     A recipe for selectively remove material from a surface using chemical or physical processes
     to create specific patterns or structures.
@@ -170,6 +175,12 @@ class EtchingRecipePDI(EtchingRecipe):
         label='EtchingRecipe',
         links=['http://purl.obolibrary.org/obo/CHMO_0001558'],
         categories=[PDICategory],
+        a_eln=ELNAnnotation(
+            hide=[
+                'recipe',
+                'samples',
+            ],
+        ),
     )
 
 
