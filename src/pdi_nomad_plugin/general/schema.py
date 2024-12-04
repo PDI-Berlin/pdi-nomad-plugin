@@ -36,7 +36,7 @@ from nomad_material_processing.general import (
     Recipe,
 )
 
-from pdi_nomad_plugin.utils import create_archive, set_sample_status, merge_sections
+from pdi_nomad_plugin.utils import create_archive, merge_sections, set_sample_status
 
 configuration = config.get_plugin_entry_point('pdi_nomad_plugin.general:schema')
 
@@ -224,6 +224,11 @@ class AnnealingPDI(ProcessPDI, Annealing):
         """
         super().normalize(archive, logger)
 
+        # merge recipe
+        if self.recipe is not None:
+            merge_sections(self, self.recipe, logger)
+
+        # set sample status
         if self.samples:
             for sample in self.samples:
                 set_sample_status(
@@ -252,6 +257,11 @@ class CleaningPDI(ProcessPDI, Cleaning):
         """
         super().normalize(archive, logger)
 
+        # merge recipe
+        if self.recipe is not None:
+            merge_sections(self, self.recipe, logger)
+
+        # set sample status
         if self.samples:
             for sample in self.samples:
                 set_sample_status(
@@ -307,6 +317,7 @@ class BackSideCoatingPDI(ProcessPDI, Process, EntryData):
         """
         super().normalize(archive, logger)
 
+        # set sample status
         if self.samples:
             for sample in self.samples:
                 set_sample_status(
