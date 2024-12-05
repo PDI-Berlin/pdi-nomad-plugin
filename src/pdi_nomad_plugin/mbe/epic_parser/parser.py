@@ -72,12 +72,14 @@ from pdi_nomad_plugin.mbe.processes import (
     SampleParametersMbe,
     SubstrateHeaterPower,
     SubstrateHeaterTemperature,
+    FilledSubstrateHolderPDIReference,
 )
 from pdi_nomad_plugin.utils import (
     create_archive,
     fill_quantity,
     handle_unit,
     link_experiment,
+    link_sample_holder,
 )
 
 timezone = 'Europe/Berlin'
@@ -708,6 +710,14 @@ class ParserEpicPDI(MatchingParser):
                 # ].substrate_temperature.pyro_time = f"{hdf5_path}#/{pyro_time}"
 
             source_object = None  # reset source object at the end of each iteration
+
+        link_sample_holder(
+            archive,
+            growthrun_id,
+            child_archives['process'],
+            FilledSubstrateHolderPDIReference,
+            logger,
+        )
 
         create_archive(
             child_archives['process'].m_to_dict(),
