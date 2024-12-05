@@ -1230,8 +1230,9 @@ class ExperimentMbePDI(Experiment, EntryData):
     growth_run_steps = SubSection(
         section_def=GrowthMbeManualMetadataPDI,
     )
-    sample_cut = SubSection(
-        section_def=GrowthMbePDIReference,
+    samples = SubSection(
+        section_def=FilledSubstrateHolderPDIReference,
+        repeats=True,
     )
     characterization = SubSection(section_def=CharacterizationMbePDI)
 

@@ -346,6 +346,7 @@ def link_experiment(archive, growth_id, growth_run_filename, reference_wrapper, 
             f'Found {search_result.pagination.total} entries with growth_id: '
             f'"{growth_id}". Cannot link multiple experiments.'
         )
+        return
     if len(search_result.data) >= 1:
         exp_upload_id = search_result.data[0]['upload_id']
         exp_mainfile = search_result.data[0]['mainfile']
@@ -380,14 +381,38 @@ def link_experiment(archive, growth_id, growth_run_filename, reference_wrapper, 
                 yaml.dump(updated_file, newfile)
         exp_context.upload.process_updated_raw_file(exp_mainfile, allow_modify=True)
 
-        # if upload_files.raw_path_is_file(growth_run_context.raw_path()):
-        #     experiment_ref_path = f"../uploads/{search_result.data[0]['upload_id']}/archive/{search_result.data[0]['entry_id']}#data"
-        #     return experiment_ref_path
-        # else:
-        #     logger.warn(
-        #         f"The path '../uploads/{search_result.data[0]['upload_id']}/archive/{search_result.data[0]['entry_id']}#data' is not a file, upload and reprocess to reference it in ThinFilmStack entry [{sample_id}]"
-        #     )
-        #     return None
+
+def link_sample_holder(
+    archive, growth_id, growth_run_object, reference_wrapper, logger
+):
+    from nomad.app.v1.models.models import User
+    from nomad.datamodel.context import ServerContext
+    from nomad.search import search
+
+    # experiment_ref_path = None
+    search_result = search(
+        owner='all',
+        query={
+            'search_quantities': {
+                'id': 'data.lab_id#pdi_nomad_plugin.mbe.processes.ExperimentMbePDI',
+                'str_value': growth_id,
+            }
+        },
+        user_id=archive.metadata.main_author.user_id,
+    )
+    if not search_result.data:
+        logger.warn(
+            f'{growth_id} Experiment not found. Cannot link sample holder into the growth process.'
+        )
+    if len(search_result.data) > 1:
+        logger.error(
+            f'Found {search_result.pagination.total} entries with growth_id: '
+            f'"{growth_id}". Cannot link sample holders from multiple experiments.'
+        )
+        return
+    if len(search_result.data) >= 1:
+        exp_upload_id = search_result.data[0]['upload_id']
+        exp_mainfile = search_result.data[0]['mainfile']
 
 
 def set_sample_status(
