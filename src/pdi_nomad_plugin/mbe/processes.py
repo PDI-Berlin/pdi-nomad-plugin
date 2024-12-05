@@ -908,11 +908,11 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
         label_quantity='lab_id',
         categories=[PDIMBECategory],
         label='Growth Process',
-        # a_h5web=H5WebAnnotation(
-        #     paths=[
-        #         'steps/0/sample_parameters/0/substrate_temperature',
-        #     ]
-        # ),
+        a_h5web=H5WebAnnotation(
+            paths=[
+                'steps/0/sources/*/impinging_flux/*',
+            ]
+        ),
     )
 
     # datetime
