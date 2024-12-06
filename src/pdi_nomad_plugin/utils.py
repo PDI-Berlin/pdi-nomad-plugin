@@ -173,6 +173,8 @@ def handle_section(section):
 def fill_quantity(dataframe, column_header, read_unit=None, array=False):
     """
     Fetches a value from a DataFrame and optionally converts it to a specified unit.
+
+    This function accept single rows as Series, not entire DataFrames.
     """
     try:
         if isinstance(dataframe[column_header], str):

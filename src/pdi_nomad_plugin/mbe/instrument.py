@@ -422,7 +422,6 @@ class SingleFilamentEffusionCell(EffusionCellSourcePDI):
 
     m_def = Section(
         label='Single Filament Effusion Cell',
-        a_h5web=H5WebAnnotation(paths=['impinging_flux/0']),
     )
 
 
@@ -436,7 +435,6 @@ class ColdLipEffusionCell(EffusionCellSourcePDI):
 
     m_def = Section(
         label='Cold Lip Effusion Cell',
-        a_h5web=H5WebAnnotation(paths=['impinging_flux/0']),
     )
 
 
@@ -456,7 +454,6 @@ class DoubleFilamentEffusionCell(EffusionCellSourcePDI):
                 ],
             ),
         ),
-        a_h5web=H5WebAnnotation(paths=['impinging_flux/0']),
     )
     vapor_source_hot_lip = SubSection(
         section_def=EffusionCellHeater,
