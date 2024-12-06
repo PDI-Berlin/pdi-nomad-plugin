@@ -42,10 +42,10 @@ from nomad.units import ureg
 from nomad.utils import hash
 
 from pdi_nomad_plugin.characterization.schema import (
-    PyrometerTemperature,
-    Pyrometry,
     LaserReflectance,
     LaserReflectanceIntensity,
+    PyrometerTemperature,
+    Pyrometry,
 )
 from pdi_nomad_plugin.mbe.instrument import (
     ColdLipEffusionCell,
@@ -66,6 +66,7 @@ from pdi_nomad_plugin.mbe.instrument import (
 )
 from pdi_nomad_plugin.mbe.processes import (
     ChamberEnvironmentMbe,
+    FilledSubstrateHolderPDIReference,
     GrowthMbePDI,
     GrowthMbePDIReference,
     GrowthStepMbePDI,
@@ -74,7 +75,6 @@ from pdi_nomad_plugin.mbe.processes import (
     SampleParametersMbe,
     SubstrateHeaterPower,
     SubstrateHeaterTemperature,
-    FilledSubstrateHolderPDIReference,
 )
 from pdi_nomad_plugin.utils import (
     create_archive,

@@ -3,6 +3,7 @@ import json
 import numpy as np
 import plotly.graph_objects as go
 from nomad.config import config
+from nomad.datamodel import EntryArchive
 from nomad.datamodel.data import ArchiveSection, EntryData
 from nomad.datamodel.hdf5 import HDF5Reference
 from nomad.datamodel.metainfo.annotations import (
@@ -11,7 +12,6 @@ from nomad.datamodel.metainfo.annotations import (
     H5WebAnnotation,
     SectionProperties,
 )
-from nomad.datamodel import EntryArchive
 from nomad.datamodel.metainfo.basesections import (
     Component,
     CompositeSystemReference,

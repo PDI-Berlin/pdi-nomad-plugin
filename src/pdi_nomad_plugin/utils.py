@@ -387,8 +387,6 @@ def link_experiment(archive, growth_id, growth_run_filename, reference_wrapper, 
 def link_sample_holder(
     archive, growth_id, growth_run_object, reference_wrapper, logger
 ):
-    from nomad.app.v1.models.models import User
-    from nomad.datamodel.context import ServerContext
     from nomad.search import search
 
     # experiment_ref_path = None
