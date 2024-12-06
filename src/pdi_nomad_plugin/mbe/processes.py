@@ -11,6 +11,7 @@ from nomad.datamodel.metainfo.annotations import (
     H5WebAnnotation,
     SectionProperties,
 )
+from nomad.datamodel import EntryArchive
 from nomad.datamodel.metainfo.basesections import (
     Component,
     CompositeSystemReference,
@@ -419,6 +420,14 @@ class XRDmeasurementReference(SectionReference):
 
 
 class InSituCharacterizationMbePDI(ArchiveSection):
+    m_def = Section(
+        a_h5web=H5WebAnnotation(
+            paths=[
+                'pyrometry/*/pyrometer_temperature',
+                'laser_reflectance/*/laser_reflectance_intensity',
+            ]
+        ),
+    )
     pyrometry = SubSection(
         section_def=Pyrometry,
         repeats=True,
@@ -915,11 +924,6 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
         ),
     )
 
-    # datetime
-    # name
-    # description
-    # lab_id
-    # method
     method = Quantity(
         type=str,
         default='MBE PDI',
@@ -1243,7 +1247,10 @@ class ExperimentMbePDI(Experiment, EntryData):
 
     def normalize(self, archive, logger):
         archive_sections = (
-            attr for attr in vars(self).values() if isinstance(attr, ArchiveSection)
+            attr
+            for attr in vars(self).values()
+            if isinstance(attr, ArchiveSection) and not isinstance(attr, EntryArchive)
+            # not isinstance(attr, EntryArchive) avoid including Experiment itself
         )
         step_list = []
         for section in archive_sections:

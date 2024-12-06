@@ -44,6 +44,8 @@ from nomad.utils import hash
 from pdi_nomad_plugin.characterization.schema import (
     PyrometerTemperature,
     Pyrometry,
+    LaserReflectance,
+    LaserReflectanceIntensity,
 )
 from pdi_nomad_plugin.mbe.instrument import (
     ColdLipEffusionCell,
@@ -166,7 +168,7 @@ class ParserEpicPDI(MatchingParser):
         gasmixing_sheet = sheets_dict['MBE gas mixing']
         chamber_sheet = sheets_dict['MBE chamber env']
         pyrometry_sheet = sheets_dict['pyrometry config']
-        # lr_sheet = sheets_dict['LR settings']
+        lr_sheet = sheets_dict['LR settings']
 
         # read Messages.txt file
         assert (
@@ -254,24 +256,18 @@ class ParserEpicPDI(MatchingParser):
         child_archives['process'].data.steps[0].in_situ_characterization.pyrometry[
             0
         ].pyrometer_temperature = PyrometerTemperature()
+        child_archives['process'].data.steps[
+            0
+        ].in_situ_characterization.laser_reflectance = [LaserReflectance()]
+        child_archives['process'].data.steps[
+            0
+        ].in_situ_characterization.laser_reflectance[
+            0
+        ].laser_reflectance_intensity = LaserReflectanceIntensity()
 
         # fill in quantities
         child_archives['process'].data.name = f'{exp_string} process'
         child_archives['process'].data.lab_id = f'{growth_id}'
-        pyro_archive = (
-            child_archives['process']
-            .data.steps[0]
-            .in_situ_characterization.pyrometry[0]
-        )
-        pyro_archive.name = f'{exp_string} pyrometry'
-        pyrovalpath = f'/{fn2dfn(pyrometry_sheet["temperature"])}/value'
-        pyro_archive.pyrometer_temperature.value = (
-            f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#{pyrovalpath}'
-        )
-        pyrotimepath = f'/{fn2dfn(pyrometry_sheet["temperature"])}/time'
-        pyro_archive.pyrometer_temperature.time = (
-            f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#{pyrotimepath}'
-        )
         child_archives['process'].data.steps[
             0
         ].environment.pressure.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(chamber_sheet["pressure_1"])}/value'
@@ -290,6 +286,42 @@ class ParserEpicPDI(MatchingParser):
         child_archives['process'].data.steps[
             0
         ].environment.bep.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(chamber_sheet["bep"])}/time'
+        # pyrometry
+        pyro_archive = (
+            child_archives['process']
+            .data.steps[0]
+            .in_situ_characterization.pyrometry[0]
+        )
+        pyro_archive.name = f'{exp_string} pyrometry'
+        pyrovalpath = f'/{fn2dfn(pyrometry_sheet["temperature"])}/value'
+        pyro_archive.pyrometer_temperature.value = (
+            f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#{pyrovalpath}'
+        )
+        pyrotimepath = f'/{fn2dfn(pyrometry_sheet["temperature"])}/time'
+        pyro_archive.pyrometer_temperature.time = (
+            f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#{pyrotimepath}'
+        )
+        # laser reflectance
+        lr_archive = (
+            child_archives['process']
+            .data.steps[0]
+            .in_situ_characterization.laser_reflectance[0]
+        )
+        lr_archive.name = f'{exp_string} laser reflectance'
+        lrvalpath = f'/{fn2dfn(lr_sheet["filename"])}/value'
+        lr_archive.laser_reflectance_intensity.value = (
+            f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#{lrvalpath}'
+        )
+        lrtimepath = f'/{fn2dfn(lr_sheet["filename"])}/time'
+        lr_archive.laser_reflectance_intensity.time = (
+            f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#{lrtimepath}'
+        )
+        lr_archive.wavelength = fill_quantity(
+            lr_sheet.iloc[0], 'wavelength', read_unit='nm'
+        )  # only the first row is currenly read iloc[0]
+        lr_archive.incidence_angle = fill_quantity(
+            lr_sheet.iloc[0], 'angle', read_unit='degree'
+        )  # only the first row is currenly read iloc[0]
 
         with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
             with h5py.File(newfile.name, 'a') as hdf:
@@ -552,6 +584,9 @@ class ParserEpicPDI(MatchingParser):
                             group = hdf.create_group(group_name)
                             value = group.create_dataset('value', data=modulated_flux)
                             value.attrs['units'] = 'nanometer ** -2 * second ** -1'
+                            value.attrs['long_name'] = (
+                                f'{sources_row["EPIC_loop"]} impinging flux (1/(nm^2*s^1))'
+                            )
                             hdf[f'/{group_name}/time'] = hdf[f'/{temp_mv_time}']
                             group.attrs['axes'] = 'time'
                             group.attrs['signal'] = 'value'
