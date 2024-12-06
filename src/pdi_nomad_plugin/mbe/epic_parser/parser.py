@@ -81,7 +81,6 @@ from pdi_nomad_plugin.utils import (
     fill_quantity,
     handle_unit,
     link_experiment,
-    link_sample_holder,
 )
 
 timezone = 'Europe/Berlin'
@@ -746,13 +745,13 @@ class ParserEpicPDI(MatchingParser):
 
             source_object = None  # reset source object at the end of each iteration
 
-        link_sample_holder(
-            archive,
-            growthrun_id,
-            child_archives['process'],
-            FilledSubstrateHolderPDIReference,
-            logger,
-        )
+        # link_sample_holder(
+        #     archive,
+        #     growthrun_id,
+        #     child_archives['process'],
+        #     FilledSubstrateHolderPDIReference,
+        #     logger,
+        # )
 
         create_archive(
             child_archives['process'].m_to_dict(),
