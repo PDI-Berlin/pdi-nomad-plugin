@@ -928,6 +928,11 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
         type=str,
         default='MBE PDI',
     )
+    datetime = Quantity(
+        type=Datetime,
+        description='The date and time when this activity was started.',
+        a_eln=dict(component='DateTimeEditQuantity', label='starting time'),
+    )  # this is added to correct the typo in the label from basesections.py
     tags = Quantity(
         type=str,
         shape=['*'],

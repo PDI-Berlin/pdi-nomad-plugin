@@ -265,7 +265,9 @@ class ParserEpicPDI(MatchingParser):
 
         # fill in quantities
         child_archives['process'].data.name = f'{exp_string} process'
-        child_archives['process'].data.lab_id = f'{growth_id}'
+        child_archives['process'].data.datetime = growth_starttime
+        child_archives['process'].data.end_time = growth_endtime
+        child_archives['process'].data.lab_id = f'{growthrun_id}'
         child_archives['process'].data.steps[
             0
         ].environment.pressure.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(chamber_sheet["pressure_1"])}/value'
@@ -306,11 +308,11 @@ class ParserEpicPDI(MatchingParser):
             .in_situ_characterization.laser_reflectance[0]
         )
         lr_archive.name = f'{exp_string} laser reflectance'
-        lrvalpath = f'/{fn2dfn(lr_sheet["filename"])}/value'
+        lrvalpath = f'/{fn2dfn(lr_sheet["intensity_mv"])}/value'
         lr_archive.laser_reflectance_intensity.value = (
             f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#{lrvalpath}'
         )
-        lrtimepath = f'/{fn2dfn(lr_sheet["filename"])}/time'
+        lrtimepath = f'/{fn2dfn(lr_sheet["intensity_mv"])}/time'
         lr_archive.laser_reflectance_intensity.time = (
             f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#{lrtimepath}'
         )
