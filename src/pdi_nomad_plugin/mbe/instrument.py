@@ -45,6 +45,7 @@ from pdi_nomad_plugin.general.schema import (
 )
 from pdi_nomad_plugin.utils import (
     merge_sections,
+    _not_equal,
 )
 
 configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:instrument_schema')
@@ -708,8 +709,56 @@ class FilledSubstrateHolderPDI(SubstrateHolderPDI, EntryData):
 
     def normalize(self, archive, logger):
         super().normalize(archive, logger)
+        if len(self.positions) > 0:
+            logger.error(
+                'FilledSubstrateHolderPDI: positions list is not None. Start from fresh entry.'
+            )
         if self.substrate_holder is not None:
-            merge_sections(self, self.substrate_holder, logger)
+            materials_list = []
+            for holder_material in self.substrate_holder.holder_material:
+                materials_list.append(holder_material)
+            self.holder_material = materials_list
+            positions_list = []
+            for position in self.substrate_holder.positions:
+                positions_list.append(FilledSubstrateHolderPositionPDI())
+
+                # TODO set the unit
+                # position.m_def.quantities[0].m_annotations["eln"].defaultDisplayUnit
+
+                for value_from_empty, value_from_filled in zip(
+                    position.m_def.all_quantities.keys(),
+                    positions_list[-1].m_def.all_quantities.keys(),
+                ):
+                    if not position.m_is_set(value_from_empty):
+                        continue
+                    if not positions_list[-1].m_is_set(value_from_filled):
+                        positions_list[-1].m_set(
+                            value_from_filled, position.m_get(value_from_empty)
+                        )
+                if position.m_is_set('slot_geometry'):
+                    positions_list[-1].slot_geometry = position.m_get_sub_sections(
+                        'slot_geometry'
+                    )[0]
+            self.positions = positions_list
+            for name, quantity in self.substrate_holder.m_def.all_quantities.items():
+                if not self.substrate_holder.m_is_set(quantity):
+                    continue
+                if not self.m_is_set(quantity):
+                    self.m_set(quantity, self.substrate_holder.m_get(quantity))
+                elif _not_equal(
+                    self.m_get(quantity), self.substrate_holder.m_get(quantity)
+                ):
+                    warning = (
+                        f'Merging sections with different values for quantity "{name}".'
+                    )
+                    if logger:
+                        logger.warning(warning)
+                    else:
+                        print(warning)
+
+            # merge_sections(
+            #     self, self.substrate_holder, FilledSubstrateHolderPositionPDI, logger
+            # )
 
 
 class FilledSubstrateHolderPDIReference(EntityReference):

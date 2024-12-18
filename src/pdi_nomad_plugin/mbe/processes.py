@@ -1024,67 +1024,70 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
         # plotly figure -----> HDF5Reference solution:
         #     # ###
         sub_time = self.steps[0].sample_parameters[0].substrate_temperature.time
-        if sub_time is not None:
-            time_array = HDF5Reference.read_dataset(archive, sub_time)
         sub_value = self.steps[0].sample_parameters[0].substrate_temperature.value
-        if sub_value is not None:
-            value_array = HDF5Reference.read_dataset(archive, sub_value)
         pyro_time = (
             self.steps[0]
             .in_situ_characterization.pyrometry[0]
             .pyrometer_temperature.time
         )
-        if pyro_time is not None:
-            pyrometer_time = HDF5Reference.read_dataset(archive, pyro_time)
         pyro_value = (
             self.steps[0]
             .in_situ_characterization.pyrometry[0]
             .pyrometer_temperature.value
         )
-        if pyro_value is not None:
+        if (
+            sub_time is not None
+            and sub_value is not None
+            and pyro_time is not None
+            and pyro_value is not None
+        ):
+            time_array = HDF5Reference.read_dataset(archive, sub_time)
+            value_array = HDF5Reference.read_dataset(archive, sub_value)
+
+            pyrometer_time = HDF5Reference.read_dataset(archive, pyro_time)
             pyrometer_temperature = HDF5Reference.read_dataset(archive, pyro_value)
 
-        # plotly figure
-        # ###
-        fig = go.Figure()
-        fig.add_trace(
-            go.Scatter(
-                x=time_array,
-                y=value_array,
-                name='Sub Temp',
-                line=dict(color='#2A4CDF', width=4),
-                yaxis='y',
-            ),
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=pyrometer_time,
-                y=pyrometer_temperature,
-                name='Pyro Temp',
-                line=dict(color='#90002C', width=2),
-                yaxis='y',
-            ),
-        )
-        fig.update_layout(
-            template='plotly_white',
-            dragmode='zoom',
-            xaxis=dict(
-                fixedrange=False,
-                autorange=True,
-                title='Process time / s',
-                mirror='all',
-                showline=True,
-                gridcolor='#EAEDFC',
-            ),
-            yaxis=dict(
-                fixedrange=False,
-                title='Temperature / °C',
-                tickfont=dict(color='#2A4CDF'),
-                gridcolor='#EAEDFC',
-            ),
-            showlegend=True,
-        )
-        self.figures = [PlotlyFigure(label='figure 1', figure=fig.to_plotly_json())]
+            # plotly figure
+            # ###
+            fig = go.Figure()
+            fig.add_trace(
+                go.Scatter(
+                    x=time_array,
+                    y=value_array,
+                    name='Sub Temp',
+                    line=dict(color='#2A4CDF', width=4),
+                    yaxis='y',
+                ),
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=pyrometer_time,
+                    y=pyrometer_temperature,
+                    name='Pyro Temp',
+                    line=dict(color='#90002C', width=2),
+                    yaxis='y',
+                ),
+            )
+            fig.update_layout(
+                template='plotly_white',
+                dragmode='zoom',
+                xaxis=dict(
+                    fixedrange=False,
+                    autorange=True,
+                    title='Process time / s',
+                    mirror='all',
+                    showline=True,
+                    gridcolor='#EAEDFC',
+                ),
+                yaxis=dict(
+                    fixedrange=False,
+                    title='Temperature / °C',
+                    tickfont=dict(color='#2A4CDF'),
+                    gridcolor='#EAEDFC',
+                ),
+                showlegend=True,
+            )
+            self.figures = [PlotlyFigure(label='figure 1', figure=fig.to_plotly_json())]
 
         # setting the sample status
         for sample_holder in self.samples:
