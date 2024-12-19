@@ -384,6 +384,36 @@ def link_experiment(archive, growth_id, growth_run_filename, reference_wrapper, 
         exp_context.upload.process_updated_raw_file(exp_mainfile, allow_modify=True)
 
 
+def link_growth_process(archive, growth_id, logger):
+    from nomad.search import search
+
+    ref_string = None
+    # experiment_ref_path = None
+    search_result = search(
+        owner='all',
+        query={
+            'search_quantities': {
+                'id': 'data.lab_id#pdi_nomad_plugin.mbe.processes.GrowthProcessMbePDI',
+                'str_value': growth_id,
+            }
+        },
+        user_id=archive.metadata.main_author.user_id,
+    )
+    if not search_result.data:
+        logger.warn(
+            f'{growth_id} Experiment not found. Link it manually after creating it.'
+        )
+    if len(search_result.data) > 1:
+        logger.error(
+            f'Found {search_result.pagination.total} entries with growth_id: '
+            f'"{growth_id}". Cannot link multiple experiments.'
+        )
+        return
+    if len(search_result.data) >= 1:
+        ref_string = f'../uploads/{archive.m_context.upload_id}/archive/{search_result.data[0]["entry_id"]}#data'
+    return ref_string
+
+
 # def link_sample_holder(
 #     archive, growth_id, growth_run_object, reference_wrapper, logger
 # ):

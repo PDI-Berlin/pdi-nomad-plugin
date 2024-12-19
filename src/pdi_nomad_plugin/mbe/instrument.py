@@ -708,11 +708,15 @@ class FilledSubstrateHolderPDI(SubstrateHolderPDI, EntryData):
 
     def normalize(self, archive, logger):
         super().normalize(archive, logger)
-        if len(self.positions) > 0:
+        if len(self.positions) > 0 and self.substrate_holder is None:
             logger.error(
-                'FilledSubstrateHolderPDI: positions list is not None. Start from fresh entry.'
+                'FilledSubstrateHolderPDI: positions list is not None and Empty Substrate Holder template is not linked. Delete all positions to import metadata from Empty Substrate Holder.'
             )
-        if self.substrate_holder is not None:
+        if len(self.positions) > 0 and self.substrate_holder is not None:
+            logger.warn(
+                'FilledSubstrateHolderPDI: positions list is not None and Empty Substrate Holder template is linked. No metadata will be imported from Empty Substrate Holder. Delete all positions to import metadata from Empty Holder.'
+            )
+        if not len(self.positions) > 0 and self.substrate_holder is not None:
             materials_list = []
             for holder_material in self.substrate_holder.holder_material:
                 materials_list.append(holder_material)

@@ -14,6 +14,7 @@ from nomad.datamodel.metainfo.annotations import (
 )
 from nomad.datamodel.metainfo.basesections import (
     Component,
+    CompositeSystem,
     CompositeSystemReference,
     Experiment,
     Process,
@@ -76,6 +77,7 @@ from pdi_nomad_plugin.mbe.instrument import (
 from pdi_nomad_plugin.utils import (
     create_archive,
     handle_section,
+    link_growth_process,
     set_sample_status,
 )
 
@@ -1008,8 +1010,12 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
         section_def=GrowthStepMbePDI,
         repeats=True,
     )
-    samples = SubSection(
+    substrate_holder = SubSection(
         section_def=FilledSubstrateHolderPDIReference,
+        repeats=True,
+    )
+    samples = SubSection(
+        section_def=CompositeSystemReference,
         repeats=True,
     )
 
@@ -1090,7 +1096,7 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
             self.figures = [PlotlyFigure(label='figure 1', figure=fig.to_plotly_json())]
 
         # setting the sample status
-        for sample_holder in self.samples:
+        for sample_holder in self.substrate_holder:
             if sample_holder.reference:
                 for sample_holder_position in sample_holder.reference.positions:
                     if sample_holder_position.substrate:
@@ -1242,8 +1248,11 @@ class ExperimentMbePDI(Experiment, EntryData):
     growth_run_steps = SubSection(
         section_def=GrowthMbeManualMetadataPDI,
     )
-    samples = SubSection(
+    substrate_holder = SubSection(
         section_def=FilledSubstrateHolderPDIReference,
+    )
+    samples = SubSection(
+        section_def=CompositeSystemReference,
         repeats=True,
     )
     characterization = SubSection(section_def=CharacterizationMbePDI)
@@ -1283,6 +1292,45 @@ class ExperimentMbePDI(Experiment, EntryData):
 
         archive.workflow2 = None
         super().normalize(archive, logger)
+
+        # link to growth archive
+        if self.growth_run_logfiles is not None:
+            if self.growth_run_logfiles.reference:
+                growth_id = self.growth_run_logfiles.reference.lab_id
+                growth_ref = link_growth_process(archive, growth_id, logger)
+                if growth_id is not None:
+                    self.lab_id = growth_id
+                if growth_ref is not None:
+                    self.growth_run_logfiles = GrowthMbePDIReference(
+                        reference=growth_ref
+                    )
+
+        # TODO handle this function
+        # create samples archives
+        if (
+            self.growth_run_logfiles is not None
+            and self.substrate_holder
+            and self.samples is not None
+        ):
+            if self.substrate_holder.reference:
+                growth_id = self.growth_run_logfiles.reference.lab_id
+                for sample_holder_position in self.substrate_holder.reference.positions:
+                    if sample_holder_position.substrate:
+                        sample_id = f'{growth_id}_pos{sample_holder_position.name}'
+                        sample_object = CompositeSystem(
+                            name=sample_holder_position.substrate.name,
+                            lab_id=sample_id,
+                        )
+                        filetype = 'yaml'
+                        sample_filename = f'{sample_id}.archive.{filetype}'
+
+                        create_archive(
+                            sample_object.m_to_dict(),
+                            archive.m_context,
+                            sample_filename,
+                            filetype,
+                            logger,
+                        )
 
         # search_result = search(
         #     owner="user",
