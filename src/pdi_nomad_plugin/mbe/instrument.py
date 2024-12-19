@@ -44,7 +44,6 @@ from pdi_nomad_plugin.general.schema import (
     PDIMBECategory,
 )
 from pdi_nomad_plugin.utils import (
-    merge_sections,
     _not_equal,
 )
 
@@ -722,9 +721,6 @@ class FilledSubstrateHolderPDI(SubstrateHolderPDI, EntryData):
             for position in self.substrate_holder.positions:
                 positions_list.append(FilledSubstrateHolderPositionPDI())
 
-                # TODO set the unit
-                # position.m_def.quantities[0].m_annotations["eln"].defaultDisplayUnit
-
                 for value_from_empty, value_from_filled in zip(
                     position.m_def.all_quantities.keys(),
                     positions_list[-1].m_def.all_quantities.keys(),
@@ -732,9 +728,26 @@ class FilledSubstrateHolderPDI(SubstrateHolderPDI, EntryData):
                     if not position.m_is_set(value_from_empty):
                         continue
                     if not positions_list[-1].m_is_set(value_from_filled):
-                        positions_list[-1].m_set(
-                            value_from_filled, position.m_get(value_from_empty)
+                        unit = None
+                        default_unit = (
+                            position.m_def.all_quantities[value_from_empty]
+                            .m_annotations['eln']
+                            .defaultDisplayUnit
                         )
+                        unit = (
+                            default_unit
+                            if default_unit
+                            else position.m_def.all_quantities[value_from_empty].unit
+                        )
+                        if unit:
+                            positions_list[-1].m_set(
+                                value_from_filled,
+                                position.m_get(value_from_empty).to(unit),
+                            )
+                        else:
+                            positions_list[-1].m_set(
+                                value_from_filled, position.m_get(value_from_empty)
+                            )
                 if position.m_is_set('slot_geometry'):
                     positions_list[-1].slot_geometry = position.m_get_sub_sections(
                         'slot_geometry'
