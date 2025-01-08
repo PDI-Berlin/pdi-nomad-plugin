@@ -393,7 +393,7 @@ def link_growth_process(archive, growth_id, logger):
         owner='all',
         query={
             'search_quantities': {
-                'id': 'data.lab_id#pdi_nomad_plugin.mbe.processes.GrowthProcessMbePDI',
+                'id': 'data.lab_id#pdi_nomad_plugin.mbe.processes.GrowthMbePDI',  # TODO this shouldn't be hardcoded
                 'str_value': growth_id,
             }
         },
