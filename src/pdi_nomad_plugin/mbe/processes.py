@@ -1293,7 +1293,7 @@ class ExperimentMbePDI(Experiment, EntryData):
         archive.workflow2 = None
         super().normalize(archive, logger)
 
-        # link to growth archive
+        # fill lab_id if exp is linked to growth archive
         if self.growth_run_logfiles is not None:
             if self.growth_run_logfiles.reference:
                 growth_id = self.growth_run_logfiles.reference.lab_id
@@ -1304,6 +1304,16 @@ class ExperimentMbePDI(Experiment, EntryData):
                     self.growth_run_logfiles = GrowthMbePDIReference(
                         reference=growth_ref
                     )
+
+        # link to growth archive if lab_id is filled in exp
+
+        if self.lab_id is not None and self.growth_run_logfiles is None:
+            growth_ref = link_growth_process(archive, self.lab_id, logger)
+            if growth_ref is not None:
+                self.growth_run_logfiles = GrowthMbePDIReference(
+                    reference=growth_ref
+                )
+                self.growth_run_logfiles.normalize(archive, logger)
 
         # TODO handle this function
         # create samples archives
