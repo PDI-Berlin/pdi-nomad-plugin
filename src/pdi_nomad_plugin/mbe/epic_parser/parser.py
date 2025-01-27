@@ -124,14 +124,9 @@ class ParserEpicPDI(MatchingParser):
         data_file = mainfile.split('/')[-1]
 
         folder_name = mainfile.split('/')[-2]
-        if (
-            folder_name == 'raw'
-        ):  # some zipping procedures do not include the folder in the path
-            upload_path = f"{mainfile.split('raw/')[0]}"
-            folder_path = f'{upload_path}'
-        else:
-            upload_path = f"{mainfile.split('raw/')[0]}raw/"
-            folder_path = f'{upload_path}{folder_name}/'
+        upload_path = f"{mainfile.split('raw/')[0]}raw/"
+        folder_path = f'{upload_path}{folder_name}/'
+
         xlsx = pd.ExcelFile(mainfile)
 
         child_archives = {
@@ -800,7 +795,7 @@ class ParserEpicPDI(MatchingParser):
             logger,
         )
 
-        archive.data = ConfigFileMBE(file=mainfile)
+        archive.data = ConfigFileMBE(file=f'../uploads/{archive.m_context.upload_id}/raw/{folder_name}/{data_file}')
 
 
 # Native parsing mode
