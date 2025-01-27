@@ -1189,6 +1189,16 @@ class GrowthMbePDIReference(ActivityReference):
             component='ReferenceEditQuantity',
         ),
     )
+    lab_id = Quantity(
+        type=str,
+        description="""
+        The readable identifier for the activity.
+        """,
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.StringEditQuantity,
+            label = 'Growth process ID',
+        ),
+    )
 
 
 class ExperimentMbePDI(Experiment, EntryData):
@@ -1239,7 +1249,7 @@ class ExperimentMbePDI(Experiment, EntryData):
         """,
         a_eln=ELNAnnotation(
             component='StringEditQuantity',
-            label='Growth run logfiles ID',
+            label='Growth process ID',
         ),
     )
     growth_run_logfiles = SubSection(
