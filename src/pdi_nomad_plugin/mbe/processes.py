@@ -1196,7 +1196,7 @@ class GrowthMbePDIReference(ActivityReference):
         """,
         a_eln=ELNAnnotation(
             component=ELNComponentEnum.StringEditQuantity,
-            label = 'Growth process ID',
+            label='Growth process ID',
         ),
     )
 
@@ -1320,9 +1320,7 @@ class ExperimentMbePDI(Experiment, EntryData):
         if self.lab_id is not None and self.growth_run_logfiles is None:
             growth_ref = link_growth_process(archive, self.lab_id, logger)
             if growth_ref is not None:
-                self.growth_run_logfiles = GrowthMbePDIReference(
-                    reference=growth_ref
-                )
+                self.growth_run_logfiles = GrowthMbePDIReference(reference=growth_ref)
                 self.growth_run_logfiles.normalize(archive, logger)
 
         # TODO handle this function

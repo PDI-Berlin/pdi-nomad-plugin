@@ -795,7 +795,9 @@ class ParserEpicPDI(MatchingParser):
             logger,
         )
 
-        archive.data = ConfigFileMBE(file=f'../uploads/{archive.m_context.upload_id}/raw/{folder_name}/{data_file}')
+        archive.data = ConfigFileMBE(
+            file=f'../uploads/{archive.m_context.upload_id}/raw/{folder_name}/{data_file}'
+        )
 
 
 # Native parsing mode

@@ -346,7 +346,7 @@ def link_experiment(archive, growth_id, growth_run_filename, reference_wrapper, 
     if len(search_result.data) > 1:
         exp_archives = []
         for exp_archive in search_result.data:
-            exp_archives.append(exp_archive["upload_id"])
+            exp_archives.append(exp_archive['upload_id'])
         logger.error(
             f'Found {search_result.pagination.total} Experiment entries with growth_id: '
             f'"{growth_id}". Cannot link multiple experiments to the same growth.'
@@ -408,17 +408,19 @@ def link_growth_process(archive, growth_id, logger):
             f'{growth_id} Process not found. Link it manually after creating it.'
         )
     if len(search_result.data) > 1:
-        logger.warning(f"Found {search_result.pagination.total} entries with growth_id: '{growth_id}'.")
+        logger.warning(
+            f"Found {search_result.pagination.total} entries with growth_id: '{growth_id}'."
+        )
         entries_same_upload = []
         for entry in search_result.data:
-            if entry["upload_id"] != archive.m_context.upload_id:
+            if entry['upload_id'] != archive.m_context.upload_id:
                 logger.warning(
                     f'Found entry (entry_id: {entry["entry_id"]}) '
                     f'with same growth_id {growth_id} but in different upload (upload_id: {entry["upload_id"]}). '
                     f'It will not be linked to the current experiment (upload_id: {archive.m_context.upload_id}).'
                 )
             else:
-                entries_same_upload.append(entry["entry_id"])
+                entries_same_upload.append(entry['entry_id'])
         if len(entries_same_upload) > 1:
             logger.error(
                 f'Found {len(entries_same_upload)} entries with same growth_id in the current upload: '
@@ -426,11 +428,13 @@ def link_growth_process(archive, growth_id, logger):
             )
         elif len(entries_same_upload) == 1:
             entryid = entries_same_upload[0]
-            ref_string = f'../uploads/{archive.m_context.upload_id}/archive/{entryid}#data'
+            ref_string = (
+                f'../uploads/{archive.m_context.upload_id}/archive/{entryid}#data'
+            )
             logger.info(
                 f'Linked growth process with entry_id "{entryid}" '
                 f'and growth_id "{growth_id}" to experiment with entry_id {archive.metadata.entry_id}'
-                )
+            )
         return ref_string
     if len(search_result.data) == 1:
         ref_string = f'../uploads/{archive.m_context.upload_id}/archive/{search_result.data[0]["entry_id"]}#data'
