@@ -60,6 +60,8 @@ from pdi_nomad_plugin.mbe.instrument import (
     Port,
     RfGeneratorHeater,
     RfGeneratorHeaterPower,
+    Shutter,
+    ShutterStatus,
     SingleFilamentEffusionCell,
     SourceGeometry,
     VolumetricFlowRatePDI,
@@ -281,6 +283,23 @@ class ParserEpicPDI(MatchingParser):
         child_archives['process'].data.steps[
             0
         ].environment.bep.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(chamber_sheet["bep"])}/time'
+        # shutters status
+        if shutters is not None:
+            for shutter_key, shutter_value in shutters.items():
+                if isinstance(shutter_value, pd.Series) and (shutter_value == 0).all():
+                    continue
+                if shutter_key in ['TimeDifference', "'Date&Time"]:
+                    continue
+
+                shutter = Shutter(
+                    name=shutter_key,
+                    shutter_status=ShutterStatus(
+                        time=shutters['TimeDifference'], value=shutter_value
+                    ),
+                )
+                child_archives['process'].data.m_add_sub_section(
+                    GrowthMbePDI.shutters, shutter
+                )
         # pyrometry
         pyro_archive = (
             child_archives['process']
@@ -795,9 +814,7 @@ class ParserEpicPDI(MatchingParser):
             logger,
         )
 
-        archive.data = ConfigFileMBE(
-            file=f'../uploads/{archive.m_context.upload_id}/raw/{folder_name}/{data_file}'
-        )
+        archive.data = ConfigFileMBE(file=f'{folder_name}/{data_file}')
 
 
 # Native parsing mode

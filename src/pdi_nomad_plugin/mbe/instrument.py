@@ -1,3 +1,4 @@
+import plotly.graph_objects as go
 from nomad.config import config
 from nomad.datamodel.data import ArchiveSection, EntryData
 from nomad.datamodel.hdf5 import HDF5Reference
@@ -12,6 +13,10 @@ from nomad.datamodel.metainfo.basesections import (
     Instrument,
     PubChemPureSubstanceSection,
 )
+from nomad.datamodel.metainfo.plot import (
+    PlotlyFigure,
+    PlotSection,
+)
 from nomad.metainfo import (
     Datetime,
     MEnum,
@@ -19,6 +24,9 @@ from nomad.metainfo import (
     SchemaPackage,
     Section,
     SubSection,
+)
+from nomad_material_processing.general import (
+    TimeSeries,
 )
 from nomad_material_processing.vapor_deposition.general import (
     FilledSubstrateHolderPosition,
@@ -138,6 +146,156 @@ class Port(ArchiveSection):
     #         component=ELNComponentEnum.ReferenceEditQuantity,
     #     ),
     # )
+
+
+class ShutterStatus(TimeSeries):
+    """
+    The status of the shutter, can be 0 (closed) or 1 (open).
+    """
+
+    m_def = Section()
+    value = Quantity(
+        type=int,
+        description='The observed value as a function of time.',
+        shape=['*'],
+    )
+    time = Quantity(
+        type=float,
+        unit='s',
+        description='The process time when each of the values were recorded.',
+        shape=['*'],
+    )
+
+
+class Shutter(PlotSection):
+    """
+    Shutter closing the inlet of the source or general Shutter in the MBE machine.
+    """
+
+    m_def = Section(
+        # a_plotly_graph_object=[
+        #     {
+        #         "label": "Shutter status",
+        #         "index": 0,
+        #         "dragmode": "pan",
+        #         "data": {
+        #             "type": "scattergl",
+        #             "line": {"width": 2},
+        #             "marker": {"size": 6},
+        #             "mode": "lines+markers",
+        #             "name": "Status",
+        #             "x": "#shutter_status/time",
+        #             "y": "#shutter_status/value",
+        #         },
+        #         "layout": {
+        #             "title": {"text": "Shutter status"},
+        #             "xaxis": {
+        #                 "showticklabels": True,
+        #                 "fixedrange": True,
+        #                 "ticks": "",
+        #                 "title": {"text": "Elapsed time [s]"},
+        #                 "showline": True,
+        #                 "linewidth": 1,
+        #                 "linecolor": "black",
+        #                 "mirror": True,
+        #             },
+        #             "yaxis": {
+        #                 "showticklabels": True,
+        #                 "fixedrange": True,
+        #                 "ticks": "",
+        #                 "title": {"text": "Status"},
+        #                 "showline": True,
+        #                 "linewidth": 1,
+        #                 "linecolor": "black",
+        #                 "mirror": True,
+        #             },
+        #             "showlegend": False,
+        #         },
+        #         "config": {
+        #             "displayModeBar": False,
+        #             "scrollZoom": False,
+        #             "responsive": False,
+        #             "displaylogo": False,
+        #             "dragmode": False,
+        #         },
+        #     },
+        # ],
+    )
+    name = Quantity(
+        type=str,
+        description='The name of the shutter.',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.StringEditQuantity,
+        ),
+    )
+    shutter_status = SubSection(
+        section_def=ShutterStatus,
+    )
+
+    def normalize(self, archive, logger):
+        # plotly figure
+        fig = go.Figure()
+        fig.add_trace(
+            go.Scatter(
+                x=self.shutter_status.time,
+                y=self.shutter_status.value,
+                name='Status',
+                mode='markers',
+                # line=dict(color="#2A4CDF", width=4),
+                # fill="tonexty",
+                yaxis='y',
+            ),
+        )
+        # Add rectangles between each pair of points
+        for i in range(len(self.shutter_status.time) - 1):
+            if self.shutter_status.value[i] == 0:
+                continue
+            if (
+                self.shutter_status.value[i] == 1
+                and self.shutter_status.value[i + 1] == 1
+            ):
+                fig.add_shape(
+                    type='rect',
+                    x0=self.shutter_status.time[i].magnitude,
+                    y0=self.shutter_status.value[i],
+                    x1=self.shutter_status.time[i + 1].magnitude,
+                    y1=0,
+                    fillcolor='rgba(42, 76, 223, 0.2)',
+                    line=dict(color='rgba(42, 76, 223, 0.2)'),
+                )
+                continue
+            fig.add_shape(
+                type='rect',
+                x0=self.shutter_status.time[i].magnitude,
+                y0=self.shutter_status.value[i],
+                x1=self.shutter_status.time[i + 1].magnitude,
+                y1=self.shutter_status.value[i + 1],
+                fillcolor='rgba(42, 76, 223, 0.2)',
+                line=dict(color='rgba(42, 76, 223, 0.2)'),
+            )
+        fig.update_shapes(dict(xref='x', yref='y'))
+        fig.update_layout(
+            template='plotly_white',
+            dragmode='zoom',
+            xaxis=dict(
+                fixedrange=False,
+                autorange=True,
+                title='Elapsed time / s',
+                mirror='all',
+                showline=True,
+                gridcolor='#EAEDFC',
+            ),
+            yaxis=dict(
+                fixedrange=False,
+                title='Shutter status',
+                tickfont=dict(color='#2A4CDF'),
+                gridcolor='#EAEDFC',
+            ),
+            showlegend=True,
+        )
+        self.figures = [
+            PlotlyFigure(label='Shutter status', figure=fig.to_plotly_json())
+        ]
 
 
 class SourceGeometry(ArchiveSection):

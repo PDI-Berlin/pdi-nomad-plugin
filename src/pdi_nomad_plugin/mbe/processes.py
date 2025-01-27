@@ -72,6 +72,7 @@ from pdi_nomad_plugin.general.schema import (
 )
 from pdi_nomad_plugin.mbe.instrument import (
     FilledSubstrateHolderPDIReference,
+    Shutter,
     SourcePDI,
 )
 from pdi_nomad_plugin.utils import (
@@ -1008,6 +1009,10 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
     )
     steps = SubSection(
         section_def=GrowthStepMbePDI,
+        repeats=True,
+    )
+    shutters = SubSection(
+        section_def=Shutter,
         repeats=True,
     )
     substrate_holder = SubSection(
