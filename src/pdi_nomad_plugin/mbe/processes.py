@@ -1140,7 +1140,7 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                 xaxis=dict(
                     fixedrange=False,
                     autorange=True,
-                    title='Process timestamp',
+                    title='Timestamp',
                     mirror='all',
                     showline=True,
                     gridcolor='#EAEDFC',
@@ -1149,7 +1149,7 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                 ),
                 yaxis=dict(
                     fixedrange=False,
-                    title='Shutter state',
+                    title='Shutter status',
                     tickfont=dict(color='#2A4CDF'),
                     gridcolor='#EAEDFC',
                 ),
@@ -1418,7 +1418,7 @@ class ExperimentMbePDI(Experiment, EntryData):
                             else False,
                             grown=True,
                         )
-                        
+
         # search_result = search(
         #     owner="user",
         #     query={
