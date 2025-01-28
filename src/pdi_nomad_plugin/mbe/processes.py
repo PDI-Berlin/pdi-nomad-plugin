@@ -995,10 +995,6 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
         section_def=Shutter,
         repeats=True,
     )
-    substrate_holder = SubSection(
-        section_def=FilledSubstrateHolderPDIReference,
-        repeats=True,
-    )
     samples = SubSection(
         section_def=CompositeSystemReference,
         repeats=True,
