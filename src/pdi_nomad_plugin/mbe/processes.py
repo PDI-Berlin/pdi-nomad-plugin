@@ -1,4 +1,5 @@
 import json
+import random
 
 import numpy as np
 import plotly.graph_objects as go
@@ -85,6 +86,12 @@ from pdi_nomad_plugin.utils import (
 configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:processes_schema')
 
 m_package = SchemaPackage()
+
+
+def random_rgb():
+    return (
+        f'{random.randint(0, 255)}, {random.randint(0, 255)}, {random.randint(0, 255)}'
+    )
 
 
 class SystemComponentPDI(SystemComponent):
@@ -1032,8 +1039,10 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
         # for substrate in self.substrate:
         #     substrate.normalize(archive, logger)
 
-        # plotly figure -----> HDF5Reference solution:
-        #     # ###
+        # plotly figure list
+        self.figures = []
+
+        # plotly temperature figure with HDF5Reference arrays:
         sub_time = self.steps[0].sample_parameters[0].substrate_temperature.time
         sub_value = self.steps[0].sample_parameters[0].substrate_temperature.value
         pyro_time = (
@@ -1058,8 +1067,7 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
             pyrometer_time = HDF5Reference.read_dataset(archive, pyro_time)
             pyrometer_temperature = HDF5Reference.read_dataset(archive, pyro_value)
 
-            # plotly figure
-            # ###
+            # plotly temperature figure
             fig = go.Figure()
             fig.add_trace(
                 go.Scatter(
@@ -1098,7 +1106,95 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                 ),
                 showlegend=True,
             )
-            self.figures = [PlotlyFigure(label='figure 1', figure=fig.to_plotly_json())]
+            self.figures.append(
+                PlotlyFigure(label='Temperature', figure=fig.to_plotly_json())
+            )
+
+        # plotly shutters figure:
+        if self.shutters is not None:
+            fig = go.Figure()
+            for index, shutter in enumerate(self.shutters):
+                current_rgb = random_rgb()
+                rgb_10 = f'rgba({current_rgb}, 1)'
+                rgb_07 = f'rgba({current_rgb}, 0.7)'
+                if shutter.shutter_status is not None:
+                    if (
+                        shutter.shutter_status.timestamp is not None
+                        and shutter.shutter_status.value is not None
+                    ):
+                        fig.add_trace(
+                            go.Scatter(
+                                x=shutter.shutter_status.timestamp,
+                                y=[
+                                    value + 1 * index
+                                    for value in shutter.shutter_status.value
+                                ],
+                                mode='markers',
+                                name=shutter.name,
+                                line=dict(color=rgb_10, width=1),
+                            ),
+                        )
+                        # Add lines at each point
+                        for j in shutter.shutter_status.timestamp:
+                            fig.add_shape(
+                                type='rect',
+                                x0=j,
+                                y0=0,
+                                x1=j,
+                                y1=1 + 1 * index,
+                                line=dict(color='rgba(0,0,0, 1)', width=1.5),
+                            )
+                        # Add rectangles between each pair of points
+                        for i in range(len(shutter.shutter_status.timestamp) - 1):
+                            if shutter.shutter_status.value[i] == 0:
+                                continue
+                            if shutter.shutter_status.value[i] == 1:
+                                fig.add_shape(
+                                    type='rect',
+                                    x0=shutter.shutter_status.timestamp[i],
+                                    y0=1 + 1 * index,
+                                    x1=shutter.shutter_status.timestamp[i + 1],
+                                    y1=0 + 1 * index,
+                                    fillcolor=rgb_07,
+                                    line=dict(color=rgb_10, width=3),
+                                )
+                                continue
+
+            # Define custom tick values and labels
+            tickvals = self.shutters[0].shutter_status.timestamp
+            # ticktext = [shutter.shutter_status.timestamp]
+
+            fig.update_shapes(dict(xref='x', yref='y'))
+            fig.update_layout(
+                template='plotly_white',
+                dragmode='zoom',
+                xaxis=dict(
+                    fixedrange=False,
+                    autorange=True,
+                    title='Process timestamp',
+                    mirror='all',
+                    showline=True,
+                    gridcolor='#EAEDFC',
+                    tickvals=tickvals,  # Set custom tick values
+                    # ticktext=ticktext,  # Set custom tick labels
+                ),
+                yaxis=dict(
+                    fixedrange=False,
+                    title='Shutter state',
+                    tickfont=dict(color='#2A4CDF'),
+                    gridcolor='#EAEDFC',
+                ),
+                showlegend=True,
+                legend=dict(
+                    itemsizing='constant',  # Ensures the size of the legend items is constant
+                    itemwidth=40,  # Adjust the width of the legend items
+                ),
+                legend_traceorder='reversed',
+            )
+
+            self.figures.append(
+                PlotlyFigure(label='Shutters', figure=fig.to_plotly_json())
+            )
 
         # setting the sample status
         for sample_holder in self.substrate_holder:

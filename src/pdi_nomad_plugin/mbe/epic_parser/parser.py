@@ -294,7 +294,11 @@ class ParserEpicPDI(MatchingParser):
                 shutter = Shutter(
                     name=shutter_key,
                     shutter_status=ShutterStatus(
-                        time=shutters['TimeDifference'], value=shutter_value
+                        time=shutters['TimeDifference'],
+                        timestamp=pd.to_datetime(
+                            shutters["'Date&Time"].values, format='%Y-%m-%d %H:%M:%S.%f'
+                        ).tolist(),
+                        value=shutter_value,
                     ),
                 )
                 child_archives['process'].data.m_add_sub_section(

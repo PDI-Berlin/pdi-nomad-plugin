@@ -165,6 +165,11 @@ class ShutterStatus(TimeSeries):
         description='The process time when each of the values were recorded.',
         shape=['*'],
     )
+    timestamp = Quantity(
+        type=Datetime,
+        description='The process time when each of the values were recorded.',
+        shape=['*'],
+    )
 
 
 class Shutter(PlotSection):
@@ -237,9 +242,9 @@ class Shutter(PlotSection):
         fig = go.Figure()
         fig.add_trace(
             go.Scatter(
-                x=self.shutter_status.time,
+                x=self.shutter_status.timestamp,
                 y=self.shutter_status.value,
-                name='Status',
+                name=self.name,
                 mode='markers',
                 # line=dict(color="#2A4CDF", width=4),
                 # fill="tonexty",
@@ -247,32 +252,20 @@ class Shutter(PlotSection):
             ),
         )
         # Add rectangles between each pair of points
-        for i in range(len(self.shutter_status.time) - 1):
+        for i in range(len(self.shutter_status.timestamp) - 1):
             if self.shutter_status.value[i] == 0:
                 continue
-            if (
-                self.shutter_status.value[i] == 1
-                and self.shutter_status.value[i + 1] == 1
-            ):
+            if self.shutter_status.value[i] == 1:
                 fig.add_shape(
                     type='rect',
-                    x0=self.shutter_status.time[i].magnitude,
+                    x0=self.shutter_status.timestamp[i],
                     y0=self.shutter_status.value[i],
-                    x1=self.shutter_status.time[i + 1].magnitude,
+                    x1=self.shutter_status.timestamp[i + 1],
                     y1=0,
                     fillcolor='rgba(42, 76, 223, 0.2)',
                     line=dict(color='rgba(42, 76, 223, 0.2)'),
                 )
                 continue
-            fig.add_shape(
-                type='rect',
-                x0=self.shutter_status.time[i].magnitude,
-                y0=self.shutter_status.value[i],
-                x1=self.shutter_status.time[i + 1].magnitude,
-                y1=self.shutter_status.value[i + 1],
-                fillcolor='rgba(42, 76, 223, 0.2)',
-                line=dict(color='rgba(42, 76, 223, 0.2)'),
-            )
         fig.update_shapes(dict(xref='x', yref='y'))
         fig.update_layout(
             template='plotly_white',
