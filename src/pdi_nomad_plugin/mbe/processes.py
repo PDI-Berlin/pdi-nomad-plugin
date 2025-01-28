@@ -1165,22 +1165,6 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                 PlotlyFigure(label='Shutters', figure=fig.to_plotly_json())
             )
 
-        # setting the sample status
-        for sample_holder in self.substrate_holder:
-            if sample_holder.reference:
-                for sample_holder_position in sample_holder.reference.positions:
-                    if sample_holder_position.substrate:
-                        set_sample_status(
-                            sample_holder_position.substrate.reference,
-                            logger,
-                            as_delivered=False,
-                            fresh=False,
-                            processed=sample_holder_position.substrate.reference.grown
-                            if sample_holder_position.substrate.reference.grown
-                            else False,
-                            grown=True,
-                        )
-
         # workflow normalization
         archive.workflow2 = None
         super().normalize(archive, logger)
@@ -1386,7 +1370,6 @@ class ExperimentMbePDI(Experiment, EntryData):
                     )
 
         # link to growth archive if lab_id is filled in exp
-
         if self.lab_id is not None and self.growth_run_logfiles is None:
             growth_ref = link_growth_process(archive, self.lab_id, logger)
             if growth_ref is not None:
@@ -1420,6 +1403,22 @@ class ExperimentMbePDI(Experiment, EntryData):
                             logger,
                         )
 
+        # setting the sample status
+        if self.substrate_holder:
+            if self.substrate_holder.reference:
+                for sample_holder_position in self.substrate_holder.reference.positions:
+                    if sample_holder_position.substrate:
+                        set_sample_status(
+                            sample_holder_position.substrate.reference,
+                            logger,
+                            as_delivered=False,
+                            fresh=False,
+                            processed=sample_holder_position.substrate.reference.grown
+                            if sample_holder_position.substrate.reference.grown
+                            else False,
+                            grown=True,
+                        )
+                        
         # search_result = search(
         #     owner="user",
         #     query={
