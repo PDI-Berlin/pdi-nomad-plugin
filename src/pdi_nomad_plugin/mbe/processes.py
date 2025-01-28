@@ -987,33 +987,6 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
     #     a_tabular={'name': 'GrowthRun/Recipe Name'},
     #     a_eln={'component': 'StringEditQuantity', 'label': 'Recipe ID'},
     # )
-    susceptor = Quantity(
-        type=str,
-        description="""
-        material of the susceptor adaptor
-        """,
-        a_eln=ELNAnnotation(
-            component='StringEditQuantity',
-        ),
-    )
-    mask = Quantity(
-        type=str,
-        description="""
-        type and size of growth map
-        """,
-        a_eln=ELNAnnotation(
-            component='StringEditQuantity',
-        ),
-    )
-    pocket = Quantity(
-        type=str,
-        description="""
-        position in the growth mask
-        """,
-        a_eln=ELNAnnotation(
-            component='StringEditQuantity',
-        ),
-    )
     steps = SubSection(
         section_def=GrowthStepMbePDI,
         repeats=True,
