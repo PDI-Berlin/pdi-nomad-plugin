@@ -1098,44 +1098,53 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                         and shutter.shutter_status.value is not None
                     ):
                         # Add lines at each point
-                        for j in shutter.shutter_status.timestamp:
-                            fig.add_shape(
-                                type='line',
-                                x0=j,
-                                y0=0,
-                                x1=j,
-                                y1=1 + 1 * index,
-                                line=dict(color='rgba(0,0,0, 1)', width=1),
-                            )
+                        # for j in shutter.shutter_status.timestamp:
+                        #     fig.add_shape(
+                        #         type='line',
+                        #         x0=j,
+                        #         y0=0,
+                        #         x1=j,
+                        #         y1=1 + 1 * index,
+                        #         line=dict(color='rgba(0,0,0, 1)', width=1),
+                        #     )
                         # Add dots at each point
                         fig.add_trace(
                             go.Scatter(
                                 x=shutter.shutter_status.timestamp,
-                                y=[
-                                    value + 1 * index
-                                    for value in shutter.shutter_status.value
-                                ],
-                                mode='markers',
+                                y=[1 * index for _ in shutter.shutter_status.value],
+                                mode='lines',
                                 name=shutter.name,
-                                line=dict(color=rgb_10, width=2),
+                                line=dict(color=rgb_10, width=1),
                             ),
                         )
-                        # Add rectangles between each pair of points
-                        for i in range(len(shutter.shutter_status.timestamp) - 1):
-                            if shutter.shutter_status.value[i] == 0:
-                                continue
-                            if shutter.shutter_status.value[i] == 1:
-                                fig.add_shape(
-                                    type='rect',
-                                    x0=shutter.shutter_status.timestamp[i],
-                                    y0=1 + 1 * index,
-                                    x1=shutter.shutter_status.timestamp[i + 1],
-                                    y1=0 + 1 * index,
-                                    fillcolor=rgb_07,
-                                    line=dict(color=rgb_10, width=2),
-                                    layer='above',
-                                )
-                                continue
+                        fig.add_trace(
+                            go.Scatter(
+                                x=shutter.shutter_status.timestamp,
+                                y=[value + 1 * index
+                                    for value in shutter.shutter_status.value],
+                                mode='markers+lines',
+                                name=shutter.name,
+                                line=dict(color=rgb_10, width=7),
+                                line_shape='hv',
+                                fill='tonexty',
+                            ),
+                        )
+                        # # Add rectangles between each pair of points
+                        # for i in range(len(shutter.shutter_status.timestamp) - 1):
+                        #     if shutter.shutter_status.value[i] == 0:
+                        #         continue
+                        #     if shutter.shutter_status.value[i] == 1:
+                        #         fig.add_shape(
+                        #             type='rect',
+                        #             x0=shutter.shutter_status.timestamp[i],
+                        #             y0=1 + 1 * index,
+                        #             x1=shutter.shutter_status.timestamp[i + 1],
+                        #             y1=0 + 1 * index,
+                        #             fillcolor=rgb_07,
+                        #             line=dict(color=rgb_10, width=2),
+                        #             layer='above',
+                        #         )
+                        #         continue
 
             # Define custom tick values and labels
             tickvals = self.shutters[0].shutter_status.timestamp
