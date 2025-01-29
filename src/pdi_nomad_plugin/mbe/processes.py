@@ -1091,7 +1091,7 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
             for index, shutter in enumerate(self.shutters):
                 current_rgb = random_rgb()
                 rgb_10 = f'rgba({current_rgb}, 1)'
-                rgb_07 = f'rgba({current_rgb}, 0.7)'
+                # rgb_07 = f'rgba({current_rgb}, 0.7)'
                 if shutter.shutter_status is not None:
                     if (
                         shutter.shutter_status.timestamp is not None
@@ -1115,6 +1115,7 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                                 mode='lines',
                                 name=shutter.name,
                                 line=dict(color=rgb_10, width=1),
+                                showlegend=False, 
                             ),
                         )
                         fig.add_trace(
@@ -1124,7 +1125,7 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                                     for value in shutter.shutter_status.value],
                                 mode='markers+lines',
                                 name=shutter.name,
-                                line=dict(color=rgb_10, width=7),
+                                line=dict(color=rgb_10, width=1.5),
                                 line_shape='hv',
                                 fill='tonexty',
                             ),
