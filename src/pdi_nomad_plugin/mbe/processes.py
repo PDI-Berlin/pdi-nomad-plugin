@@ -41,6 +41,7 @@ from nomad.metainfo import (
 )
 from nomad_material_processing.general import (
     TimeSeries,
+    SubstrateReference,
 )
 from nomad_material_processing.vapor_deposition.cvd.general import (
     Rotation,
@@ -71,6 +72,11 @@ from pdi_nomad_plugin.general.schema import (
     PDIMBECategory,
     SampleCutPDI,
 )
+
+from pdi_nomad_plugin.mbe.materials import (
+    ThinFilmStackMbePDI
+)
+
 from pdi_nomad_plugin.mbe.instrument import (
     FilledSubstrateHolderPDIReference,
     Shutter,
@@ -1091,6 +1097,17 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                         shutter.shutter_status.timestamp is not None
                         and shutter.shutter_status.value is not None
                     ):
+                        # Add lines at each point
+                        for j in shutter.shutter_status.timestamp:
+                            fig.add_shape(
+                                type='line',
+                                x0=j,
+                                y0=0,
+                                x1=j,
+                                y1=1 + 1 * index,
+                                line=dict(color='rgba(0,0,0, 1)', width=1),
+                            )
+                        # Add dots at each point
                         fig.add_trace(
                             go.Scatter(
                                 x=shutter.shutter_status.timestamp,
@@ -1100,19 +1117,9 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                                 ],
                                 mode='markers',
                                 name=shutter.name,
-                                line=dict(color=rgb_10, width=1),
+                                line=dict(color=rgb_10, width=2),
                             ),
                         )
-                        # Add lines at each point
-                        for j in shutter.shutter_status.timestamp:
-                            fig.add_shape(
-                                type='rect',
-                                x0=j,
-                                y0=0,
-                                x1=j,
-                                y1=1 + 1 * index,
-                                line=dict(color='rgba(0,0,0, 1)', width=1.5),
-                            )
                         # Add rectangles between each pair of points
                         for i in range(len(shutter.shutter_status.timestamp) - 1):
                             if shutter.shutter_status.value[i] == 0:
@@ -1125,7 +1132,8 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                                     x1=shutter.shutter_status.timestamp[i + 1],
                                     y1=0 + 1 * index,
                                     fillcolor=rgb_07,
-                                    line=dict(color=rgb_10, width=3),
+                                    line=dict(color=rgb_10, width=2),
+                                    layer='above',
                                 )
                                 continue
 
@@ -1376,33 +1384,6 @@ class ExperimentMbePDI(Experiment, EntryData):
                 self.growth_run_logfiles = GrowthMbePDIReference(reference=growth_ref)
                 self.growth_run_logfiles.normalize(archive, logger)
 
-        # TODO handle this function
-        # create samples archives
-        if (
-            self.growth_run_logfiles is not None
-            and self.substrate_holder
-            and self.samples is not None
-        ):
-            if self.substrate_holder.reference:
-                growth_id = self.growth_run_logfiles.reference.lab_id
-                for sample_holder_position in self.substrate_holder.reference.positions:
-                    if sample_holder_position.substrate:
-                        sample_id = f'{growth_id}_pos{sample_holder_position.name}'
-                        sample_object = CompositeSystem(
-                            name=sample_holder_position.substrate.name,
-                            lab_id=sample_id,
-                        )
-                        filetype = 'yaml'
-                        sample_filename = f'{sample_id}.archive.{filetype}'
-
-                        create_archive(
-                            sample_object.m_to_dict(),
-                            archive.m_context,
-                            sample_filename,
-                            filetype,
-                            logger,
-                        )
-
         # setting the sample status
         if self.substrate_holder:
             if self.substrate_holder.reference:
@@ -1418,6 +1399,46 @@ class ExperimentMbePDI(Experiment, EntryData):
                             else False,
                             grown=True,
                         )
+
+        # create samples archives
+        if (
+            self.growth_run_logfiles is not None
+            and self.substrate_holder is not None
+            and not self.samples
+        ):
+            if self.substrate_holder.reference:
+                growth_id = self.growth_run_logfiles.reference.lab_id
+                self.samples = []
+                for sample_holder_position in self.substrate_holder.reference.positions:
+                    if sample_holder_position.substrate:
+                        sample_id = f'{growth_id}_{sample_holder_position.name}'
+                        sample_object = ThinFilmStackMbePDI(
+                            name=sample_holder_position.substrate.name,
+                            lab_id=sample_id,
+                            substrate=SubstrateReference(
+                                reference=sample_holder_position.substrate.reference
+                            )
+                        )
+                        filetype = 'yaml'
+                        sample_filename = f'{sample_id}.archive.{filetype}'
+                        
+                        sample_archive = EntryArchive(
+                            m_context=archive.m_context,
+                            data=sample_object,
+                        )
+                        self.samples.append(
+                            CompositeSystemReference(
+                                reference=create_archive(
+                            sample_archive.m_to_dict(),
+                            archive.m_context,
+                            sample_filename,
+                            filetype,
+                            logger,
+                        ),
+                        ))
+
+
+        
 
         # search_result = search(
         #     owner="user",
