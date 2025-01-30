@@ -1114,7 +1114,7 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                                 y=[1 * index for _ in shutter.shutter_status.value],
                                 mode='lines',
                                 name=shutter.name,
-                                line=dict(color=rgb_10, width=1),
+                                line=dict(color=rgb_10, width=2),
                                 showlegend=False, 
                             ),
                         )
@@ -1125,7 +1125,7 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                                     for value in shutter.shutter_status.value],
                                 mode='markers+lines',
                                 name=shutter.name,
-                                line=dict(color=rgb_10, width=1.5),
+                                line=dict(color=rgb_10, width=2),
                                 line_shape='hv',
                                 fill='tonexty',
                             ),
