@@ -810,24 +810,40 @@ class SubstrateHolderPDI(SubstrateHolder, EntryData):
     )
 
 
-class FilledSubstrateHolderPositionPDI(FilledSubstrateHolderPosition):
+class FilledSubstrateHolderPositionPDI(FilledSubstrateHolderPosition):    
+    name = Quantity(
+        type=str,
+        description="""
+        A short name for this position. This name is used as label of the position.
+        """,
+    )
+    x_position = Quantity(
+        type=float,
+        unit='meter',
+        description="""
+        The x coordinate of the substrate holder position
+        relative to the center of the holder.
+        """,
+    )
+    y_position = Quantity(
+        type=float,
+        unit='meter',
+        description="""
+        The y coordinate of the substrate holder position
+        relative to the center of the holder.
+        """,
+    )
     rho = Quantity(
         type=float,
         description="""
         Rho angle of the substrate holder in the x-y plane.
         """,
-        a_eln=ELNAnnotation(
-            component=ELNComponentEnum.NumberEditQuantity,
-        ),
     )
     theta = Quantity(
         type=float,
         description="""
         Theta angle of the substrate holder in the x-z plane.
         """,
-        a_eln=ELNAnnotation(
-            component=ELNComponentEnum.NumberEditQuantity,
-        ),
     )
 
 

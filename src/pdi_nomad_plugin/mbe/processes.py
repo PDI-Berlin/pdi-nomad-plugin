@@ -1016,7 +1016,6 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
 
         # plotly figure list
         self.figures = []
-
         # plotly temperature figure with HDF5Reference arrays:
         sub_time = self.steps[0].sample_parameters[0].substrate_temperature.time
         sub_value = self.steps[0].sample_parameters[0].substrate_temperature.value
