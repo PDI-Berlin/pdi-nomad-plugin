@@ -126,7 +126,7 @@ class ParserEpicPDI(MatchingParser):
         data_file = mainfile.split('/')[-1]
 
         folder_name = mainfile.split('/')[-2]
-        upload_path = f"{mainfile.split('raw/')[0]}raw/"
+        upload_path = f'{mainfile.split("raw/")[0]}raw/'
         folder_path = f'{upload_path}{folder_name}/'
 
         xlsx = pd.ExcelFile(mainfile)
@@ -166,12 +166,12 @@ class ParserEpicPDI(MatchingParser):
         lr_sheet = sheets_dict['LR settings']
 
         # read Messages.txt file
-        assert (
-            'messages' in config_sheet and not config_sheet['messages'].empty
-        ), 'Messages file not found. Provide a valid messages file in the configuration sheet.'
-        assert pd.notna(
-            config_sheet['messages'].iloc[0]
-        ), 'Messages file not found. Provide a valid messages file in the configuration sheet.'
+        assert 'messages' in config_sheet and not config_sheet['messages'].empty, (
+            'Messages file not found. Provide a valid messages file in the configuration sheet.'
+        )
+        assert pd.notna(config_sheet['messages'].iloc[0]), (
+            'Messages file not found. Provide a valid messages file in the configuration sheet.'
+        )
         (
             growth_id,
             substrate_load_time,
@@ -188,7 +188,7 @@ class ParserEpicPDI(MatchingParser):
             'flux_calibration' in config_sheet
             and not config_sheet['flux_calibration'].empty
         ):
-            file_path = f"{folder_path}{config_sheet['flux_calibration'][0]}"
+            file_path = f'{folder_path}{config_sheet["flux_calibration"][0]}'
             if pd.notna(config_sheet['flux_calibration'].iloc[0]) and os.path.exists(
                 file_path
             ):
@@ -208,7 +208,7 @@ class ParserEpicPDI(MatchingParser):
         # reading Shutters.txt
         shutters = None
         if 'shutters' in config_sheet and not config_sheet['shutters'].empty:
-            file_path = f"{folder_path}{config_sheet['shutters'][0]}"
+            file_path = f'{folder_path}{config_sheet["shutters"][0]}'
             if pd.notna(config_sheet['shutters'].iloc[0]) and os.path.exists(file_path):
                 with open(
                     file_path,
@@ -219,7 +219,8 @@ class ParserEpicPDI(MatchingParser):
                     shutters["'Date&Time"], format='%d/%m/%Y %H:%M:%S.%f'
                 )
                 shutters['TimeDifference'] = (
-                    shutters["'Date&Time"].dt.tz_localize(timezone) - substrate_load_time
+                    shutters["'Date&Time"].dt.tz_localize(timezone)
+                    - substrate_load_time
                 ).dt.total_seconds()
 
         # # # # # HDF5 FILE CREATION # # # # #
@@ -608,9 +609,13 @@ class ParserEpicPDI(MatchingParser):
                             value.attrs['long_name'] = (
                                 f'{sources_row["EPIC_loop"]} impinging flux (1/(nm^2*s^1))'
                             )
-                            hdf[f'/{group_name}/time'] = hdf[f'/{temp_mv_time}'] # relative time dataset from the temperature log file
+                            hdf[f'/{group_name}/time'] = hdf[
+                                f'/{temp_mv_time}'
+                            ]  # relative time dataset from the temperature log file
                             timestamp = f'{fn2dfn(sources_row["temp_mv"])}/timestamp'
-                            hdf[f'/{group_name}/timestamp'] = hdf[f'/{timestamp}'] # relative time dataset from the temperature log file
+                            hdf[f'/{group_name}/timestamp'] = hdf[
+                                f'/{timestamp}'
+                            ]  # relative time dataset from the temperature log file
                             group.attrs['axes'] = 'time'
                             group.attrs['signal'] = 'value'
                             group.attrs['NX_class'] = 'NXdata'
@@ -637,7 +642,7 @@ class ParserEpicPDI(MatchingParser):
                     str(fill_quantity(sources_row, 'source_type'))
                     + ' '
                     + str(fill_quantity(sources_row, 'source_material'))
-                    + f" (primary species: {fill_quantity(sources_row, 'primary_flux_species')})"
+                    + f' (primary species: {fill_quantity(sources_row, "primary_flux_species")})'
                 )
                 source_object.name = source_name
                 # Define a list of tuples containing

@@ -314,7 +314,7 @@ def fetch_substrate(archive, sample_id, substrate_id, logger):
         )
 
         if upload_files.raw_path_is_file(substrate_context.raw_path()):
-            substrate_reference_str = f"../uploads/{search_result.data[0]['upload_id']}/archive/{search_result.data[0]['entry_id']}#data"
+            substrate_reference_str = f'../uploads/{search_result.data[0]["upload_id"]}/archive/{search_result.data[0]["entry_id"]}#data'
             return substrate_reference_str
         else:
             logger.warn(
@@ -561,7 +561,7 @@ def epiclog_read_handle_empty(folder_path, dataframe, column_header):
             if dataframe[column_header] != '':
                 string_filename = dataframe[column_header]
         if string_filename is not None:
-            file_path = f'{folder_path}{string_filename.replace(".txt","")}.txt'
+            file_path = f'{folder_path}{string_filename.replace(".txt", "")}.txt'
             if os.path.exists(file_path):
                 data_array = epiclog_read(file_path)
     return data_array
