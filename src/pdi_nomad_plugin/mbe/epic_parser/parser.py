@@ -174,8 +174,8 @@ class ParserEpicPDI(MatchingParser):
         ), 'Messages file not found. Provide a valid messages file in the configuration sheet.'
         (
             growth_id,
-            growth_starttime,
-            growth_endtime,
+            substrate_load_time,
+            substrate_unload_time,
             growth_duration,
             logger_msg,
         ) = extract_growth_messages(folder_path, config_sheet['messages'].iloc[0])
@@ -219,14 +219,14 @@ class ParserEpicPDI(MatchingParser):
                     shutters["'Date&Time"], format='%d/%m/%Y %H:%M:%S.%f'
                 )
                 shutters['TimeDifference'] = (
-                    shutters["'Date&Time"].dt.tz_localize(timezone) - growth_starttime
+                    shutters["'Date&Time"].dt.tz_localize(timezone) - substrate_load_time
                 ).dt.total_seconds()
 
         # # # # # HDF5 FILE CREATION # # # # #
         dataframe_list = epiclog_read_batch(folder_name, upload_path)
         hdf_filename = f'{data_file[:-5]}.h5'
         with archive.m_context.raw_file(hdf_filename, 'w') as newfile:
-            epic_hdf5_exporter(newfile.name, dataframe_list, growth_starttime)
+            epic_hdf5_exporter(newfile.name, dataframe_list, substrate_load_time)
             logger.info(logger_msg)
 
         # instrument archive
@@ -262,8 +262,11 @@ class ParserEpicPDI(MatchingParser):
 
         # fill in quantities
         child_archives['process'].data.name = f'{exp_string} process'
-        child_archives['process'].data.datetime = growth_starttime
-        child_archives['process'].data.end_time = growth_endtime
+        child_archives['process'].data.datetime = substrate_load_time
+        child_archives['process'].data.start_time = substrate_load_time
+        child_archives['process'].data.end_time = substrate_unload_time
+        child_archives['process'].data.recalculate_growth_start_time = False
+        child_archives['process'].data.hdf5_file = hdf_filename
         child_archives['process'].data.lab_id = f'{growthrun_id}'
         child_archives['process'].data.steps[
             0
@@ -433,15 +436,15 @@ class ParserEpicPDI(MatchingParser):
                         gasmixing_datetime = fill_datetime(
                             gas_row['date'], gas_row['time']
                         )
-                        if growth_starttime is None:
+                        if substrate_load_time is None:
                             logger.warning(
                                 'Growth start time not found. Possibly, Messages.txt file is missing.'
                             )
-                        elif gasmixing_datetime > growth_starttime:
+                        elif gasmixing_datetime > substrate_load_time:
                             continue
 
                         print(f'this mixing was done at: {gasmixing_datetime}')
-                        print(f'growth started at: {growth_starttime}')
+                        print(f'growth started at: {substrate_load_time}')
                         source_object.gas_flow.append(
                             GasFlowPDI(flow_rate=VolumetricFlowRatePDI())
                         )

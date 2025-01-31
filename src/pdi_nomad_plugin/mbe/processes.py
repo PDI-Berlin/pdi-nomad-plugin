@@ -89,6 +89,11 @@ from pdi_nomad_plugin.utils import (
     set_sample_status,
 )
 
+from epic_scraper.epicfileimport.epic_module import (
+    epic_hdf5_exporter,
+    epiclog_read_batch,
+)
+
 configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:processes_schema')
 
 m_package = SchemaPackage()
@@ -926,17 +931,16 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                     'name',
                     'method',
                     'data_file',
-                    'datetime',
+                    'start_time',
                     'end_time',
+                    'datetime',
+                    'recalculate_growth_start_time',
                     'duration',
                 ],
             ),
             # hide=[
-            #     'sub_value',
-            #     'sub_time',
-            #     'pyro_value',
-            #     'pyro_time',
-            # ],
+            #     'folder_path',
+            # ]
         ),
         label_quantity='lab_id',
         categories=[PDIMBECategory],
@@ -952,11 +956,26 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
         type=str,
         default='MBE PDI',
     )
+    start_time = Quantity(
+        type=Datetime,
+        description='The date and time when the sample was loaded from growth chamber.',
+        a_eln=dict(component='DateTimeEditQuantity', label='substrate load time'),
+    )
+    end_time = Quantity(
+        type=Datetime,
+        description='The date and time when the sample was unloaded from growth chamber.',
+        a_eln=dict(component='DateTimeEditQuantity', label='substrate unload time'),
+    )
+    recalculate_growth_start_time = Quantity(
+        type=bool,
+        description='If true, the growth start time will be recalculated based on the date found in growth start time field.',
+        a_eln=dict(component='BoolEditQuantity', label='recalculate growth start time'),
+    )
     datetime = Quantity(
         type=Datetime,
-        description='The date and time when this activity was started.',
-        a_eln=dict(component='DateTimeEditQuantity', label='starting time'),
-    )  # this is added to correct the typo in the label from basesections.py
+        description='The date and time when the growth was started.',
+        a_eln=dict(component='DateTimeEditQuantity', label='growth start time'),
+    )
     tags = Quantity(
         type=str,
         shape=['*'],
@@ -995,12 +1014,12 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
         """,
         a_eln=dict(component='StringEditQuantity', label='Growth process ID'),
     )
-    # recipe_id = Quantity(
-    #     type=str,
-    #     description='the ID from RTG',
-    #     a_tabular={'name': 'GrowthRun/Recipe Name'},
-    #     a_eln={'component': 'StringEditQuantity', 'label': 'Recipe ID'},
-    # )
+    hdf5_file = Quantity(
+        type=str,
+        description='The HDF5 file containing the data for this growth process.',
+        a_browser={'adaptor': 'RawFileAdaptor'},
+        a_eln={'component': 'FileEditQuantity'},
+    )
     steps = SubSection(
         section_def=GrowthStepMbePDI,
         repeats=True,
@@ -1015,12 +1034,14 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
     )
 
     def normalize(self, archive, logger):
-        # for sample in self.samples:
-        #     sample.normalize(archive, logger)
-        # for parent_sample in self.parent_sample:
-        #     parent_sample.normalize(archive, logger)
-        # for substrate in self.substrate:
-        #     substrate.normalize(archive, logger)
+
+        # recalculating the growth start time
+        # if self.recalculate_growth_start_time:
+        #     self.recalculate_growth_start_time = False
+        #     dataframe_list = epiclog_read_batch(folder_name, upload_path)
+        #     hdf_filename = archive.m_context.raw_file(self.hdf5_file)
+        #     with archive.m_context.raw_file(hdf_filename, 'w') as newfile:
+        #         epic_hdf5_exporter(newfile.name, dataframe_list, self.recalculate_growth_start_time)
 
         # plotly figure list
         self.figures = []
@@ -1046,7 +1067,7 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                                 x=timestamp_array,
                                 y=[1 * sources_index for _ in value_array],
                                 mode='lines',
-                                name=f"{self.steps[0].sources[sources_index].primary_flux_species.name}" if self.steps[0].sources[sources_index].primary_flux_species is not None else "No name",
+                                name=f"{self.steps[0].sources[sources_index].epic_loop}" if self.steps[0].sources[sources_index].epic_loop is not None else "No name",
                                 line=dict(color=rgb_10, width=2),
                                 showlegend=False, 
                             ),
@@ -1057,7 +1078,7 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                                 x=timestamp_array,
                                 y=[value/max_y + 1 * sources_index for value in value_array],
                                 mode='markers+lines',
-                                name=f"{self.steps[0].sources[sources_index].primary_flux_species.name}" if self.steps[0].sources[sources_index].primary_flux_species is not None else "No name",
+                                name=f"{self.steps[0].sources[sources_index].epic_loop}" if self.steps[0].sources[sources_index].epic_loop is not None else "No name",
                                 line=dict(color=rgb_10, width=2),
                                 line_shape='hv',
                                 fill='tonexty',
