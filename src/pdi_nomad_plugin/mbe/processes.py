@@ -1,6 +1,6 @@
 import json
 import random
-
+import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from nomad.config import config
@@ -99,6 +99,14 @@ def random_rgb():
         f'{random.randint(0, 255)}, {random.randint(0, 255)}, {random.randint(0, 255)}'
     )
 
+
+def hdf5_2_datetime(archive, hdf5_dataset_path):
+    timestamp_string_array = HDF5Reference.read_dataset(
+        archive, hdf5_dataset_path
+    ) 
+    timestamp_string_list = [ts.decode('utf-8') for ts in timestamp_string_array]
+    return pd.to_datetime(
+        timestamp_string_list, format='ISO8601') #2024-11-21 00:19:37.291000+01:00
 
 class SystemComponentPDI(SystemComponent):
     """
@@ -933,11 +941,11 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
         label_quantity='lab_id',
         categories=[PDIMBECategory],
         label='Growth Process',
-        a_h5web=H5WebAnnotation(
-            paths=[
-                'steps/0/sources/*/impinging_flux/*',
-            ]
-        ),
+        # a_h5web=H5WebAnnotation(
+        #     paths=[
+        #         'steps/0/sources/*/impinging_flux/*',
+        #     ]
+        # ),
     )
 
     method = Quantity(
@@ -1016,6 +1024,78 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
 
         # plotly figure list
         self.figures = []
+        
+        # plotly gas flows figure:
+        fig = go.Figure()
+        # Define custom tick values and labels
+        tickvals_y = []
+        ticktext_y = []
+        for sources_index in range(len(self.steps[0].sources)):
+            if len(self.steps[0].sources[sources_index].impinging_flux) > 0:
+                current_rgb = random_rgb()
+                rgb_10 = f'rgba({current_rgb}, 1)'
+                if self.steps[0].sources[sources_index].impinging_flux[0].value is not None:
+                    if self.steps[0].sources[sources_index].impinging_flux[0].time is not None:
+                        timestamp_array = hdf5_2_datetime(archive, f"{self.steps[0].sources[sources_index].impinging_flux[0].time.rsplit("/", 1)[0]}/timestamp") # fetch the hdf5 dataset from the already used path for time
+                        value_array = HDF5Reference.read_dataset(
+                            archive, self.steps[0].sources[sources_index].impinging_flux[0].value
+                        )
+                        # Add baseline for each shutter
+                        fig.add_trace(
+                            go.Scatter(
+                                x=timestamp_array,
+                                y=[1 * sources_index for _ in value_array],
+                                mode='lines',
+                                name=f"{self.steps[0].sources[sources_index].primary_flux_species.name}" if self.steps[0].sources[sources_index].primary_flux_species is not None else "No name",
+                                line=dict(color=rgb_10, width=2),
+                                showlegend=False, 
+                            ),
+                        )
+                        max_y = np.max(value_array)
+                        fig.add_trace(
+                            go.Scatter(
+                                x=timestamp_array,
+                                y=[value/max_y + 1 * sources_index for value in value_array],
+                                mode='markers+lines',
+                                name=f"{self.steps[0].sources[sources_index].primary_flux_species.name}" if self.steps[0].sources[sources_index].primary_flux_species is not None else "No name",
+                                line=dict(color=rgb_10, width=2),
+                                line_shape='hv',
+                                fill='tonexty',
+                            ),
+                        )
+
+                        # Define custom tick values and labels
+                        tickvals_y.append(1 * sources_index + 1) 
+                        ticktext_y.append(f"{max_y:.2e}")
+
+                        fig.update_layout(
+                            template='plotly_white',
+                            dragmode='zoom',
+                            xaxis=dict(
+                                fixedrange=False,
+                                autorange=True,
+                                title='Timestamp',
+                                mirror='all',
+                                showline=True,
+                                gridcolor='#EAEDFC',
+                            ),
+                            yaxis=dict(
+                                fixedrange=False,
+                                title='Gas flows',
+                                tickfont=dict(color='#2A4CDF'),
+                                gridcolor='#EAEDFC',
+                                tickvals=tickvals_y, 
+                                ticktext=ticktext_y,
+                            ),
+                            showlegend=True,
+                        )
+        self.figures.append(
+            PlotlyFigure(
+                label='Gas flows ',
+                figure=fig.to_plotly_json(),
+            )
+        )
+
         # plotly temperature figure with HDF5Reference arrays:
         sub_time = self.steps[0].sample_parameters[0].substrate_temperature.time
         sub_value = self.steps[0].sample_parameters[0].substrate_temperature.value
@@ -1035,17 +1115,18 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
             and pyro_time is not None
             and pyro_value is not None
         ):
-            time_array = HDF5Reference.read_dataset(archive, sub_time)
-            value_array = HDF5Reference.read_dataset(archive, sub_value)
 
-            pyrometer_time = HDF5Reference.read_dataset(archive, pyro_time)
+            timestamp_array = hdf5_2_datetime(archive, f"{sub_time.rsplit("/", 1)[0]}/timestamp") # fetch the hdf5 dataset from the already used path for time
+            value_array = HDF5Reference.read_dataset(archive, sub_value)
+            
+            pyrometer_timestamp = hdf5_2_datetime(archive, f"{pyro_time.rsplit("/", 1)[0]}/timestamp") # fetch the hdf5 dataset from the already used path for time
             pyrometer_temperature = HDF5Reference.read_dataset(archive, pyro_value)
 
             # plotly temperature figure
             fig = go.Figure()
             fig.add_trace(
                 go.Scatter(
-                    x=time_array,
+                    x=timestamp_array,
                     y=value_array,
                     name='Sub Temp',
                     line=dict(color='#2A4CDF', width=4),
@@ -1054,7 +1135,7 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
             )
             fig.add_trace(
                 go.Scatter(
-                    x=pyrometer_time,
+                    x=pyrometer_timestamp,
                     y=pyrometer_temperature,
                     name='Pyro Temp',
                     line=dict(color='#90002C', width=2),
@@ -1067,7 +1148,7 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                 xaxis=dict(
                     fixedrange=False,
                     autorange=True,
-                    title='Process time / s',
+                    title='Timestamp',
                     mirror='all',
                     showline=True,
                     gridcolor='#EAEDFC',
@@ -1106,7 +1187,7 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                         #         y1=1 + 1 * index,
                         #         line=dict(color='rgba(0,0,0, 1)', width=1),
                         #     )
-                        # Add dots at each point
+                        # Add baseline for each shutter
                         fig.add_trace(
                             go.Scatter(
                                 x=shutter.shutter_status.timestamp,
@@ -1147,7 +1228,7 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                         #         continue
 
             # Define custom tick values and labels
-            tickvals = self.shutters[0].shutter_status.timestamp
+            # tickvals = self.shutters[0].shutter_status.timestamp
             # ticktext = [shutter.shutter_status.timestamp]
 
             fig.update_shapes(dict(xref='x', yref='y'))
@@ -1161,7 +1242,7 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                     mirror='all',
                     showline=True,
                     gridcolor='#EAEDFC',
-                    tickvals=tickvals,  # Set custom tick values
+                    #tickvals=tickvals,  # Set custom tick values
                     # ticktext=ticktext,  # Set custom tick labels
                 ),
                 yaxis=dict(

@@ -605,7 +605,9 @@ class ParserEpicPDI(MatchingParser):
                             value.attrs['long_name'] = (
                                 f'{sources_row["EPIC_loop"]} impinging flux (1/(nm^2*s^1))'
                             )
-                            hdf[f'/{group_name}/time'] = hdf[f'/{temp_mv_time}']
+                            hdf[f'/{group_name}/time'] = hdf[f'/{temp_mv_time}'] # relative time dataset from the temperature log file
+                            timestamp = f'{fn2dfn(sources_row["temp_mv"])}/timestamp'
+                            hdf[f'/{group_name}/timestamp'] = hdf[f'/{timestamp}'] # relative time dataset from the temperature log file
                             group.attrs['axes'] = 'time'
                             group.attrs['signal'] = 'value'
                             group.attrs['NX_class'] = 'NXdata'

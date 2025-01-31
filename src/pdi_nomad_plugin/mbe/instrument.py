@@ -500,6 +500,12 @@ class ImpingingFluxPDI(ImpingingFlux):
         description='The process time when each of the values were recorded.',
         shape=[],
     )
+    timestamp = Quantity(
+        type=HDF5Reference,
+        description='The process time when each of the values were recorded.',
+        shape=[],
+    )
+
 
 
 class EffusionCellHeater(ThermalEvaporationHeater):
