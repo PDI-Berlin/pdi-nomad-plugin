@@ -507,7 +507,6 @@ class ImpingingFluxPDI(ImpingingFlux):
     )
 
 
-
 class EffusionCellHeater(ThermalEvaporationHeater):
     m_def = Section()
     temperature = SubSection(
@@ -816,7 +815,7 @@ class SubstrateHolderPDI(SubstrateHolder, EntryData):
     )
 
 
-class FilledSubstrateHolderPositionPDI(FilledSubstrateHolderPosition):    
+class FilledSubstrateHolderPositionPDI(FilledSubstrateHolderPosition):
     name = Quantity(
         type=str,
         description="""

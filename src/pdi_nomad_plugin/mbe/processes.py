@@ -1,7 +1,8 @@
 import json
 import random
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 from nomad.config import config
 from nomad.datamodel import EntryArchive
@@ -15,7 +16,6 @@ from nomad.datamodel.metainfo.annotations import (
 )
 from nomad.datamodel.metainfo.basesections import (
     Component,
-    CompositeSystem,
     CompositeSystemReference,
     Experiment,
     Process,
@@ -40,8 +40,8 @@ from nomad.metainfo import (
     SubSection,
 )
 from nomad_material_processing.general import (
-    TimeSeries,
     SubstrateReference,
+    TimeSeries,
 )
 from nomad_material_processing.vapor_deposition.cvd.general import (
     Rotation,
@@ -72,26 +72,17 @@ from pdi_nomad_plugin.general.schema import (
     PDIMBECategory,
     SampleCutPDI,
 )
-
-from pdi_nomad_plugin.mbe.materials import (
-    ThinFilmStackMbePDI
-)
-
 from pdi_nomad_plugin.mbe.instrument import (
     FilledSubstrateHolderPDIReference,
     Shutter,
     SourcePDI,
 )
+from pdi_nomad_plugin.mbe.materials import ThinFilmStackMbePDI
 from pdi_nomad_plugin.utils import (
     create_archive,
     handle_section,
     link_growth_process,
     set_sample_status,
-)
-
-from epic_scraper.epicfileimport.epic_module import (
-    epic_hdf5_exporter,
-    epiclog_read_batch,
 )
 
 configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:processes_schema')
@@ -106,12 +97,12 @@ def random_rgb():
 
 
 def hdf5_2_datetime(archive, hdf5_dataset_path):
-    timestamp_string_array = HDF5Reference.read_dataset(
-        archive, hdf5_dataset_path
-    ) 
+    timestamp_string_array = HDF5Reference.read_dataset(archive, hdf5_dataset_path)
     timestamp_string_list = [ts.decode('utf-8') for ts in timestamp_string_array]
     return pd.to_datetime(
-        timestamp_string_list, format='ISO8601') #2024-11-21 00:19:37.291000+01:00
+        timestamp_string_list, format='ISO8601'
+    )  # 2024-11-21 00:19:37.291000+01:00
+
 
 class SystemComponentPDI(SystemComponent):
     """
@@ -1034,8 +1025,8 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
     )
 
     def normalize(self, archive, logger):
-
         # recalculating the growth start time
+
         # if self.recalculate_growth_start_time:
         #     self.recalculate_growth_start_time = False
         #     dataframe_list = epiclog_read_batch(folder_name, upload_path)
@@ -1045,7 +1036,7 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
 
         # plotly figure list
         self.figures = []
-        
+
         # plotly gas flows figure:
         fig = go.Figure()
         # Define custom tick values and labels
@@ -1055,11 +1046,24 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
             if len(self.steps[0].sources[sources_index].impinging_flux) > 0:
                 current_rgb = random_rgb()
                 rgb_10 = f'rgba({current_rgb}, 1)'
-                if self.steps[0].sources[sources_index].impinging_flux[0].value is not None:
-                    if self.steps[0].sources[sources_index].impinging_flux[0].time is not None:
-                        timestamp_array = hdf5_2_datetime(archive, f"{self.steps[0].sources[sources_index].impinging_flux[0].time.rsplit("/", 1)[0]}/timestamp") # fetch the hdf5 dataset from the already used path for time
+                if (
+                    self.steps[0].sources[sources_index].impinging_flux[0].value
+                    is not None
+                ):
+                    if (
+                        self.steps[0].sources[sources_index].impinging_flux[0].time
+                        is not None
+                    ):
+                        timestamp_array = hdf5_2_datetime(
+                            archive,
+                            f'{self.steps[0].sources[sources_index].impinging_flux[0].time.rsplit("/", 1)[0]}/timestamp',
+                        )  # fetch the hdf5 dataset from the already used path for time
                         value_array = HDF5Reference.read_dataset(
-                            archive, self.steps[0].sources[sources_index].impinging_flux[0].value
+                            archive,
+                            self.steps[0]
+                            .sources[sources_index]
+                            .impinging_flux[0]
+                            .value,
                         )
                         # Add baseline for each shutter
                         fig.add_trace(
@@ -1067,18 +1071,27 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                                 x=timestamp_array,
                                 y=[1 * sources_index for _ in value_array],
                                 mode='lines',
-                                name=f"{self.steps[0].sources[sources_index].epic_loop}" if self.steps[0].sources[sources_index].epic_loop is not None else "No name",
+                                name=f'{self.steps[0].sources[sources_index].epic_loop}'
+                                if self.steps[0].sources[sources_index].epic_loop
+                                is not None
+                                else 'No name',
                                 line=dict(color=rgb_10, width=2),
-                                showlegend=False, 
+                                showlegend=False,
                             ),
                         )
                         max_y = np.max(value_array)
                         fig.add_trace(
                             go.Scatter(
                                 x=timestamp_array,
-                                y=[value/max_y + 1 * sources_index for value in value_array],
+                                y=[
+                                    value / max_y + 1 * sources_index
+                                    for value in value_array
+                                ],
                                 mode='markers+lines',
-                                name=f"{self.steps[0].sources[sources_index].epic_loop}" if self.steps[0].sources[sources_index].epic_loop is not None else "No name",
+                                name=f'{self.steps[0].sources[sources_index].epic_loop}'
+                                if self.steps[0].sources[sources_index].epic_loop
+                                is not None
+                                else 'No name',
                                 line=dict(color=rgb_10, width=2),
                                 line_shape='hv',
                                 fill='tonexty',
@@ -1086,8 +1099,8 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                         )
 
                         # Define custom tick values and labels
-                        tickvals_y.append(1 * sources_index + 1) 
-                        ticktext_y.append(f"{max_y:.2e}")
+                        tickvals_y.append(1 * sources_index + 1)
+                        ticktext_y.append(f'{max_y:.2e}')
 
                         fig.update_layout(
                             template='plotly_white',
@@ -1105,7 +1118,7 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                                 title='Gas flows',
                                 tickfont=dict(color='#2A4CDF'),
                                 gridcolor='#EAEDFC',
-                                tickvals=tickvals_y, 
+                                tickvals=tickvals_y,
                                 ticktext=ticktext_y,
                             ),
                             showlegend=True,
@@ -1136,11 +1149,14 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
             and pyro_time is not None
             and pyro_value is not None
         ):
-
-            timestamp_array = hdf5_2_datetime(archive, f"{sub_time.rsplit("/", 1)[0]}/timestamp") # fetch the hdf5 dataset from the already used path for time
+            timestamp_array = hdf5_2_datetime(
+                archive, f'{sub_time.rsplit("/", 1)[0]}/timestamp'
+            )  # fetch the hdf5 dataset from the already used path for time
             value_array = HDF5Reference.read_dataset(archive, sub_value)
-            
-            pyrometer_timestamp = hdf5_2_datetime(archive, f"{pyro_time.rsplit("/", 1)[0]}/timestamp") # fetch the hdf5 dataset from the already used path for time
+
+            pyrometer_timestamp = hdf5_2_datetime(
+                archive, f'{pyro_time.rsplit("/", 1)[0]}/timestamp'
+            )  # fetch the hdf5 dataset from the already used path for time
             pyrometer_temperature = HDF5Reference.read_dataset(archive, pyro_value)
 
             # plotly temperature figure
@@ -1216,14 +1232,16 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                                 mode='lines',
                                 name=shutter.name,
                                 line=dict(color=rgb_10, width=2),
-                                showlegend=False, 
+                                showlegend=False,
                             ),
                         )
                         fig.add_trace(
                             go.Scatter(
                                 x=shutter.shutter_status.timestamp,
-                                y=[value + 1 * index
-                                    for value in shutter.shutter_status.value],
+                                y=[
+                                    value + 1 * index
+                                    for value in shutter.shutter_status.value
+                                ],
                                 mode='markers+lines',
                                 name=shutter.name,
                                 line=dict(color=rgb_10, width=2),
@@ -1263,7 +1281,7 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                     mirror='all',
                     showline=True,
                     gridcolor='#EAEDFC',
-                    #tickvals=tickvals,  # Set custom tick values
+                    # tickvals=tickvals,  # Set custom tick values
                     # ticktext=ticktext,  # Set custom tick labels
                 ),
                 yaxis=dict(
@@ -1528,11 +1546,11 @@ class ExperimentMbePDI(Experiment, EntryData):
                             lab_id=sample_id,
                             substrate=SubstrateReference(
                                 reference=sample_holder_position.substrate.reference
-                            )
+                            ),
                         )
                         filetype = 'yaml'
                         sample_filename = f'{sample_id}.archive.{filetype}'
-                        
+
                         sample_archive = EntryArchive(
                             m_context=archive.m_context,
                             data=sample_object,
@@ -1540,16 +1558,14 @@ class ExperimentMbePDI(Experiment, EntryData):
                         self.samples.append(
                             CompositeSystemReference(
                                 reference=create_archive(
-                            sample_archive.m_to_dict(),
-                            archive.m_context,
-                            sample_filename,
-                            filetype,
-                            logger,
-                        ),
-                        ))
-
-
-        
+                                    sample_archive.m_to_dict(),
+                                    archive.m_context,
+                                    sample_filename,
+                                    filetype,
+                                    logger,
+                                ),
+                            )
+                        )
 
         # search_result = search(
         #     owner="user",
