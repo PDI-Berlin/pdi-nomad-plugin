@@ -18,8 +18,6 @@
 
 import pandas as pd
 from epic_scraper.epicfileimport.epic_module import (
-    epic_hdf5_exporter,
-    epiclog_read_batch,
     extract_growth_messages,
 )
 from epic_scraper.epicfileimport.epic_module import (
@@ -73,19 +71,17 @@ from pdi_nomad_plugin.mbe.processes import (
     SubstrateHeaterTemperature,
 )
 from pdi_nomad_plugin.utils import (
-    create_archive,
-    fill_quantity,
-    handle_unit,
-    link_experiment,
-    create_hdf5_file,
-    xlsx_to_dict,
-    calculate_impinging_flux,
     add_impinging_flux_to_hdf5,
+    add_units_to_hdf5,
+    calculate_impinging_flux,
+    create_archive,
+    create_hdf5_file,
+    fill_datetime,
+    fill_quantity,
+    link_experiment,
     read_fitting,
     read_shutters,
-    fill_datetime,
-    add_units_to_hdf5,
-
+    xlsx_to_dict,
 )
 
 timezone = 'Europe/Berlin'
@@ -124,7 +120,14 @@ class ParserEpicPDI(MatchingParser):
         instrument_filename = f'{data_file[:-5]}.InstrumentMbePDI.archive.{filetype}'
 
         # Read excel file sheets
-        config_sheet, sources_sheet, gasmixing_sheet, chamber_sheet, pyrometry_sheet, lr_sheet = xlsx_to_dict(pd.ExcelFile(mainfile))
+        (
+            config_sheet,
+            sources_sheet,
+            gasmixing_sheet,
+            chamber_sheet,
+            pyrometry_sheet,
+            lr_sheet,
+        ) = xlsx_to_dict(pd.ExcelFile(mainfile))
 
         # Read Messages.txt file
         assert 'messages' in config_sheet and not config_sheet['messages'].empty, (
@@ -154,13 +157,17 @@ class ParserEpicPDI(MatchingParser):
         # Read Shutters.txt
         if 'shutters' in config_sheet and not config_sheet['shutters'].empty:
             file_path = f'{folder_path}{config_sheet["shutters"][0]}'
-            shutters = read_shutters(file_path, config_sheet, substrate_load_time, timezone)
+            shutters = read_shutters(
+                file_path, config_sheet, substrate_load_time, timezone
+            )
 
-        # # # # # HDF5 FILE CREATION 1/3 # # # # # 
+        # # # # # HDF5 FILE CREATION 1/3 # # # # #
         # WARNING: the ExperimentMbePDI normalize function reuses this method to overwrite the growth start time !
         # Every change made here should be reflected there, too
         hdf_filename = f'{data_file[:-5]}.h5'
-        create_hdf5_file(archive, folder_name, upload_path, substrate_load_time, hdf_filename)
+        create_hdf5_file(
+            archive, folder_name, upload_path, substrate_load_time, hdf_filename
+        )
 
         # instrument archive
         child_archives['instrument'].data = InstrumentMbePDI()
@@ -199,7 +206,7 @@ class ParserEpicPDI(MatchingParser):
         child_archives['process'].data.end_time = substrate_unload_time
         if child_archives['process'].data.datetime is None:
             child_archives['process'].data.datetime = substrate_load_time
-        child_archives['process'].data.hdf5_file = hdf_filename 
+        child_archives['process'].data.hdf5_file = hdf_filename
         child_archives['process'].data.data_file = f'{folder_name}/{data_file}'
         child_archives['process'].data.lab_id = f'{growthrun_id}'
         child_archives['process'].data.steps[
@@ -411,13 +418,24 @@ class ParserEpicPDI(MatchingParser):
                 time_vector = HDF5Reference.read_dataset(
                     archive, source_object.vapor_source.temperature.time
                 )
-                # # # # # HDF5 FILE CREATION 2/3 # # # # # 
+                # # # # # HDF5 FILE CREATION 2/3 # # # # #
                 # WARNING: the ExperimentMbePDI normalize function reuses this method to overwrite the growth start time !
                 # Every change made here should be reflected there, too
                 # The impinging flux modulated by shutters opening is being added to the HDF5 file
-                modulated_flux, a_param, t0_param_pint, bep_to_flux_pint = calculate_impinging_flux(logger, sources_row, fitting, temperature_pint, time_vector, shutters)
+                modulated_flux, a_param, t0_param_pint, bep_to_flux_pint = (
+                    calculate_impinging_flux(
+                        logger,
+                        sources_row,
+                        fitting,
+                        temperature_pint,
+                        time_vector,
+                        shutters,
+                    )
+                )
                 if modulated_flux is not None:
-                    group_name = add_impinging_flux_to_hdf5(archive, sources_row, modulated_flux, hdf_filename, temp_mv_time)
+                    group_name = add_impinging_flux_to_hdf5(
+                        archive, sources_row, modulated_flux, hdf_filename, temp_mv_time
+                    )
                     # fill in quantities
                     source_object.impinging_flux[0].bep_to_flux = bep_to_flux_pint
                     source_object.impinging_flux[0].t_0_parameter = t0_param_pint
@@ -527,11 +545,20 @@ class ParserEpicPDI(MatchingParser):
                 ].substrate_power.time = f'{hdf5_path}#/{subpower_time}'
             source_object = None  # reset source object at the end of each iteration
 
-        # # # # # HDF5 FILE CREATION 3/3 # # # # # 
+        # # # # # HDF5 FILE CREATION 3/3 # # # # #
         # WARNING: the ExperimentMbePDI normalize function reuses this method to overwrite the growth start time !
         # Every change made here should be reflected there, too
         # Complete the HDF5 file with the units and other derived datasets
-        add_units_to_hdf5(archive, logger, hdf_filename, sources_sheet, gasmixing_sheet, chamber_sheet, pyrometry_sheet, temp_mv_time)
+        add_units_to_hdf5(
+            archive,
+            logger,
+            hdf_filename,
+            sources_sheet,
+            gasmixing_sheet,
+            chamber_sheet,
+            pyrometry_sheet,
+            temp_mv_time,
+        )
 
         # create archives
         create_archive(
