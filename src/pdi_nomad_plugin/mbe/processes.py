@@ -14,6 +14,7 @@ from nomad.datamodel.metainfo.annotations import (
     H5WebAnnotation,
     SectionProperties,
 )
+from nomad.units import ureg
 from nomad.datamodel.metainfo.basesections import (
     Component,
     CompositeSystemReference,
@@ -83,12 +84,28 @@ from pdi_nomad_plugin.utils import (
     handle_section,
     link_growth_process,
     set_sample_status,
+    create_hdf5_file,
+    xlsx_to_dict,
+    calculate_impinging_flux,
+    add_impinging_flux_to_hdf5,
+    read_fitting,
+    read_shutters,
+    add_units_to_hdf5,
+
+)
+
+from epic_scraper.epicfileimport.epic_module import (
+    epic_hdf5_exporter,
+    epiclog_read_batch,
+    filename_2_dataframename as fn2dfn,
 )
 
 configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:processes_schema')
 
 m_package = SchemaPackage()
 
+
+timezone = 'Europe/Berlin'
 
 def random_rgb():
     return (
@@ -879,6 +896,13 @@ class GrowthStepMbeManualMetadataPDI(ProcessStep):
         description='The date and time when this process was finished.',
         a_eln=dict(component='DateTimeEditQuantity', label='ending time'),
     )
+    target_material = Quantity(
+        type=str,
+        shape=['*'],
+        a_eln=ELNAnnotation(
+            component='StringEditQuantity',
+        ),
+    )
 
 
 class GrowthMbeManualMetadataPDI(Process):
@@ -919,19 +943,23 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
         a_eln=ELNAnnotation(
             properties=SectionProperties(
                 order=[
-                    'name',
                     'method',
+                    'name',
+                    'lab_id',
                     'data_file',
+                    'hdf5_file',
                     'start_time',
                     'end_time',
                     'datetime',
                     'recalculate_growth_start_time',
                     'duration',
+                    'tags',
+                    'description',
                 ],
             ),
-            # hide=[
-            #     'folder_path',
-            # ]
+            hide=[
+                'location',
+            ]
         ),
         label_quantity='lab_id',
         categories=[PDIMBECategory],
@@ -942,7 +970,12 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
         #     ]
         # ),
     )
-
+    name = Quantity(
+        type=str,
+        description="""
+        A short and descriptive name for this growth process.
+        """,
+    )
     method = Quantity(
         type=str,
         default='MBE PDI',
@@ -950,22 +983,21 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
     start_time = Quantity(
         type=Datetime,
         description='The date and time when the sample was loaded from growth chamber.',
-        a_eln=dict(component='DateTimeEditQuantity', label='substrate load time'),
+        a_eln=dict(#component='DateTimeEditQuantity', 
+            label='substrate load time'),
     )
     end_time = Quantity(
         type=Datetime,
         description='The date and time when the sample was unloaded from growth chamber.',
-        a_eln=dict(component='DateTimeEditQuantity', label='substrate unload time'),
-    )
-    recalculate_growth_start_time = Quantity(
-        type=bool,
-        description='If true, the growth start time will be recalculated based on the date found in growth start time field.',
-        a_eln=dict(component='BoolEditQuantity', label='recalculate growth start time'),
+        a_eln=dict(#component='DateTimeEditQuantity', 
+            label='substrate unload time'),
     )
     datetime = Quantity(
         type=Datetime,
         description='The date and time when the growth was started.',
-        a_eln=dict(component='DateTimeEditQuantity', label='growth start time'),
+        a_eln=dict(
+            component='DateTimeEditQuantity', 
+            label='growth start time'),
     )
     tags = Quantity(
         type=str,
@@ -977,25 +1009,21 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
     )
     data_file = Quantity(
         type=str,
-        description='Upload here the spreadsheet file containing the deposition control data',
-        # a_tabular_parser={
-        #     "parsing_options": {"comment": "#"},
-        #     "mapping_options": [
-        #         {
-        #             "mapping_mode": "row",
-        #             "file_mode": "multiple_new_entries",
-        #             "sections": ["#root"],
-        #         }
-        #     ],
-        # },
+        description='Spreadsheet file containing the deposition control data',
         a_browser={'adaptor': 'RawFileAdaptor'},
-        a_eln={'component': 'FileEditQuantity'},
+        #a_eln={'component': 'FileEditQuantity'},
+    )
+    hdf5_file = Quantity(
+        type=str,
+        description='The HDF5 file containing the data for this growth process.',
+        a_browser={'adaptor': 'RawFileAdaptor'},
+        #a_eln={'component': 'FileEditQuantity'},
     )
     description = Quantity(
         type=str,
         description='description',
         a_eln={'component': 'StringEditQuantity'},
-        label='Notes',
+        label='notes',
     )
     lab_id = Quantity(
         type=str,
@@ -1003,13 +1031,8 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
         The ID found in Messages.txt raw file.
         It is composed by the Growth Run ID and the Sample Holder ID.
         """,
-        a_eln=dict(component='StringEditQuantity', label='Growth process ID'),
-    )
-    hdf5_file = Quantity(
-        type=str,
-        description='The HDF5 file containing the data for this growth process.',
-        a_browser={'adaptor': 'RawFileAdaptor'},
-        a_eln={'component': 'FileEditQuantity'},
+        a_eln=dict(# component='StringEditQuantity', 
+                   label='growth process ID'),
     )
     steps = SubSection(
         section_def=GrowthStepMbePDI,
@@ -1025,14 +1048,6 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
     )
 
     def normalize(self, archive, logger):
-        # recalculating the growth start time
-
-        # if self.recalculate_growth_start_time:
-        #     self.recalculate_growth_start_time = False
-        #     dataframe_list = epiclog_read_batch(folder_name, upload_path)
-        #     hdf_filename = archive.m_context.raw_file(self.hdf5_file)
-        #     with archive.m_context.raw_file(hdf_filename, 'w') as newfile:
-        #         epic_hdf5_exporter(newfile.name, dataframe_list, self.recalculate_growth_start_time)
 
         # plotly figure list
         self.figures = []
@@ -1406,11 +1421,19 @@ class ExperimentMbePDI(Experiment, EntryData):
                 order=[
                     'name',
                     'lab_id',
+                    'start_time',
+                    'end_time',
+                    'datetime',
+                    'recalculate_growth_start_time',
+                    'data_file',
+                    'hdf5_file',
+                    'tags',
+                    'description',
                 ]
             ),
-            hide=[
-                'datetime',
-            ],
+            # hide=[
+            #     'datetime',
+            # ],
         ),
     )
 
@@ -1425,12 +1448,40 @@ class ExperimentMbePDI(Experiment, EntryData):
             component='StringEditQuantity',
         ),
     )
-    target_material = Quantity(
+    start_time = Quantity(
+        type=Datetime,
+        description='The date and time when the sample was loaded from growth chamber.',
+        a_eln=dict(#component='DateTimeEditQuantity', 
+                   label='substrate load time'),
+    )
+    end_time = Quantity(
+        type=Datetime,
+        description='The date and time when the sample was unloaded from growth chamber.',
+        a_eln=dict(#component='DateTimeEditQuantity', 
+                   label='substrate unload time'),
+    )
+    datetime = Quantity(
+        type=Datetime,
+        description='The date and time when the growth was started.',
+        a_eln=dict(component='DateTimeEditQuantity', 
+                   label='growth start time'),
+    )
+    recalculate_growth_start_time = Quantity(
+        type=bool,
+        description='If true, the growth start time will be recalculated based on the date found in growth start time field.',
+        a_eln=dict(component='BoolEditQuantity', label='recalculate growth start time'),
+    )
+    data_file = Quantity(
         type=str,
-        shape=['*'],
-        a_eln=ELNAnnotation(
-            component='StringEditQuantity',
-        ),
+        description='Spreadsheet file containing the deposition control data',
+        a_browser={'adaptor': 'RawFileAdaptor'},
+        #a_eln={'component': 'FileEditQuantity'},
+    )
+    hdf5_file = Quantity(
+        type=str,
+        description='The HDF5 file containing the data for this growth process.',
+        a_browser={'adaptor': 'RawFileAdaptor'},
+        #a_eln={'component': 'FileEditQuantity'},
     )
     lab_id = Quantity(
         type=str,
@@ -1440,7 +1491,7 @@ class ExperimentMbePDI(Experiment, EntryData):
         """,
         a_eln=ELNAnnotation(
             component='StringEditQuantity',
-            label='Growth process ID',
+            label='growth process ID',
         ),
     )
     growth_run_logfiles = SubSection(
@@ -1464,34 +1515,34 @@ class ExperimentMbePDI(Experiment, EntryData):
     )
 
     def normalize(self, archive, logger):
-        archive_sections = (
-            attr
-            for attr in vars(self).values()
-            if isinstance(attr, ArchiveSection) and not isinstance(attr, EntryArchive)
-            # not isinstance(attr, EntryArchive) avoid including Experiment itself
-        )
-        step_list = []
-        for section in archive_sections:
-            try:
-                if section is not None:
-                    step_list.extend(handle_section(section))
-            except (AttributeError, TypeError, NameError) as e:
-                print(f'An error occurred in section XXX {section}: {e}')
-        self.steps = [step for step in step_list if step is not None]
+        # archive_sections = (
+        #     attr
+        #     for attr in vars(self).values()
+        #     if isinstance(attr, ArchiveSection) and not isinstance(attr, EntryArchive)
+        #     # not isinstance(attr, EntryArchive) avoid including Experiment itself
+        # )
+        # step_list = []
+        # for section in archive_sections:
+        #     try:
+        #         if section is not None:
+        #             step_list.extend(handle_section(section))
+        #     except (AttributeError, TypeError, NameError) as e:
+        #         print(f'An error occurred in section XXX {section}: {e}')
+        # self.steps = [step for step in step_list if step is not None]
 
-        activity_lists = (
-            attr for attr in vars(self).values() if isinstance(attr, list)
-        )
-        for activity_list in activity_lists:
-            for activity in activity_list:
-                if isinstance(activity, ArchiveSection):
-                    try:
-                        step_list.extend(handle_section(activity))
-                    except (AttributeError, TypeError, NameError) as e:
-                        print(f'An error occurred in section YYY {section}: {e}')
-        self.steps = [step for step in step_list if step is not None]
+        # activity_lists = (
+        #     attr for attr in vars(self).values() if isinstance(attr, list)
+        # )
+        # for activity_list in activity_lists:
+        #     for activity in activity_list:
+        #         if isinstance(activity, ArchiveSection):
+        #             try:
+        #                 step_list.extend(handle_section(activity))
+        #             except (AttributeError, TypeError, NameError) as e:
+        #                 print(f'An error occurred in section YYY {section}: {e}')
+        # self.steps = [step for step in step_list if step is not None]
 
-        archive.workflow2 = None
+        # archive.workflow2 = None
         super().normalize(archive, logger)
 
         # fill lab_id if exp is linked to growth archive
@@ -1512,6 +1563,27 @@ class ExperimentMbePDI(Experiment, EntryData):
             if growth_ref is not None:
                 self.growth_run_logfiles = GrowthMbePDIReference(reference=growth_ref)
                 self.growth_run_logfiles.normalize(archive, logger)
+
+        # fill metadata from growth run to experiment
+        if self.growth_run_logfiles is not None:
+            if self.growth_run_logfiles.reference:
+                data_file = self.growth_run_logfiles.reference.data_file
+                hdf5_file = self.growth_run_logfiles.reference.hdf5_file
+                load_time = self.growth_run_logfiles.reference.start_time
+                unload_time = self.growth_run_logfiles.reference.end_time
+                datetime = self.growth_run_logfiles.reference.datetime
+                if data_file is not None:
+                    self.data_file = data_file
+                if hdf5_file is not None:
+                    self.hdf5_file = hdf5_file
+                if load_time is not None:
+                    self.start_time = load_time
+                if unload_time is not None:
+                    self.end_time = unload_time
+                if datetime is not None and self.recalculate_growth_start_time is not True:
+                    self.datetime = datetime
+                if self.recalculate_growth_start_time is None:
+                    self.recalculate_growth_start_time = False
 
         # setting the sample status
         if self.substrate_holder:
@@ -1566,6 +1638,56 @@ class ExperimentMbePDI(Experiment, EntryData):
                                 ),
                             )
                         )
+
+        # recalculate the growth start time and rewrite the HDF5 file
+        if self.recalculate_growth_start_time:
+            self.recalculate_growth_start_time = False
+            folder_name = f"/{self.data_file.rsplit('/', 1)[0]}"
+            upload_path = archive.m_context.raw_path()
+            create_hdf5_file(archive, folder_name, upload_path, self.datetime, self.hdf5_file)
+            mainfile = upload_path + "/" + self.data_file
+            config_sheet, sources_sheet, gasmixing_sheet, chamber_sheet, pyrometry_sheet, lr_sheet = xlsx_to_dict(pd.ExcelFile(mainfile))
+            # Read Fitting.txt
+            if (
+                'flux_calibration' in config_sheet
+                and not config_sheet['flux_calibration'].empty
+            ):
+                file_path = f'{upload_path}{folder_name}/{config_sheet["flux_calibration"][0]}'
+                fitting = read_fitting(file_path, config_sheet)
+            
+            # Read Shutters.txt
+            if 'shutters' in config_sheet and not config_sheet['shutters'].empty:
+                file_path = f'{upload_path}{folder_name}/{config_sheet["shutters"][0]}'
+                shutters = read_shutters(file_path, config_sheet, self.datetime, timezone)
+            for _, sources_row in sources_sheet.iterrows():
+                if (
+                    sources_row['EPIC_loop']
+                    and fitting is not None
+                    and sources_row['source_type'] != 'SUB'
+                ):
+                    # prepare variables for impinging flux calculation
+                    temperature_pint = None
+                    time_vector = None
+                    for source_object in self.growth_run_logfiles.reference.steps[0].sources:
+                        if source_object.epic_loop != sources_row['EPIC_loop']:
+                            continue
+                        else:
+                            temperature_pint = ureg.Quantity(
+                                HDF5Reference.read_dataset(
+                                    archive, source_object.vapor_source.temperature.value
+                                )[:],
+                                ureg('°C'),
+                            )
+                            time_vector = HDF5Reference.read_dataset(
+                                archive, source_object.vapor_source.temperature.time
+                            )
+                            
+                    modulated_flux, _, _, _ = calculate_impinging_flux(logger, sources_row, fitting, temperature_pint, time_vector, shutters)
+                    if modulated_flux is not None:
+                        add_impinging_flux_to_hdf5(archive, sources_row, modulated_flux, self.hdf5_file, f'{fn2dfn(sources_row["temp_mv"])}/time')
+                    
+            add_units_to_hdf5(archive, logger, self.hdf5_file, sources_sheet, gasmixing_sheet, chamber_sheet, pyrometry_sheet, f'{fn2dfn(sources_row["temp_mv"])}/time')
+                
 
         # search_result = search(
         #     owner="user",
