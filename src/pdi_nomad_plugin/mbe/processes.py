@@ -990,11 +990,11 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
             label='substrate unload time'
         ),
     )
-    datetime = Quantity(
-        type=Datetime,
-        description='The date and time when the growth was started.',
-        a_eln=dict(component='DateTimeEditQuantity', label='growth start time'),
-    )
+    # datetime = Quantity(
+    #     type=Datetime,
+    #     description='The date and time when the growth was started.',
+    #     a_eln=dict(component='DateTimeEditQuantity', label='growth start time'),
+    # )
     tags = Quantity(
         type=str,
         shape=['*'],
