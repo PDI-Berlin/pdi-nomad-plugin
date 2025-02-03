@@ -21,9 +21,13 @@ import math
 import os
 from typing import TYPE_CHECKING
 
+import h5py
 import numpy as np
 import pandas as pd
 import yaml
+
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 if TYPE_CHECKING:
     from structlog.stdlib import (
@@ -31,7 +35,11 @@ if TYPE_CHECKING:
     )
 from epic_scraper.epicfileimport.epic_module import (
     epiclog_read,  # TODO maybe use epiclog_read_handle_empty instead
+    epic_hdf5_exporter,
+    epiclog_read_batch,
+    filename_2_dataframename as fn2dfn,
 )
+
 from nomad.datamodel.context import ClientContext
 from nomad.datamodel.data import ArchiveSection
 from nomad.datamodel.metainfo.basesections import (
@@ -40,6 +48,8 @@ from nomad.datamodel.metainfo.basesections import (
 from nomad.units import ureg
 from nomad.utils import hash
 
+
+timezone = 'Europe/Berlin'
 
 def clean_name(name):
     """
@@ -142,6 +152,26 @@ def create_archive(
     #             include_others=True,
     #         )
     #     )  # Upload(upload_id=matches["upload_id"][0]))
+
+
+def fill_datetime(date: pd.Series, time: pd.Series) -> datetime.date:
+    return datetime.combine(
+        datetime.strptime(
+            date,
+            '%d/%m/%Y',
+        ),
+        datetime.strptime(time, '%H:%M:%S').time(),
+    ).replace(tzinfo=ZoneInfo(timezone))
+
+
+def set_dataset_unit(hdf_file, dataset_name, attribute_value):
+    """
+    Set the unit attribute for a dataset in an HDF5 file.
+
+    """
+    if dataset_name in hdf_file:
+        dataset = hdf_file[dataset_name]
+        dataset.attrs['units'] = attribute_value
 
 
 def is_activity_section(section):
@@ -695,3 +725,267 @@ def merge_sections(  # noqa: PLR0912
                 logger.warning(warning)
             else:
                 print(warning)
+
+def create_hdf5_file(archive, folder_name, upload_path, growth_starttime, hdf5_filename):
+    """
+    Creates an HDF5 file from the epic log .txt files in the folder_name.
+    """
+
+    dataframe_list = epiclog_read_batch(folder_name, upload_path)
+    with archive.m_context.raw_file(hdf5_filename, 'w') as newfile:
+        epic_hdf5_exporter(newfile.name, dataframe_list, growth_starttime)
+
+def xlsx_to_dict(xlsx):
+    """
+    Extracts the sheets from an xlsx file and returns them as a dictionary of DataFrames.
+    """
+    sheets = [
+        'MBE config files',
+        'MBE sources',
+        'MBE gas mixing',
+        'MBE chamber env',
+        'pyrometry config',
+        'LR settings',
+    ]
+    # Read the sheets into a dictionary of DataFrames
+    sheets_dict = {
+        sheet: pd.read_excel(xlsx, sheet, comment='#').rename(
+            columns=lambda x: x.strip()
+        )
+        for sheet in sheets
+    }
+    # Access the individual DataFrames
+    config_sheet = sheets_dict['MBE config files']
+    sources_sheet = sheets_dict['MBE sources']
+    gasmixing_sheet = sheets_dict['MBE gas mixing']
+    chamber_sheet = sheets_dict['MBE chamber env']
+    pyrometry_sheet = sheets_dict['pyrometry config']
+    lr_sheet = sheets_dict['LR settings']
+
+    return config_sheet, sources_sheet, gasmixing_sheet, chamber_sheet, pyrometry_sheet, lr_sheet
+
+
+def calculate_impinging_flux(logger, sources_row, fitting, temperature_pint, time_vector, shutters):
+
+        if sources_row['EPIC_loop'] in fitting.keys():
+            a_param, t0_param = fitting[sources_row['EPIC_loop']][
+                'Coeff'
+            ].split(',')
+            t0_param_pint = ureg.Quantity(float(t0_param), ureg('°C'))
+            bep_to_flux_pint = ureg.Quantity(
+                float(fitting[sources_row['EPIC_loop']]['BEPtoFlux']),
+                ureg('nanometer ** -2 * second ** -1 * mbar ** -1'),
+            )
+            # with source_object.vapor_source.temperature.value as temperature: # Native parsing mode
+
+            impinging_flux = (
+                bep_to_flux_pint.magnitude
+                * np.exp(float(a_param))
+                * np.exp(
+                    t0_param_pint.to('kelvin').magnitude
+                    / temperature_pint.to('kelvin').magnitude
+                )
+            )
+
+            # make shutter status a vector
+            shutter_vector = np.zeros(len(time_vector))
+            if shutters is not None:
+                # Iterate over the shutters DataFrame
+                for _, shutter_status in shutters.iterrows():
+                    shutter_change_time = shutter_status['TimeDifference']
+                    shutter_value = shutter_status[
+                        f'{sources_row["EPIC_loop"]}_Sh'
+                    ]
+
+                    # Find the index in time_vector where the shutter change occurs
+                    for i, time_value in enumerate(time_vector):
+                        if time_value >= shutter_change_time:
+                            shutter_vector[i:] = shutter_value
+                            break
+            else:
+                shutter_vector = np.ones(len(time_vector))
+                logger.error("No Shutters.txt file found. Cannot modulate the flux.")
+
+            modulated_flux = impinging_flux * shutter_vector
+        else:
+            modulated_flux = None
+        return modulated_flux, a_param, t0_param_pint, bep_to_flux_pint
+
+
+
+
+def add_impinging_flux_to_hdf5(archive, sources_row, modulated_flux, hdf_filename, temp_mv_time):
+
+    with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
+        with h5py.File(newfile.name, 'a') as hdf:
+            group_name = f'{sources_row["EPIC_loop"]}_impinging_flux'
+            group = hdf.create_group(group_name)
+            value = group.create_dataset('value', data=modulated_flux)
+            value.attrs['units'] = 'nanometer ** -2 * second ** -1'
+            value.attrs['long_name'] = (
+                f'{sources_row["EPIC_loop"]} impinging flux (1/(nm^2*s^1))'
+            )
+            hdf[f'/{group_name}/time'] = hdf[
+                f'/{temp_mv_time}'
+            ]  # relative time dataset from the temperature log file
+            timestamp = f'{fn2dfn(sources_row["temp_mv"])}/timestamp'
+            hdf[f'/{group_name}/timestamp'] = hdf[
+                f'/{timestamp}'
+            ]  # relative time dataset from the temperature log file
+            group.attrs['axes'] = 'time'
+            group.attrs['signal'] = 'value'
+            group.attrs['NX_class'] = 'NXdata'
+    return group_name
+
+def read_fitting(file_path, config_sheet):
+    fitting = None
+    if pd.notna(config_sheet['flux_calibration'].iloc[0]) and os.path.exists(
+        file_path
+    ):
+        with open(
+            file_path,
+            encoding='utf-8',
+        ) as file:
+            fitting = {}
+            for line in file:
+                if '#' in line:
+                    epic_loop = line.split('#')[1].strip()
+                    fitting[epic_loop] = {}
+                    for _ in range(4):
+                        key, value = file.readline().split('=')
+                        fitting[epic_loop][key] = value
+    return fitting
+
+def read_shutters(file_path, config_sheet, growth_start_time, timezone):
+    if pd.notna(config_sheet['shutters'].iloc[0]) and os.path.exists(file_path):
+        with open(
+            file_path,
+            encoding='utf-8',
+        ) as file:
+            shutters = pd.read_csv(file, skiprows=2)
+        shutters["'Date&Time"] = pd.to_datetime(
+            shutters["'Date&Time"], format='%d/%m/%Y %H:%M:%S.%f'
+        )
+        shutters['TimeDifference'] = (
+            shutters["'Date&Time"].dt.tz_localize(timezone)
+            - growth_start_time
+        ).dt.total_seconds()
+        return shutters
+
+# TODO get a better code for this function
+def add_units_to_hdf5(archive, logger, hdf_filename, sources_sheet, gasmixing_sheet, chamber_sheet, pyrometry_sheet, temp_mv_time):
+
+        with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
+            with h5py.File(newfile.name, 'a') as hdf:
+                set_dataset_unit(
+                    hdf, f'{fn2dfn(pyrometry_sheet["temperature"])}/time', 's'
+                )
+
+                unit = handle_unit(pyrometry_sheet, 'temperature_unit')
+                if unit:
+                    set_dataset_unit(
+                        hdf, f'{fn2dfn(pyrometry_sheet["temperature"])}/value', unit
+                    )
+
+                set_dataset_unit(
+                    hdf, f'{fn2dfn(chamber_sheet["pressure_1"])}/time', 's'
+                )
+                set_dataset_unit(
+                    hdf, f'{fn2dfn(chamber_sheet["pressure_2"])}/time', 's'
+                )
+                set_dataset_unit(hdf, f'{fn2dfn(chamber_sheet["bep"])}/time', 's')
+
+                unit = handle_unit(chamber_sheet, 'pressure_1_unit')
+                if unit:
+                    set_dataset_unit(
+                        hdf, f'{fn2dfn(chamber_sheet["pressure_1"])}/value', unit
+                    )
+                unit = handle_unit(chamber_sheet, 'pressure_2_unit')
+                if unit:
+                    set_dataset_unit(
+                        hdf, f'{fn2dfn(chamber_sheet["pressure_2"])}/value', unit
+                    )
+                unit = handle_unit(chamber_sheet, 'bep_unit')
+                if unit:
+                    set_dataset_unit(hdf, f'{fn2dfn(chamber_sheet["bep"])}/value', unit)
+
+        for _, sources_row in sources_sheet.iterrows():
+            if sources_row['source_type'] == 'PLASMA':
+                with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
+                    with h5py.File(newfile.name, 'a') as hdf:
+                        set_dataset_unit(
+                            hdf, f'{fn2dfn(sources_row["f_power"])}/time', 's'
+                        )
+                        unit = handle_unit(sources_row, 'f_power_unit')
+                        if unit:
+                            set_dataset_unit(
+                                hdf, f'{fn2dfn(sources_row["f_power"])}/value', unit
+                            )
+                        set_dataset_unit(
+                            hdf, f'{fn2dfn(sources_row["r_power"])}/time', 's'
+                        )
+                        unit = handle_unit(sources_row, 'r_power_unit')
+                        if unit:
+                            set_dataset_unit(
+                                hdf, f'{fn2dfn(sources_row["r_power"])}/value', unit
+                            )
+            if (
+                sources_row['source_type'] == 'SFC'
+                or sources_row['source_type'] == 'DFC'
+                or sources_row['source_type'] == 'CLC'
+            ):
+                with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
+                    with h5py.File(newfile.name, 'a') as hdf:
+                        set_dataset_unit(hdf, temp_mv_time, 's')
+                        unit = handle_unit(sources_row, 'temp_mv_unit')
+                        if unit:
+                            set_dataset_unit(
+                                hdf, f'{fn2dfn(sources_row["temp_mv"])}/value', unit
+                            )
+
+            if sources_row['source_type'] == 'PLASMA':
+                for gas_index in reversed(gasmixing_sheet.index):
+                    gas_row = gasmixing_sheet.loc[
+                        gas_index
+                    ]  # this allows to loop in reverse order. Use .iterrows() instead
+
+                    if gas_row['date'] and gas_row['time']:
+                        gasmixing_datetime = fill_datetime(
+                            gas_row['date'], gas_row['time']
+                        )
+                        logger.info(f'This mixing was done at: {gasmixing_datetime}')
+                        with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
+                            with h5py.File(newfile.name, 'a') as hdf:
+                                set_dataset_unit(
+                                    hdf, f'{fn2dfn(gas_row["mfc_flow"])}/time', 's'
+                                )
+                                unit = handle_unit(gas_row, 'mfc_flow_unit')
+                                if unit:
+                                    set_dataset_unit(
+                                        hdf,
+                                        f'{fn2dfn(gas_row["mfc_flow"])}/value',
+                                        unit,
+                                    )
+            if sources_row['source_type'] == 'DFC':
+                with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
+                    with h5py.File(newfile.name, 'a') as hdf:
+                        set_dataset_unit(
+                            hdf, f'{fn2dfn(sources_row["hl_temp_mv"])}/time', 's'
+                        )
+                        unit = handle_unit(sources_row, 'hl_temp_mv_unit')
+                        if unit:
+                            set_dataset_unit(
+                                hdf, f'{fn2dfn(sources_row["hl_temp_mv"])}/value', unit
+                            )
+            if sources_row['source_type'] == 'SUB':
+                with archive.m_context.raw_file(hdf_filename, 'a') as newfile:
+                    with h5py.File(newfile.name, 'a') as hdf:
+                        # parsing units in hdf5 file
+                        set_dataset_unit(
+                            hdf, f'{fn2dfn(sources_row["temp_mv"])}/time', 's'
+                        )
+                        unit = handle_unit(sources_row, 'temp_mv_unit')
+                        if unit:
+                            set_dataset_unit(
+                                hdf, f'{fn2dfn(sources_row["temp_mv"])}/value', unit
+                            )
