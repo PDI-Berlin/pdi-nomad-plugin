@@ -838,7 +838,7 @@ def add_impinging_flux_to_hdf5(
             timestamp = f'{fn2dfn(sources_row["temp_mv"])}/timestamp'
             hdf[f'/{group_name}/timestamp'] = hdf[
                 f'/{timestamp}'
-            ]  # relative time dataset from the temperature log file
+            ]  # absolute time dataset from the temperature log file
             group.attrs['axes'] = 'time'
             group.attrs['signal'] = 'value'
             group.attrs['NX_class'] = 'NXdata'
