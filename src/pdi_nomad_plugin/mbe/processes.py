@@ -45,6 +45,7 @@ from nomad.metainfo import (
 from nomad.units import ureg
 from nomad_material_processing.general import (
     SubstrateReference,
+    ThinFilmReference,
     TimeSeries,
 )
 from nomad_material_processing.vapor_deposition.cvd.general import (
@@ -81,7 +82,7 @@ from pdi_nomad_plugin.mbe.instrument import (
     Shutter,
     SourcePDI,
 )
-from pdi_nomad_plugin.mbe.materials import ThinFilmStackMbePDI
+from pdi_nomad_plugin.mbe.materials import ThinFilmMbe, ThinFilmStackMbePDI
 from pdi_nomad_plugin.utils import (
     add_impinging_flux_to_hdf5,
     add_units_to_hdf5,
@@ -1053,28 +1054,19 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
         # Define custom tick values and labels
         tickvals_y = []
         ticktext_y = []
-        for sources_index in range(len(self.steps[0].sources)):
-            if len(self.steps[0].sources[sources_index].impinging_flux) > 0:
+        for sources_index, source in enumerate(self.steps[0].sources):
+            if len(source.impinging_flux) > 0:
                 current_rgb = random_rgb()
                 rgb_10 = f'rgba({current_rgb}, 1)'
-                if (
-                    self.steps[0].sources[sources_index].impinging_flux[0].value
-                    is not None
-                ):
-                    if (
-                        self.steps[0].sources[sources_index].impinging_flux[0].time
-                        is not None
-                    ):
+                if source.impinging_flux[0].value is not None:
+                    if source.impinging_flux[0].time is not None:
                         timestamp_array = hdf5_2_datetime(
                             archive,
-                            f'{self.steps[0].sources[sources_index].impinging_flux[0].time.rsplit("/", 1)[0]}/timestamp',
+                            f'{source.impinging_flux[0].time.rsplit("/", 1)[0]}/timestamp',
                         )  # fetch the hdf5 dataset from the already used path for time
                         value_array = HDF5Reference.read_dataset(
                             archive,
-                            self.steps[0]
-                            .sources[sources_index]
-                            .impinging_flux[0]
-                            .value,
+                            source.impinging_flux[0].value,
                         )
                         # Add baseline for each shutter
                         fig.add_trace(
@@ -1082,9 +1074,8 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                                 x=timestamp_array,
                                 y=[1 * sources_index for _ in value_array],
                                 mode='lines',
-                                name=f'{self.steps[0].sources[sources_index].epic_loop}'
-                                if self.steps[0].sources[sources_index].epic_loop
-                                is not None
+                                name=f'{source.epic_loop}'
+                                if source.epic_loop is not None
                                 else 'No name',
                                 line=dict(color=rgb_10, width=2),
                                 showlegend=False,
@@ -1099,9 +1090,8 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                                     for value in value_array
                                 ],
                                 mode='markers+lines',
-                                name=f'{self.steps[0].sources[sources_index].epic_loop}'
-                                if self.steps[0].sources[sources_index].epic_loop
-                                is not None
+                                name=f'{source.epic_loop}'
+                                if source.epic_loop is not None
                                 else 'No name',
                                 line=dict(color=rgb_10, width=2),
                                 line_shape='hv',
@@ -1612,15 +1602,42 @@ class ExperimentMbePDI(Experiment, EntryData):
                 self.samples = []
                 for sample_holder_position in self.substrate_holder.reference.positions:
                     if sample_holder_position.substrate:
+                        filetype = 'yaml'
                         sample_id = f'{growth_id}_{sample_holder_position.name}'
-                        sample_object = ThinFilmStackMbePDI(
-                            name=sample_holder_position.substrate.name,
+                        layer_object = ThinFilmMbe(
+                            name=f'Layer {sample_id}',
                             lab_id=sample_id,
+                        )
+                        layer_archive = EntryArchive(
+                            m_context=archive.m_context,
+                            data=layer_object,
+                        )
+                        layer_filename = f'{sample_id}_layer.archive.{filetype}'
+                        layer_reference = create_archive(
+                            layer_archive.m_to_dict(),
+                            archive.m_context,
+                            layer_filename,
+                            filetype,
+                            logger,
+                        )
+                        sample_object = ThinFilmStackMbePDI(
+                            name=f'{sample_holder_position.substrate.name} {sample_id}',
+                            lab_id=f'{sample_holder_position.substrate.lab_id} {sample_id}',
+                            datetime=self.datetime,
                             substrate=SubstrateReference(
                                 reference=sample_holder_position.substrate.reference
                             ),
                         )
-                        filetype = 'yaml'
+                        # TODO check why m_add_sub_section does not work
+                        # sample_object.m_add_sub_section(
+                        #             ThinFilmStackMbePDI.layers, ThinFilmReference(
+                        #         reference=layer_reference,
+                        #         ))
+                        sample_object.layers.append(
+                            ThinFilmReference(
+                                reference=layer_reference,
+                            )
+                        )
                         sample_filename = f'{sample_id}.archive.{filetype}'
 
                         sample_archive = EntryArchive(
@@ -1657,6 +1674,7 @@ class ExperimentMbePDI(Experiment, EntryData):
                 lr_sheet,
             ) = xlsx_to_dict(pd.ExcelFile(mainfile))
             # Read Fitting.txt
+            fitting = None
             if (
                 'flux_calibration' in config_sheet
                 and not config_sheet['flux_calibration'].empty
@@ -1667,6 +1685,7 @@ class ExperimentMbePDI(Experiment, EntryData):
                 fitting = read_fitting(file_path, config_sheet)
 
             # Read Shutters.txt
+            shutters = None
             if 'shutters' in config_sheet and not config_sheet['shutters'].empty:
                 file_path = f'{upload_path}{folder_name}/{config_sheet["shutters"][0]}'
                 shutters = read_shutters(
