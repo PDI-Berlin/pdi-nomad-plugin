@@ -147,6 +147,7 @@ class ParserEpicPDI(MatchingParser):
         growthrun_id = growth_id.split('@')[0] if growth_id else None
 
         # Read Fitting.txt
+        fitting = None
         if (
             'flux_calibration' in config_sheet
             and not config_sheet['flux_calibration'].empty
@@ -155,6 +156,7 @@ class ParserEpicPDI(MatchingParser):
             fitting = read_fitting(file_path, config_sheet)
 
         # Read Shutters.txt
+        shutters = None
         if 'shutters' in config_sheet and not config_sheet['shutters'].empty:
             file_path = f'{folder_path}{config_sheet["shutters"][0]}'
             shutters = read_shutters(
@@ -405,6 +407,7 @@ class ParserEpicPDI(MatchingParser):
                 sources_row['EPIC_loop']
                 and fitting is not None
                 and sources_row['source_type'] != 'SUB'
+                and hasattr(source_object.vapor_source, 'temperature')
             ):
                 # fill in quantities
                 source_object.epic_loop = sources_row['EPIC_loop']

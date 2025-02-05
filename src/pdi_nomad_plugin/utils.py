@@ -779,6 +779,9 @@ def xlsx_to_dict(xlsx):
 def calculate_impinging_flux(
     logger, sources_row, fitting, temperature_pint, time_vector, shutters
 ):
+    a_param = None
+    t0_param_pint = None
+    bep_to_flux_pint = None
     if sources_row['EPIC_loop'] in fitting.keys():
         a_param, t0_param = fitting[sources_row['EPIC_loop']]['Coeff'].split(',')
         t0_param_pint = ureg.Quantity(float(t0_param), ureg('°C'))
