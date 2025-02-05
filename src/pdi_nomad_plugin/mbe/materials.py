@@ -1,4 +1,3 @@
-from nomad.config import config
 from nomad.datamodel.data import EntryData
 from nomad.datamodel.metainfo.annotations import (
     ELNAnnotation,
@@ -34,8 +33,6 @@ from pdi_nomad_plugin.general.schema import (
 from pdi_nomad_plugin.utils import (
     create_archive,
 )
-
-configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:materials_schema')
 
 m_package = SchemaPackage()
 

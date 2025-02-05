@@ -1,5 +1,4 @@
 import plotly.graph_objects as go
-from nomad.config import config
 from nomad.datamodel.data import ArchiveSection, EntryData
 from nomad.datamodel.hdf5 import HDF5Reference
 from nomad.datamodel.metainfo.annotations import (
@@ -54,8 +53,6 @@ from pdi_nomad_plugin.general.schema import (
 from pdi_nomad_plugin.utils import (
     _not_equal,
 )
-
-configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:instrument_schema')
 
 m_package = SchemaPackage()
 

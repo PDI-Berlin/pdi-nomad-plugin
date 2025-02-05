@@ -6,7 +6,6 @@ if TYPE_CHECKING:
     )
 
 import numpy as np
-from nomad.config import config
 from nomad.datamodel.data import ArchiveSection, EntryData, EntryDataCategory
 from nomad.datamodel.metainfo.annotations import ELNAnnotation, ELNComponentEnum
 from nomad.datamodel.metainfo.basesections import (
@@ -37,8 +36,6 @@ from nomad_material_processing.general import (
 )
 
 from pdi_nomad_plugin.utils import create_archive, merge_sections, set_sample_status
-
-configuration = config.get_plugin_entry_point('pdi_nomad_plugin.general:schema')
 
 m_package = SchemaPackage()
 

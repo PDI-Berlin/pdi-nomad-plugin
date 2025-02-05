@@ -1,5 +1,4 @@
 import numpy as np
-from nomad.config import config
 from nomad.datamodel.data import EntryData
 from nomad.datamodel.hdf5 import HDF5Reference
 from nomad.datamodel.metainfo.annotations import (
@@ -18,10 +17,6 @@ from nomad_material_processing.general import (
 
 from pdi_nomad_plugin.general.schema import (
     PDICategory,
-)
-
-configuration = config.get_plugin_entry_point(
-    'pdi_nomad_plugin.characterization:schema'
 )
 
 m_package = SchemaPackage()

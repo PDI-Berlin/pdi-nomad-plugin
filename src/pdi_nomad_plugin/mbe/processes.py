@@ -7,7 +7,6 @@ import plotly.graph_objects as go
 from epic_scraper.epicfileimport.epic_module import (
     filename_2_dataframename as fn2dfn,
 )
-from nomad.config import config
 from nomad.datamodel import EntryArchive
 from nomad.datamodel.data import ArchiveSection, EntryData
 from nomad.datamodel.hdf5 import HDF5Reference
@@ -95,8 +94,6 @@ from pdi_nomad_plugin.utils import (
     set_sample_status,
     xlsx_to_dict,
 )
-
-configuration = config.get_plugin_entry_point('pdi_nomad_plugin.mbe:processes_schema')
 
 m_package = SchemaPackage()
 
