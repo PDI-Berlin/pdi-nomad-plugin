@@ -1600,16 +1600,17 @@ class ExperimentMbePDI(Experiment, EntryData):
                 for sample_holder_position in self.substrate_holder.reference.positions:
                     if sample_holder_position.substrate:
                         filetype = 'yaml'
-                        sample_id = f'{growth_id}_{sample_holder_position.name}'
+                        stack_id = f'{growth_id}_{sample_holder_position.name}'
+                        layer_id = f'{stack_id}_lyr_1'  # TODO adapt this to the number of layers
                         layer_object = ThinFilmMbe(
-                            name=f'Layer {sample_id}',
-                            lab_id=sample_id,
+                            name=f'{layer_id}',
+                            lab_id=layer_id,
                         )
                         layer_archive = EntryArchive(
                             m_context=archive.m_context,
                             data=layer_object,
                         )
-                        layer_filename = f'{sample_id}_layer.archive.{filetype}'
+                        layer_filename = f'{layer_id}.archive.{filetype}'
                         layer_reference = create_archive(
                             layer_archive.m_to_dict(),
                             archive.m_context,
@@ -1618,11 +1619,12 @@ class ExperimentMbePDI(Experiment, EntryData):
                             logger,
                         )
                         sample_object = ThinFilmStackMbePDI(
-                            name=f'{sample_holder_position.substrate.name} {sample_id}',
-                            lab_id=f'{sample_holder_position.substrate.lab_id} {sample_id}',
+                            name=f'{sample_holder_position.substrate.name} {stack_id}',
+                            lab_id=f'{sample_holder_position.substrate.lab_id} {stack_id}',
                             datetime=self.datetime,
                             substrate=SubstrateReference(
-                                reference=sample_holder_position.substrate.reference
+                                name=sample_holder_position.substrate.reference.lab_id,
+                                reference=sample_holder_position.substrate.reference,
                             ),
                         )
                         # TODO check why m_add_sub_section does not work
@@ -1632,10 +1634,11 @@ class ExperimentMbePDI(Experiment, EntryData):
                         #         ))
                         sample_object.layers.append(
                             ThinFilmReference(
+                                name=layer_id,
                                 reference=layer_reference,
                             )
                         )
-                        sample_filename = f'{sample_id}.archive.{filetype}'
+                        stack_filename = f'{stack_id}.archive.{filetype}'
 
                         sample_archive = EntryArchive(
                             m_context=archive.m_context,
@@ -1646,7 +1649,7 @@ class ExperimentMbePDI(Experiment, EntryData):
                                 reference=create_archive(
                                     sample_archive.m_to_dict(),
                                     archive.m_context,
-                                    sample_filename,
+                                    stack_filename,
                                     filetype,
                                     logger,
                                 ),

@@ -440,8 +440,8 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
                 children_filename = (
                     f'{child_name}_{sample_index}.CompositeSystem.archive.{filetype}'
                 )
-                children_object.name = f'{child_name}_{sample_index}'
-                children_object.lab_id = f'{child_name}_{sample_index}'
+                children_object.name = f'{child_name}.{sample_index}'
+                children_object.lab_id = f'{child_name}.{sample_index}'
                 children_archive = EntryArchive(
                     data=children_object,
                     m_context=archive.m_context,
