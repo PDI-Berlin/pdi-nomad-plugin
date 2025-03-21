@@ -10,6 +10,7 @@ from nomad.datamodel.metainfo.annotations import (
 from nomad.datamodel.metainfo.basesections import (
     EntityReference,
     Instrument,
+    PureSubstanceSection,
     PubChemPureSubstanceSection,
 )
 from nomad.datamodel.metainfo.plot import (
@@ -690,7 +691,7 @@ class GasFlowPDI(GasFlow):
 
     m_def = Section()
     gas = SubSection(
-        section_def=PubChemPureSubstanceSection,
+        section_def=PureSubstanceSection, # TODO change to PubChemPureSubstanceSection
     )
     flow_rate = SubSection(
         section_def=VolumetricFlowRatePDI,
