@@ -337,7 +337,8 @@ class ParserEpicPDI(MatchingParser):
                         logger.info(f'Growth Cell was loaded at: {substrate_load_time}')
                         logger.info(f'Growth run start time: {substrate_load_time}')
                         source_object.gas_flow.append(
-                            GasFlowPDI(flow_rate=VolumetricFlowRatePDI())
+                            GasFlowPDI(gas=PureSubstanceSection(name=gas_row["mfc_gas"]), # use PubChemPureSubstanceSection
+                                       flow_rate=VolumetricFlowRatePDI())
                         )
 
                         source_object.gas_flow[
