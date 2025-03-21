@@ -1601,7 +1601,7 @@ class ExperimentMbePDI(Experiment, EntryData):
                     if sample_holder_position.substrate:
                         filetype = 'yaml'
                         stack_id = f'{growth_id}_{sample_holder_position.name}'
-                        layer_id = f'{stack_id}_lyr_1' # TODO adapt this to the number of layers
+                        layer_id = f'{stack_id}_lyr_1'  # TODO adapt this to the number of layers
                         layer_object = ThinFilmMbe(
                             name=f'{layer_id}',
                             lab_id=layer_id,
@@ -1623,7 +1623,8 @@ class ExperimentMbePDI(Experiment, EntryData):
                             lab_id=f'{sample_holder_position.substrate.lab_id} {stack_id}',
                             datetime=self.datetime,
                             substrate=SubstrateReference(
-                                reference=sample_holder_position.substrate.reference
+                                name=sample_holder_position.substrate.reference.lab_id,
+                                reference=sample_holder_position.substrate.reference,
                             ),
                         )
                         # TODO check why m_add_sub_section does not work
@@ -1633,6 +1634,7 @@ class ExperimentMbePDI(Experiment, EntryData):
                         #         ))
                         sample_object.layers.append(
                             ThinFilmReference(
+                                name=layer_id,
                                 reference=layer_reference,
                             )
                         )

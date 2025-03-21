@@ -10,8 +10,8 @@ from nomad.datamodel.metainfo.annotations import (
 from nomad.datamodel.metainfo.basesections import (
     EntityReference,
     Instrument,
-    PureSubstanceSection,
     PubChemPureSubstanceSection,
+    PureSubstanceSection,
 )
 from nomad.datamodel.metainfo.plot import (
     PlotlyFigure,
@@ -690,8 +690,14 @@ class GasFlowPDI(GasFlow):
     """
 
     m_def = Section()
+    name = Quantity(
+        type=str,
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.StringEditQuantity,
+        ),
+    )
     gas = SubSection(
-        section_def=PureSubstanceSection, # TODO change to PubChemPureSubstanceSection
+        section_def=PureSubstanceSection,  # TODO change to PubChemPureSubstanceSection
     )
     flow_rate = SubSection(
         section_def=VolumetricFlowRatePDI,
