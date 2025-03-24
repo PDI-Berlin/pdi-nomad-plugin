@@ -1619,8 +1619,8 @@ class ExperimentMbePDI(Experiment, EntryData):
                             logger,
                         )
                         sample_object = ThinFilmStackMbePDI(
-                            name=f'{sample_holder_position.substrate.name} {stack_id}',
-                            lab_id=f'{sample_holder_position.substrate.lab_id} {stack_id}',
+                            name=stack_id,
+                            lab_id=stack_id,
                             datetime=self.datetime,
                             substrate=SubstrateReference(
                                 name=sample_holder_position.substrate.reference.lab_id,
