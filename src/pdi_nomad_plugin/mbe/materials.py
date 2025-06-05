@@ -276,7 +276,7 @@ class SubstrateBatchMbe(SubstrateMbe, EntryData):
             if not self.number_of_substrates:
                 logger.error(
                     "Error in SubstrateBatch: 'number_of_substrates' expected, but None "
-                    "found."
+                    'found.'
                 )
             else:
                 self.substrates = []
@@ -310,6 +310,7 @@ class SubstrateBatchMbe(SubstrateMbe, EntryData):
                         ),
                     )
             self.trigger_create_substrate = False
+
 
 class ThinFilmMbe(SystemPDI, ThinFilm, EntryData):
     """
