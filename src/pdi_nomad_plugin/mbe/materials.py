@@ -220,6 +220,19 @@ class SubstrateBatchMbe(SubstrateMbe, EntryData):
         description='The number of substrates in the batch.',
         a_eln=dict(component='NumberEditQuantity'),
     )
+    trigger_create_substrate = Quantity(
+        type=bool,
+        description="""
+        Create Substrate entries based on the current Substrate Batch entry and add
+        references to then in `substrates` subsection.
+        WARNING: If `substrates` is non-empty, the existing entries and references will be
+        overwritten.
+        """,
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.ActionEditQuantity,
+            label='Create Substrates',
+        ),
+    )
     substrates = SubSection(
         description="""
         The substrates in the batch.
@@ -259,47 +272,44 @@ class SubstrateBatchMbe(SubstrateMbe, EntryData):
         #         f"Please provide 'supplier_id', 'crystal_id', 'charge_id' and 'lab_id'."
         #     )
 
-        if not self.number_of_substrates:
-            logger.error(
-                "Error in SubstrateBatch: 'number_of_substrates' expected, but None found."
-            )
-        if self.substrates:
-            logger.error(
-                f'Error in SubstrateBatch: No substrates expected,'
-                f' but {len(self.substrates)} substrates given.'
-                f' Remove the substrates and save again to generate substrates.'
-            )
-        generated_substrates = []
-        if self.number_of_substrates:
-            substrate_object = self.m_copy(deep=True)
-            substrate_object.m_def = SubstrateMbe.m_def
-            substrate_object.number_of_substrates = None
-            for substrate_index in range(1, self.number_of_substrates + 1):
-                child_name = self.lab_id if self.lab_id else self.name
-                substrate_filename = (
-                    f'{child_name}_{substrate_index}.Substrate.archive.{filetype}'
+        if self.trigger_create_substrate:
+            self.substrates = []
+            if not self.number_of_substrates:
+                logger.error(
+                    "Error in SubstrateBatch: 'number_of_substrates' expected, but None "
+                    'found.'
                 )
-                substrate_object.name = f'{child_name}_{substrate_index}'
-                substrate_object.lab_id = f'{child_name}_{substrate_index}'
-                substrate_archive = EntryArchive(
-                    data=substrate_object,
-                    m_context=archive.m_context,
-                    metadata=EntryMetadata(upload_id=archive.m_context.upload_id),
-                )
-                create_archive(
-                    substrate_archive.m_to_dict(),
-                    archive.m_context,
-                    substrate_filename,
-                    filetype,
-                    logger,
-                )
-                generated_substrates.append(
-                    CompositeSystemReference(
-                        name=substrate_object.name,
-                        reference=f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, substrate_filename)}#data',
-                    ),
-                )
-            self.substrates = generated_substrates
+            else:
+                substrate_object = self.m_copy(deep=True)
+                substrate_object.m_def = SubstrateMbe.m_def
+                substrate_object.number_of_substrates = None
+                for substrate_index in range(1, self.number_of_substrates + 1):
+                    child_name = self.lab_id if self.lab_id else self.name
+                    substrate_filename = (
+                        f'{child_name}_{substrate_index}.Substrate.archive.{filetype}'
+                    )
+                    substrate_object.name = f'{child_name}_{substrate_index}'
+                    substrate_object.lab_id = f'{child_name}_{substrate_index}'
+                    substrate_archive = EntryArchive(
+                        data=substrate_object,
+                        m_context=archive.m_context,
+                        metadata=EntryMetadata(upload_id=archive.m_context.upload_id),
+                    )
+                    create_archive(
+                        substrate_archive.m_to_dict(),
+                        archive.m_context,
+                        substrate_filename,
+                        filetype,
+                        logger,
+                        overwrite=True,
+                    )
+                    self.substrates.append(
+                        CompositeSystemReference(
+                            name=substrate_object.name,
+                            reference=f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, substrate_filename)}#data',
+                        ),
+                    )
+            self.trigger_create_substrate = False
 
 
 class ThinFilmMbe(SystemPDI, ThinFilm, EntryData):
