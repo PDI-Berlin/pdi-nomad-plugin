@@ -273,13 +273,13 @@ class SubstrateBatchMbe(SubstrateMbe, EntryData):
         #     )
 
         if self.trigger_create_substrate:
+            self.substrates = []
             if not self.number_of_substrates:
                 logger.error(
                     "Error in SubstrateBatch: 'number_of_substrates' expected, but None "
                     'found.'
                 )
             else:
-                self.substrates = []
                 substrate_object = self.m_copy(deep=True)
                 substrate_object.m_def = SubstrateMbe.m_def
                 substrate_object.number_of_substrates = None
