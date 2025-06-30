@@ -94,6 +94,7 @@ ignore = [
     "PLR0912", # Too many branches
     "PLR0913", # Too many arguments in function definition
     "PLR0915", # Too many statements
+    "PLC0415", # `import` should be at the top-level of a file
 ]
 
 fixable = ["ALL"]
@@ -123,8 +124,8 @@ where = ["src"]
 
 [project.entry-points.'nomad.plugin']
 
-general_schema = "pdi_nomad_plugin.general:schema"
-characterization_schema = "pdi_nomad_plugin.characterization:schema"
+general_schema = "pdi_nomad_plugin.general:schema_entry_point"
+characterization_schema = "pdi_nomad_plugin.characterization:schema_entry_point"
 materials_schema = "pdi_nomad_plugin.mbe:materials_schema"
 instrument_schema = "pdi_nomad_plugin.mbe:instrument_schema"
 processes_schema = "pdi_nomad_plugin.mbe:processes_schema"

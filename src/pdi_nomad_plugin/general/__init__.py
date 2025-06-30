@@ -11,7 +11,7 @@ class GeneralPackageEntryPoint(SchemaPackageEntryPoint):
         return m_package
 
 
-schema = GeneralPackageEntryPoint(
+schema_entry_point = GeneralPackageEntryPoint(
     name='GeneralSchema',
     description='Schema package defined using the new plugin mechanism.',
 )
