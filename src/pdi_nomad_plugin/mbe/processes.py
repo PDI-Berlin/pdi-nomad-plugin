@@ -1540,6 +1540,7 @@ class ExperimentMbePDI(Experiment, EntryData):
                     self.growth_run_logfiles = GrowthMbePDIReference(
                         reference=growth_ref
                     )
+                    self.growth_run_logfiles.normalize(archive, logger)
 
         # link to growth archive if lab_id is filled in exp
         if self.lab_id is not None and self.growth_run_logfiles is None:
