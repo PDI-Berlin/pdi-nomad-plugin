@@ -115,10 +115,6 @@ class ParserEpicPDI(MatchingParser):
             'process': EntryArchive(),
         }
 
-        filetype = 'yaml'
-        process_filename = f'{folder_name}/{data_file[:-5]}.GrowthMbePDI.archive.{filetype}'
-        instrument_filename = f'{folder_name}/{data_file[:-5]}.InstrumentMbePDI.archive.{filetype}'
-
         # Read excel file sheets
         (
             config_sheet,
@@ -146,6 +142,13 @@ class ParserEpicPDI(MatchingParser):
         exp_string = growth_id.replace('@', '_') if growth_id else None
         growthrun_id = growth_id.split('@')[0] if growth_id else None
 
+        # Create entity paths based on growthrun_id
+        filetype = 'yaml'
+        process_filename = f'{growthrun_id}/{data_file[:-5]}.GrowthMbePDI.archive.{filetype}'
+        instrument_filename = f'{growthrun_id}/{data_file[:-5]}.InstrumentMbePDI.archive.{filetype}'
+
+
+
         # Read Fitting.txt
         fitting = None
         if (
@@ -166,7 +169,7 @@ class ParserEpicPDI(MatchingParser):
         # # # # # HDF5 FILE CREATION 1/3 # # # # #
         # WARNING: the ExperimentMbePDI normalize function reuses this method to overwrite the growth start time !
         # Every change made here should be reflected there, too
-        hdf_filename = f'{folder_name}/{data_file[:-5]}.h5'
+        hdf_filename = f'{growthrun_id}/{data_file[:-5]}.h5'
         create_hdf5_file(
             archive, folder_name, upload_path, substrate_load_time, hdf_filename
         )
