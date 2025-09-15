@@ -1529,6 +1529,14 @@ class ExperimentMbePDI(Experiment, EntryData):
         # archive.workflow2 = None
         super().normalize(archive, logger)
 
+
+        # Load lab_id from subfolder if not set        
+        if self.lab_id is None:
+            parts = archive.metadata.mainfile.split('/',1)
+            if len(parts) > 1:
+                self.lab_id = parts[0]
+            
+
         # fill lab_id if exp is linked to growth archive
         if self.growth_run_logfiles is not None:
             if self.growth_run_logfiles.reference:
@@ -1541,6 +1549,7 @@ class ExperimentMbePDI(Experiment, EntryData):
                         reference=growth_ref
                     )
                     self.growth_run_logfiles.normalize(archive, logger)
+
 
         # link to growth archive if lab_id is filled in exp
         if self.lab_id is not None and self.growth_run_logfiles is None:
