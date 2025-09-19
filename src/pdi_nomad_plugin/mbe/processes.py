@@ -1582,6 +1582,9 @@ class ExperimentMbePDI(Experiment, EntryData):
                 if self.recalculate_growth_start_time is None:
                     self.recalculate_growth_start_time = False
 
+        # make sample holder available on overview page of upload
+        if self.substrate_holder is None:
+            self.substrate_holder = FilledSubstrateHolderPDIReference()
         # setting the sample status
         if self.substrate_holder:
             if self.substrate_holder.reference:
