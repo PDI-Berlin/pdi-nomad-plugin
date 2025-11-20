@@ -1529,6 +1529,14 @@ class ExperimentMbePDI(Experiment, EntryData):
         # archive.workflow2 = None
         super().normalize(archive, logger)
 
+
+        # Load lab_id from subfolder if not set        
+        if self.lab_id is None:
+            parts = archive.metadata.mainfile.split('/',1)
+            if len(parts) > 1:
+                self.lab_id = parts[0]
+            
+
         # fill lab_id if exp is linked to growth archive
         if self.growth_run_logfiles is not None:
             if self.growth_run_logfiles.reference:
@@ -1540,6 +1548,8 @@ class ExperimentMbePDI(Experiment, EntryData):
                     self.growth_run_logfiles = GrowthMbePDIReference(
                         reference=growth_ref
                     )
+                    self.growth_run_logfiles.normalize(archive, logger)
+
 
         # link to growth archive if lab_id is filled in exp
         if self.lab_id is not None and self.growth_run_logfiles is None:
@@ -1572,6 +1582,9 @@ class ExperimentMbePDI(Experiment, EntryData):
                 if self.recalculate_growth_start_time is None:
                     self.recalculate_growth_start_time = False
 
+        # make sample holder available on overview page of upload
+        if self.substrate_holder is None:
+            self.substrate_holder = FilledSubstrateHolderPDIReference()
         # setting the sample status
         if self.substrate_holder:
             if self.substrate_holder.reference:
@@ -1590,15 +1603,17 @@ class ExperimentMbePDI(Experiment, EntryData):
 
         # create samples archives
         if (
-            self.growth_run_logfiles is not None
+            self.lab_id is not None
             and self.substrate_holder is not None
             and not self.samples
         ):
             if self.substrate_holder.reference:
-                growth_id = self.growth_run_logfiles.reference.lab_id
+                growth_id = self.lab_id
                 self.samples = []
                 for sample_holder_position in self.substrate_holder.reference.positions:
                     if sample_holder_position.substrate:
+                        parts = archive.metadata.mainfile.rsplit('/',1)
+                        experiment_path = f'{parts[0]}/' if len(parts) > 1 else ''
                         filetype = 'yaml'
                         stack_id = f'{growth_id}_{sample_holder_position.name}'
                         layer_id = f'{stack_id}_lyr_1'  # TODO adapt this to the number of layers
@@ -1610,7 +1625,7 @@ class ExperimentMbePDI(Experiment, EntryData):
                             m_context=archive.m_context,
                             data=layer_object,
                         )
-                        layer_filename = f'{layer_id}.archive.{filetype}'
+                        layer_filename = f'{experiment_path}{layer_id}.archive.{filetype}'
                         layer_reference = create_archive(
                             layer_archive.m_to_dict(),
                             archive.m_context,
@@ -1638,7 +1653,7 @@ class ExperimentMbePDI(Experiment, EntryData):
                                 reference=layer_reference,
                             )
                         )
-                        stack_filename = f'{stack_id}.archive.{filetype}'
+                        stack_filename = f'{experiment_path}{stack_id}.archive.{filetype}'
 
                         sample_archive = EntryArchive(
                             m_context=archive.m_context,
