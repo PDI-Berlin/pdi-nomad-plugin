@@ -103,10 +103,10 @@ class ParserEpicPDI(MatchingParser):
         archive: EntryArchive,
         logger,
     ) -> None:
-        data_file = mainfile.rsplit('/',1)[-1]
+        data_file = mainfile.rsplit('/', 1)[-1]
 
-        folder_name = (mainfile.split("raw/",1)[1]).rsplit('/',1)[-2]
-        upload_path = f'{mainfile.split("raw/",1)[0]}raw/'
+        folder_name = (mainfile.split('raw/', 1)[1]).rsplit('/', 1)[-2]
+        upload_path = f'{mainfile.split("raw/", 1)[0]}raw/'
         folder_path = f'{upload_path}{folder_name}/'
 
         child_archives = {
@@ -144,10 +144,12 @@ class ParserEpicPDI(MatchingParser):
 
         # Create entity paths based on growthrun_id
         filetype = 'yaml'
-        process_filename = f'{growthrun_id}/{data_file[:-5]}.GrowthMbePDI.archive.{filetype}'
-        instrument_filename = f'{growthrun_id}/{data_file[:-5]}.InstrumentMbePDI.archive.{filetype}'
-
-
+        process_filename = (
+            f'{growthrun_id}/{data_file[:-5]}.GrowthMbePDI.archive.{filetype}'
+        )
+        instrument_filename = (
+            f'{growthrun_id}/{data_file[:-5]}.InstrumentMbePDI.archive.{filetype}'
+        )
 
         # Read Fitting.txt
         fitting = None
