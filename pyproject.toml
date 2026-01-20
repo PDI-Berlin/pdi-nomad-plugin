@@ -34,8 +34,12 @@ dependencies = [
     'nomad-lab>=1.3.1',
     'nomad-material-processing',
     'nomad-measurements',
-    'epic_scraper @ git+https://github.com/PDI-Berlin/EPIC_scraper.git@main',
+    'epic_scraper',
 ]
+
+[tool.uv.sources]
+epic_scraper = { git = "https://github.com/PDI-Berlin/EPIC_scraper.git", rev = "v1.0.0" }
+
 [project.urls]
 "Homepage" = "https://github.com/PDI-Berlin/pdi-nomad-plugin"
 "Bug Tracker" = "https://github.com/PDI-Berlin/pdi-nomad-plugin/issues"
