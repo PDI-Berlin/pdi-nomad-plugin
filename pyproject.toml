@@ -1,7 +1,6 @@
 [build-system]
 requires = [
     "setuptools>=61.0.0",
-    "setuptools-scm>=8.0",
 ]
 build-backend = "setuptools.build_meta"
 
@@ -16,7 +15,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
 ]
 name = "pdi-nomad-plugin"
-dynamic = "1.0.3"
+version = "1.0.3"
 description = "A plugin for PDI NOMAD containing principal techniques."
 readme = "README.md"
 requires-python = ">=3.10"
