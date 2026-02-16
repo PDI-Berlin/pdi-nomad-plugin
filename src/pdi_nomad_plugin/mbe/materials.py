@@ -154,13 +154,20 @@ class SubstrateMbe(CrystallineSubstrate, EntryData):
     def normalize(self, archive, logger):
         super().normalize(archive, logger)
 
+        logger.info("Running SubstrateMbe normalization")
+        
+        # -------------------------------------------------
+        # Construct substrate ID if not explicitly given
+        # -------------------------------------------------
+
         if (
             self.supplier_id is not None
             and self.crystal_id is not None
             and self.charge_id is not None
             and self.lab_id is None
         ):
-            self.lab_id = f'{self.supplier_id}_{self.crystal_id}_{self.charge_id}'
+            self.lab_id = f"{self.supplier_id}_{self.crystal_id}_{self.charge_id}"
+
         elif (
             self.supplier_id is not None
             and self.crystal_id is not None
@@ -168,9 +175,9 @@ class SubstrateMbe(CrystallineSubstrate, EntryData):
             and self.lab_id is not None
         ):
             logger.warning(
-                "Error in SubstrateBatch: 'Substrate ID' is already given:\n"
-                'supplier_id, charge_id, crystal_id are not used to compose it.'
+                "Substrate ID already given; supplier_id, crystal_id, charge_id not used."
             )
+
         elif (
             self.supplier_id is None
             and self.crystal_id is None
@@ -178,10 +185,126 @@ class SubstrateMbe(CrystallineSubstrate, EntryData):
             and self.lab_id is None
         ):
             logger.error(
-                "Error in SubstrateBatch: 'Substrate ID' expected, but None found.\n"
-                "Please provide 'supplier_id', 'crystal_id', and 'charge_id',"
-                " or 'Substrate ID'."
+                "Substrate ID expected but missing. "
+                "Provide supplier_id, crystal_id, charge_id, or Substrate ID."
             )
+
+        # -------------------------------------------------
+        # Initialize NOMAD results structure
+        # -------------------------------------------------
+        if archive.results is None:
+            from nomad.datamodel.results import Results
+            archive.results = Results()
+
+        if archive.results.material is None:
+            from nomad.datamodel.results import Material
+            archive.results.material = Material()
+
+        material = archive.results.material
+
+        # -------------------------------------------------
+        # Chemical formula (use existing NOMAD fields)
+        # -------------------------------------------------
+        formula = None
+
+        if self.components:
+            for component in self.components:
+                if (
+                    hasattr(component, "pure_substance")
+                    and component.pure_substance
+                    and getattr(component.pure_substance, "molecular_formula", None)
+                ):
+                    formula = component.pure_substance.molecular_formula
+                    break
+
+        if not formula and getattr(self, "chemical_formula", None):
+            formula = self.chemical_formula
+
+        if formula:
+            material.chemical_formula_descriptive = formula
+            material.chemical_formula_hill = formula
+            material.chemical_formula_reduced = formula
+            material.material_name = formula
+
+        # -------------------------------------------------
+        # Structural properties
+        # -------------------------------------------------
+        material.structural_type = "bulk"
+        material.dimensionality = "3D"
+
+        # -------------------------------------------------
+        # Symmetry
+        # -------------------------------------------------
+        if self.crystal_properties:
+            if material.symmetry is None:
+                from nomad.datamodel.results import Symmetry
+                material.symmetry = Symmetry()
+
+            #  DEFINE THE MAP
+            lattice_map = {
+                "fcc": "cF",        
+                "bcc": "cI",
+                "cubic": "cP",
+                "hexagonal": "hP",
+                "trigonal": "hR",   
+                "rhombohedral": "hR"
+            }
+
+            # ---- Bravais lattice  ----
+            b_lattice_raw = getattr(self.crystal_properties, "bravais_lattice", None)
+            
+            if b_lattice_raw is None:
+                b_lattice_raw = getattr(self.crystal_properties, "bravais_lattices", None)
+
+            if isinstance(b_lattice_raw, list) and len(b_lattice_raw) > 0:
+                b_lattice_raw = b_lattice_raw[0]
+
+            if b_lattice_raw:
+                clean_raw = str(b_lattice_raw).strip()
+                
+                if clean_raw.lower() in lattice_map:
+                    material.symmetry.bravais_lattice = lattice_map[clean_raw.lower()]
+                    logger.info(f"✓ Mapped lattice: {clean_raw} -> {lattice_map[clean_raw.lower()]}")
+                    
+                elif clean_raw in material.symmetry.m_def.quantities["bravais_lattice"].type:
+                    material.symmetry.bravais_lattice = clean_raw
+                    logger.info(f"✓ Set lattice directly: {clean_raw}")
+                else:
+                    logger.warning(f"Ignoring invalid bravais_lattice: {clean_raw}")
+            else:
+                 logger.warning("Still could not find bravais_lattice or bravais_lattices")
+
+            # ---- Crystal System ----
+            if material.symmetry.bravais_lattice and not material.symmetry.crystal_system:
+                lattice = material.symmetry.bravais_lattice
+                pearson_first = lattice[0] # First letter
+                
+                if lattice == 'hR':
+                     material.symmetry.crystal_system = 'trigonal'
+                     logger.info(f"✓ Inferred crystal_system 'trigonal' from lattice 'hR'")
+                else:
+                    # Standard lookup
+                    system_lookup = {
+                        'a': 'triclinic',
+                        'm': 'monoclinic',
+                        'o': 'orthorhombic',
+                        't': 'tetragonal',
+                        'h': 'hexagonal', 
+                        'c': 'cubic'
+                    }
+                    if pearson_first in system_lookup:
+                        material.symmetry.crystal_system = system_lookup[pearson_first]
+                        logger.info(f"✓ Inferred crystal_system '{system_lookup[pearson_first]}' from lattice '{lattice}'")
+        # -------------------------------------------------
+        # Method
+        # -------------------------------------------------
+        # if archive.results.method is None:
+        #     from nomad.datamodel.results import Method
+        #     archive.results.method = Method()
+
+        # archive.results.method.method_name = "bulk growth"
+
+        logger.info("SubstrateMbe normalization completed")
 
 
 class SubstrateBatchMbe(SubstrateMbe, EntryData):
