@@ -673,6 +673,54 @@ def _not_equal(a, b) -> bool:
     return comparison
 
 
+def have_common_ancestry(
+    *sections: 'ArchiveSection',
+    exclude: list = None,
+) -> bool:
+    """
+    Check if given sections have a common ancestor in their class hierarchy, excluding
+    certain base sections that are common to all sections like ArchiveSection,
+    EntryData, and BaseSection.
+
+    Example usage:
+        - `have_common_ancestry(section1, section2, exclude=[CustomBaseSection])`
+        checks if `section1` and `section2` have a common ancestor, excluding
+        `CustomBaseSection`.
+
+    Args:
+        *section (ArchiveSection): Two or more sections to check for common ancestry.
+        exclude (list, optional): A list of base sections to exclude from the
+            check. Defaults to None.
+
+    Returns:
+        bool: True if the sections have a common ancestor (excluding the ones in the
+            exclude list), False otherwise.
+    """
+    from nomad.datamodel.data import EntryData
+    from nomad.datamodel.metainfo.basesections.v1 import BaseSection
+
+    minimum_sections = 2
+
+    if len(sections) < minimum_sections:
+        raise ValueError('At least two sections must be provided.')
+
+    if exclude is None:
+        exclude = []
+
+    exclude.extend([ArchiveSection.m_def, EntryData.m_def, BaseSection.m_def])
+
+    common_ancestors = set(sections[0].m_def.all_base_sections)
+    for section in sections[1:]:
+        common_ancestors &= set(section.m_def.all_base_sections)
+
+    # filter out common ancestors that are not in the exclude list
+    common_ancestors = [
+        ancestor for ancestor in common_ancestors if ancestor not in exclude
+    ]
+
+    return len(common_ancestors) > 0
+
+
 def merge_sections(  # noqa: PLR0912
     section: 'ArchiveSection',
     update: 'ArchiveSection',
@@ -683,16 +731,10 @@ def merge_sections(  # noqa: PLR0912
     if section is None:
         section = update.m_copy()
         return
-    if update.m_def not in [
-        section.m_def,
-        *section.m_def.all_base_sections,
-    ] and section.m_def not in [update.m_def, *update.m_def.all_base_sections]:
-        # if not isinstance(
-        #     update.m_def, tuple([type(mdef) for mdef in section.m_def.all_base_sections])
-        # ):
+    if update.m_def != section.m_def and not have_common_ancestry(section, update):
         raise TypeError(
-            'Cannot merge sections of different types: '
-            f'{type(section)} and {type(update)}'
+            f'Cannot merge "{type(section)}" with "{type(update)}" as they are not of '
+            'the same type and do not have a common ancestry.'
         )
     for name, quantity in update.m_def.all_quantities.items():
         if not update.m_is_set(quantity):
