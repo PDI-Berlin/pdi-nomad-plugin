@@ -15,7 +15,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
 ]
 name = "pdi-nomad-plugin"
-version = "1.0.3"
+version = "1.0.4"
 description = "A plugin for PDI NOMAD containing principal techniques."
 readme = "README.md"
 requires-python = ">=3.10"
