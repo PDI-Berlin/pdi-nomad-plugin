@@ -331,10 +331,11 @@ def fetch_substrate(archive, sample_id, substrate_id, logger):
         )
         return None
     if len(search_result.data) >= 1:
-        upload_id = search_result.data[0]['upload_id']
         from nomad.app.v1.routers.uploads import get_upload_with_read_access
         from nomad.files import UploadFiles
 
+        upload_id = search_result.data[0]['upload_id']
+        entry_id = search_result.data[0]['entry_id']
         upload_files = UploadFiles.get(upload_id)
 
         substrate_context = ServerContext(
@@ -348,8 +349,6 @@ def fetch_substrate(archive, sample_id, substrate_id, logger):
             )
         )
 
-        upload_id = search_result.data[0]['upload_id']
-        entry_id = search_result.data[0]['entry_id']
         if upload_files.raw_path_is_file(substrate_context.raw_path()):
             substrate_reference_str = f'../uploads/{upload_id}/archive/{entry_id}#data'
             return substrate_reference_str
@@ -555,13 +554,13 @@ def set_sample_status(
     )
 
     if sample_reference:
+        filename = sample_reference.m_parent.metadata.mainfile
         if (
             hasattr(sample_reference, 'fresh')
             and hasattr(sample_reference, 'as_delivered')
             and hasattr(sample_reference, 'processed')
             and hasattr(sample_reference, 'grown')
         ):
-            filename = sample_reference.m_parent.metadata.mainfile
             with context.raw_file(
                 filename, 'r'
             ) as file:  # TODO it only works with a specific context
