@@ -424,16 +424,19 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
             logger.error(
                 "Error in SampleCut: 'number_of_samples' expected, but None found."
             )
-        if not self.parent_sample:
+            return
+        if not self.parent_sample or not self.parent_sample.reference:
             logger.error(
                 "Error in SampleCut: 'parent_sample' expected, but None found."
             )
+            return
         if self.children_samples:
             logger.error(
                 f'Error in SampleCut: No children samples expected,'
                 f' but {len(self.children_samples)} children samples given.'
                 f' Remove the children samples and save again to generate children.'
             )
+            return
         generated_samples = []
         if self.parent_sample and self.number_of_samples:
             children_object = self.parent_sample.reference.m_copy(deep=False)
