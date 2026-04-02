@@ -384,6 +384,15 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
             component=ELNComponentEnum.FileEditQuantity,
         ),
     )
+    trigger_cut_sample = Quantity(
+        type=bool,
+        description='Cut the sample based on the given number of samples and parent '
+        'sample reference.',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.ActionEditQuantity,
+        ),
+        label='Cut Sample',
+    )
     children_geometry = SubSection(
         section_def=Geometry,
         description='Section containing the geometry of the substrate.',
@@ -402,13 +411,13 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
         repeats=True,
     )
 
-    def normalize(self, archive, logger: 'BoundLogger') -> None:
+    def cut_sample(self, archive, logger: 'BoundLogger') -> None:
         """
-        The normalizer sets the sample status if a reference to a sample is given.
+        Method to cut the sample based on the given number of samples and parent
+        sample reference. This method is triggered when the `trigger_cut_sample`
+        quantity is set to True.
         """
         from nomad.datamodel import EntryArchive, EntryMetadata
-
-        super().normalize(archive, logger)
 
         filetype = 'yaml'
         if not self.number_of_samples:
@@ -488,6 +497,21 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
                 if self.parent_sample.reference.grown
                 else False,
             )
+
+    def normalize(self, archive, logger: 'BoundLogger') -> None:
+        """
+        The normalizer triggers the `cut_sample` method if the `trigger_cut_sample`
+        quantity is set to True.
+        """
+
+        super().normalize(archive, logger)
+        if self.trigger_cut_sample:
+            try:
+                self.cut_sample(archive, logger)
+            except Exception as e:
+                logger.error(f'Error occurred while cutting sample: {e}')
+            finally:
+                self.trigger_cut_sample = False
 
 
 m_package.__init_metainfo__()
