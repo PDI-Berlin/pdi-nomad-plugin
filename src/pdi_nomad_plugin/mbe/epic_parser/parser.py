@@ -78,6 +78,7 @@ from pdi_nomad_plugin.utils import (
     fill_datetime,
     fill_quantity,
     get_hash_ref,
+    get_hdf5_ref,
     link_experiment,
     read_fitting,
     read_shutters,
@@ -127,10 +128,12 @@ class ParserEpicPDI(MatchingParser):
 
         # Read Messages.txt file
         assert 'messages' in config_sheet and not config_sheet['messages'].empty, (
-            'Messages file not found. Provide a valid messages file in the configuration sheet.'
+            'Messages file not found. Provide a valid messages file '
+            'in the configuration sheet.'
         )
         assert pd.notna(config_sheet['messages'].iloc[0]), (
-            'Messages file not found. Provide a valid messages file in the configuration sheet.'
+            'Messages file not found. Provide a valid messages file '
+            'in the configuration sheet.'
         )
         (
             growth_id,
@@ -169,7 +172,8 @@ class ParserEpicPDI(MatchingParser):
             )
 
         # # # # # HDF5 FILE CREATION 1/3 # # # # #
-        # WARNING: the ExperimentMbePDI normalize function reuses this method to overwrite the growth start time !
+        # WARNING: the ExperimentMbePDI normalize function reuses this
+        # method to overwrite the growth start time!
         # Every change made here should be reflected there, too
         hdf_filename = f'{growthrun_id}/{data_file[:-5]}.h5'
         create_hdf5_file(
@@ -216,24 +220,33 @@ class ParserEpicPDI(MatchingParser):
         child_archives['process'].data.hdf5_file = hdf_filename
         child_archives['process'].data.data_file = f'{folder_name}/{data_file}'
         child_archives['process'].data.lab_id = f'{growthrun_id}'
+        upload_id = archive.m_context.upload_id
         child_archives['process'].data.steps[
             0
-        ].environment.pressure.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(chamber_sheet["pressure_1"])}/value'
+        ].environment.pressure.value = get_hdf5_ref(
+            upload_id, hdf_filename, f'{fn2dfn(chamber_sheet["pressure_1"])}/value'
+        )
         child_archives['process'].data.steps[
             0
-        ].environment.pressure.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(chamber_sheet["pressure_1"])}/time'
+        ].environment.pressure.time = get_hdf5_ref(
+            upload_id, hdf_filename, f'{fn2dfn(chamber_sheet["pressure_1"])}/time'
+        )
         child_archives['process'].data.steps[
             0
-        ].environment.pressure_2.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(chamber_sheet["pressure_2"])}/value'
+        ].environment.pressure_2.value = get_hdf5_ref(
+            upload_id, hdf_filename, f'{fn2dfn(chamber_sheet["pressure_2"])}/value'
+        )
         child_archives['process'].data.steps[
             0
-        ].environment.pressure_2.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(chamber_sheet["pressure_2"])}/time'
-        child_archives['process'].data.steps[
-            0
-        ].environment.bep.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(chamber_sheet["bep"])}/value'
-        child_archives['process'].data.steps[
-            0
-        ].environment.bep.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(chamber_sheet["bep"])}/time'
+        ].environment.pressure_2.time = get_hdf5_ref(
+            upload_id, hdf_filename, f'{fn2dfn(chamber_sheet["pressure_2"])}/time'
+        )
+        child_archives['process'].data.steps[0].environment.bep.value = get_hdf5_ref(
+            upload_id, hdf_filename, f'{fn2dfn(chamber_sheet["bep"])}/value'
+        )
+        child_archives['process'].data.steps[0].environment.bep.time = get_hdf5_ref(
+            upload_id, hdf_filename, f'{fn2dfn(chamber_sheet["bep"])}/time'
+        )
         # shutters status
         if shutters is not None:
             for shutter_key, shutter_value in shutters.items():
