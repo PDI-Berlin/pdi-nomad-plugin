@@ -116,7 +116,10 @@ class SubstrateMbe(CrystallineSubstrate, EntryData):
     )
     crystal_id = Quantity(
         type=str,
-        description='The ID of the crystal from which the current batch was cut, given by the manufacturer.',
+        description=(
+            'The ID of the crystal from which the current batch was cut, '
+            'given by the manufacturer.'
+        ),
         a_eln=ELNAnnotation(
             component='StringEditQuantity',
         ),
@@ -124,7 +127,9 @@ class SubstrateMbe(CrystallineSubstrate, EntryData):
     )
     charge_id = Quantity(
         type=str,
-        description='The ID of the charge, or polishing batch, given by the manufacturer.',
+        description=(
+            'The ID of the charge, or polishing batch, given by the manufacturer.'
+        ),
         a_eln=ELNAnnotation(
             component='StringEditQuantity',
             label='Charge ID',
@@ -225,8 +230,8 @@ class SubstrateBatchMbe(SubstrateMbe, EntryData):
         description="""
         Create Substrate entries based on the current Substrate Batch entry and add
         references to then in `substrates` subsection.
-        WARNING: If `substrates` is non-empty, the existing entries and references will be
-        overwritten.
+        WARNING: If `substrates` is non-empty, the existing entries and references
+        will be overwritten.
         """,
         a_eln=ELNAnnotation(
             component=ELNComponentEnum.ActionEditQuantity,
@@ -260,7 +265,9 @@ class SubstrateBatchMbe(SubstrateMbe, EntryData):
         #     and self.charge_id is not None
         #     and self.lab_id is not None
         # ):
-        #     logger.warning(f"Error in SubstrateBatch: 'Substrate ID' is already given.")
+        #     logger.warning(
+        #         f"Error in SubstrateBatch: 'Substrate ID' is already given."
+        #     )
         # elif (
         #     self.supplier_id is None
         #     and self.crystal_id is None
@@ -268,16 +275,18 @@ class SubstrateBatchMbe(SubstrateMbe, EntryData):
         #     and self.lab_id is None
         # ):
         #     logger.error(
-        #         f"Error in SubstrateBatch: 'Substrate ID' expected, but None found.\n"
-        #         f"Please provide 'supplier_id', 'crystal_id', 'charge_id' and 'lab_id'."
+        #         f"Error in SubstrateBatch: 'Substrate ID' expected, "
+        #         f"but None found.\n"
+        #         f"Please provide 'supplier_id', 'crystal_id', 'charge_id' "
+        #         f"and 'lab_id'."
         #     )
 
         if self.trigger_create_substrate:
             self.substrates = []
             if not self.number_of_substrates:
                 logger.error(
-                    "Error in SubstrateBatch: 'number_of_substrates' expected, but None "
-                    'found.'
+                    "Error in SubstrateBatch: 'number_of_substrates' expected, "
+                    'but None found.'
                 )
             else:
                 substrate_object = self.m_copy(deep=True)

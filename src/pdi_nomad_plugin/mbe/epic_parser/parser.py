@@ -326,12 +326,24 @@ class ParserEpicPDI(MatchingParser):
 
                 # fill in quantities
                 source_object.type = 'RF plasma source (PLASMA)'
-                source_object.vapor_source.forward_power.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["f_power"])}/value'
-                source_object.vapor_source.forward_power.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["f_power"])}/time'
-                source_object.vapor_source.reflected_power.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["r_power"])}/value'
-                source_object.vapor_source.reflected_power.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["r_power"])}/time'
+                upload_id = archive.m_context.upload_id
+                f_power_path = fn2dfn(sources_row['f_power'])
+                r_power_path = fn2dfn(sources_row['r_power'])
+                source_object.vapor_source.forward_power.value = get_hdf5_ref(
+                    upload_id, hdf_filename, f'{f_power_path}/value'
+                )
+                source_object.vapor_source.forward_power.time = get_hdf5_ref(
+                    upload_id, hdf_filename, f'{f_power_path}/time'
+                )
+                source_object.vapor_source.reflected_power.value = get_hdf5_ref(
+                    upload_id, hdf_filename, f'{r_power_path}/value'
+                )
+                source_object.vapor_source.reflected_power.time = get_hdf5_ref(
+                    upload_id, hdf_filename, f'{r_power_path}/time'
+                )
 
-                # TODO fill in dissipated power as the difference between forward and reflected power
+                # TODO: fill in dissipated power as the difference between
+                # forward and reflected power
 
                 # fill the gas mixing in the plasma source:
                 i = 0
@@ -346,7 +358,8 @@ class ParserEpicPDI(MatchingParser):
                         )
                         if substrate_load_time is None:
                             logger.warning(
-                                'Growth start time not found. Possibly, Messages.txt file is missing.'
+                                'Growth start time not found. Possibly, '
+                                'Messages.txt file is missing.'
                             )
                         elif gasmixing_datetime > substrate_load_time:
                             continue
@@ -364,12 +377,13 @@ class ParserEpicPDI(MatchingParser):
                             )
                         )
 
-                        source_object.gas_flow[
-                            i
-                        ].flow_rate.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(gas_row["mfc_flow"])}/value'
-                        source_object.gas_flow[
-                            i
-                        ].flow_rate.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(gas_row["mfc_flow"])}/time'
+                        mfc_path = fn2dfn(gas_row['mfc_flow'])
+                        source_object.gas_flow[i].flow_rate.value = get_hdf5_ref(
+                            upload_id, hdf_filename, f'{mfc_path}/value'
+                        )
+                        source_object.gas_flow[i].flow_rate.time = get_hdf5_ref(
+                            upload_id, hdf_filename, f'{mfc_path}/time'
+                        )
                         i += 1
 
                         # measurement_type ='Mass Flow Controller',
@@ -407,11 +421,22 @@ class ParserEpicPDI(MatchingParser):
                     source_object.type = 'Double filament effusion cell (DFC)'
                 if sources_row['source_type'] == 'CLC':
                     source_object.type = 'Cold lip cell (CLC)'
-                temp_mv_time = f'{fn2dfn(sources_row["temp_mv"])}/time'  # used later for impinging flux too
-                source_object.vapor_source.temperature.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["temp_mv"])}/value'
-                source_object.vapor_source.temperature.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{temp_mv_time}'
-                source_object.vapor_source.power.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["temp_wop"])}/value'
-                source_object.vapor_source.power.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["temp_wop"])}/time'
+                # used later for impinging flux too
+                temp_mv_time = f'{fn2dfn(sources_row["temp_mv"])}/time'
+                temp_mv_path = fn2dfn(sources_row['temp_mv'])
+                temp_wop_path = fn2dfn(sources_row['temp_wop'])
+                source_object.vapor_source.temperature.value = get_hdf5_ref(
+                    upload_id, hdf_filename, f'{temp_mv_path}/value'
+                )
+                source_object.vapor_source.temperature.time = get_hdf5_ref(
+                    upload_id, hdf_filename, temp_mv_time
+                )
+                source_object.vapor_source.power.value = get_hdf5_ref(
+                    upload_id, hdf_filename, f'{temp_wop_path}/value'
+                )
+                source_object.vapor_source.power.time = get_hdf5_ref(
+                    upload_id, hdf_filename, f'{temp_wop_path}/time'
+                )
 
             if sources_row['source_type'] == 'DFC':
                 # instantiate objects
@@ -421,10 +446,20 @@ class ParserEpicPDI(MatchingParser):
                 )
                 source_object.vapor_source_hot_lip.power = EffusionCellHeaterPower()
                 # fill in quantities
-                source_object.vapor_source_hot_lip.temperature.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["hl_temp_mv"])}/value'
-                source_object.vapor_source_hot_lip.temperature.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["hl_temp_mv"])}/time'
-                source_object.vapor_source_hot_lip.power.value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["hl_temp_wop"])}/value'
-                source_object.vapor_source_hot_lip.power.time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{fn2dfn(sources_row["hl_temp_wop"])}/time'
+                hl_temp_mv_path = fn2dfn(sources_row['hl_temp_mv'])
+                hl_temp_wop_path = fn2dfn(sources_row['hl_temp_wop'])
+                source_object.vapor_source_hot_lip.temperature.value = get_hdf5_ref(
+                    upload_id, hdf_filename, f'{hl_temp_mv_path}/value'
+                )
+                source_object.vapor_source_hot_lip.temperature.time = get_hdf5_ref(
+                    upload_id, hdf_filename, f'{hl_temp_mv_path}/time'
+                )
+                source_object.vapor_source_hot_lip.power.value = get_hdf5_ref(
+                    upload_id, hdf_filename, f'{hl_temp_wop_path}/value'
+                )
+                source_object.vapor_source_hot_lip.power.time = get_hdf5_ref(
+                    upload_id, hdf_filename, f'{hl_temp_wop_path}/time'
+                )
 
             # Impinging flux
             if (
@@ -446,9 +481,11 @@ class ParserEpicPDI(MatchingParser):
                     archive, source_object.vapor_source.temperature.time
                 )
                 # # # # # HDF5 FILE CREATION 2/3 # # # # #
-                # WARNING: the ExperimentMbePDI normalize function reuses this method to overwrite the growth start time !
+                # WARNING: the ExperimentMbePDI normalize function reuses
+                # this method to overwrite the growth start time!
                 # Every change made here should be reflected there, too
-                # The impinging flux modulated by shutters opening is being added to the HDF5 file
+                # The impinging flux modulated by shutters opening is being
+                # added to the HDF5 file
                 modulated_flux, a_param, t0_param_pint, bep_to_flux_pint = (
                     calculate_impinging_flux(
                         logger,
@@ -467,12 +504,12 @@ class ParserEpicPDI(MatchingParser):
                     source_object.impinging_flux[0].bep_to_flux = bep_to_flux_pint
                     source_object.impinging_flux[0].t_0_parameter = t0_param_pint
                     source_object.impinging_flux[0].a_parameter = float(a_param)
-                    source_object.impinging_flux[
-                        0
-                    ].value = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{group_name}/value'
-                    source_object.impinging_flux[
-                        0
-                    ].time = f'/uploads/{archive.m_context.upload_id}/raw/{hdf_filename}#/{group_name}/time'
+                    source_object.impinging_flux[0].value = get_hdf5_ref(
+                        upload_id, hdf_filename, f'{group_name}/value'
+                    )
+                    source_object.impinging_flux[0].time = get_hdf5_ref(
+                        upload_id, hdf_filename, f'{group_name}/time'
+                    )
 
             elif fitting is None:
                 logger.warning(
@@ -482,11 +519,12 @@ class ParserEpicPDI(MatchingParser):
             # fill in quantities common to all sources
             # and create Source objects and Port objects lists
             if source_object:
+                primary_species = fill_quantity(sources_row, 'primary_flux_species')
                 source_name = (
                     str(fill_quantity(sources_row, 'source_type'))
                     + ' '
                     + str(fill_quantity(sources_row, 'source_material'))
-                    + f' (primary species: {fill_quantity(sources_row, "primary_flux_species")})'
+                    + f' (primary species: {primary_species})'
                 )
                 source_object.name = source_name
                 # Define a list of tuples containing
@@ -502,11 +540,9 @@ class ParserEpicPDI(MatchingParser):
                         substances = str(sources_row[key]).split('+')
                         substance_objs = []
                         for substance in substances:
-                            substance_objs = [
-                                PureSubstanceSection(
-                                    name=substance
-                                )  # TODO insert here again PUBCHEM PubChemPureSubstanceSection(name=substance)
-                            ]
+                            # TODO: insert here again PUBCHEM
+                            # PubChemPureSubstanceSection(name=substance)
+                            substance_objs = [PureSubstanceSection(name=substance)]
                         setattr(source_object, attribute, substance_objs)
                 if sources_row['date'] and sources_row['time']:
                     source_object.datetime = fill_datetime(
@@ -530,7 +566,8 @@ class ParserEpicPDI(MatchingParser):
                     get_hash_ref(archive.m_context.upload_id, instrument_filename)
                     + f'/port_list/{sources_index}'
                 )
-                # child_archives["instrument"].data.port_list[sources_index] # Native parsing mode
+                # child_archives["instrument"].data.port_list[sources_index]
+                # Native parsing mode
 
                 if sources_row['source_length']:
                     source_object.geometry = SourceGeometry()
@@ -576,7 +613,8 @@ class ParserEpicPDI(MatchingParser):
             source_object = None  # reset source object at the end of each iteration
 
         # # # # # HDF5 FILE CREATION 3/3 # # # # #
-        # WARNING: the ExperimentMbePDI normalize function reuses this method to overwrite the growth start time !
+        # WARNING: the ExperimentMbePDI normalize function reuses
+        # this method to overwrite the growth start time!
         # Every change made here should be reflected there, too
         # Complete the HDF5 file with the units and other derived datasets
         add_units_to_hdf5(

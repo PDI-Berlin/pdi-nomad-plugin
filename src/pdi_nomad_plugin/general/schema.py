@@ -168,8 +168,8 @@ class EtchingPDI(ProcessPDI, Etching):
 
 class EtchingRecipePDI(EtchingPDI, EtchingRecipe):
     """
-    A recipe for selectively remove material from a surface using chemical or physical processes
-    to create specific patterns or structures.
+    A recipe for selectively remove material from a surface using chemical
+    or physical processes to create specific patterns or structures.
     """
 
     m_def = Section(
@@ -187,7 +187,8 @@ class EtchingRecipePDI(EtchingPDI, EtchingRecipe):
 
 class AnnealingRecipePDI(AnnealingRecipe):
     """
-    A recipe for the process of heating a material to a specific temperature for a specific time.
+    A recipe for the process of heating a material to a specific temperature
+    for a specific time.
     """
 
     m_def = Section(
