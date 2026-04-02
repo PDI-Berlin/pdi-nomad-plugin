@@ -542,7 +542,7 @@ class ParserEpicPDI(MatchingParser):
                         for substance in substances:
                             # TODO: insert here again PUBCHEM
                             # PubChemPureSubstanceSection(name=substance)
-                            substance_objs = [PureSubstanceSection(name=substance)]
+                            substance_objs.append(PureSubstanceSection(name=substance))
                         setattr(source_object, attribute, substance_objs)
                 if sources_row['date'] and sources_row['time']:
                     source_object.datetime = fill_datetime(
