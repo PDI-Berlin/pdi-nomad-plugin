@@ -36,7 +36,7 @@ jobs:
         uv pip install -e '.[dev]'
     - name: Test with pytest
       run: |
-        pytest
+        pytest || [ $? -eq 5 ] # to ignore "no tests collected" error code
 
   ruff-linting:
     runs-on: ubuntu-latest
