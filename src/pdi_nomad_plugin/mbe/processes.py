@@ -156,7 +156,9 @@ class PrecursorsPreparationPDI(Process, EntryData):
     )
     data_file = Quantity(
         type=str,
-        description='Upload here the spreadsheet file containing the deposition control data',
+        description=(
+            'Upload here the spreadsheet file containing the deposition control data'
+        ),
         a_browser={'adaptor': 'RawFileAdaptor'},
         a_eln={'component': 'FileEditQuantity'},
     )
@@ -209,8 +211,8 @@ class PrecursorsPreparationPDI(Process, EntryData):
     # )
     components = SubSection(
         description="""
-        A list of all the components of the composite system containing a name, reference
-        to the system section and mass of that component.
+        A list of all the components of the composite system containing a name,
+        reference to the system section and mass of that component.
         """,
         section_def=Component,
         repeats=True,
@@ -983,7 +985,9 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
     )
     end_time = Quantity(
         type=Datetime,
-        description='The date and time when the sample was unloaded from growth chamber.',
+        description=(
+            'The date and time when the sample was unloaded from growth chamber.'
+        ),
         a_eln=dict(  # component='DateTimeEditQuantity',
             label='substrate unload time'
         ),
@@ -1057,10 +1061,12 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                 rgb_10 = f'rgba({current_rgb}, 1)'
                 if source.impinging_flux[0].value is not None:
                     if source.impinging_flux[0].time is not None:
+                        # fetch hdf5 dataset from already used path for time
+                        time_path = source.impinging_flux[0].time.rsplit('/', 1)[0]
                         timestamp_array = hdf5_2_datetime(
                             archive,
-                            f'{source.impinging_flux[0].time.rsplit("/", 1)[0]}/timestamp',
-                        )  # fetch the hdf5 dataset from the already used path for time
+                            f'{time_path}/timestamp',
+                        )
                         value_array = HDF5Reference.read_dataset(
                             archive,
                             source.impinging_flux[0].value,
@@ -1290,7 +1296,8 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                 ),
                 showlegend=True,
                 legend=dict(
-                    itemsizing='constant',  # Ensures the size of the legend items is constant
+                    # Ensures the size of the legend items is constant
+                    itemsizing='constant',
                     itemwidth=40,  # Adjust the width of the legend items
                 ),
                 legend_traceorder='reversed',
@@ -1331,7 +1338,8 @@ class GrowthMbePDI(VaporDeposition, PlotSection, EntryData):
                                 getattr(sample.substrate.reference, 'substrate'),
                                 'name',
                             ):
-                                # sample.substrate.reference.substrate.reference is not None:
+                                # sample.substrate.reference.substrate.reference
+                                # is not None:
                                 inputs.append(
                                     Link(
                                         name=f'{sample.substrate.reference.substrate.name}',
@@ -1440,7 +1448,9 @@ class ExperimentMbePDI(Experiment, EntryData):
     )
     end_time = Quantity(
         type=Datetime,
-        description='The date and time when the sample was unloaded from growth chamber.',
+        description=(
+            'The date and time when the sample was unloaded from growth chamber.'
+        ),
         a_eln=dict(  # component='DateTimeEditQuantity',
             label='substrate unload time'
         ),
@@ -1452,8 +1462,14 @@ class ExperimentMbePDI(Experiment, EntryData):
     )
     recalculate_growth_start_time = Quantity(
         type=bool,
-        description='If true, the growth start time will be recalculated based on the date found in growth start time field.',
-        a_eln=dict(component='BoolEditQuantity', label='recalculate growth start time'),
+        description=(
+            'If true, the growth start time will be recalculated based on '
+            'the date found in growth start time field.'
+        ),
+        a_eln=dict(
+            component='BoolEditQuantity',
+            label='recalculate growth start time',
+        ),
     )
     data_file = Quantity(
         type=str,
@@ -1613,7 +1629,8 @@ class ExperimentMbePDI(Experiment, EntryData):
                         experiment_path = f'{parts[0]}/' if len(parts) > 1 else ''
                         filetype = 'yaml'
                         stack_id = f'{growth_id}_{sample_holder_position.name}'
-                        layer_id = f'{stack_id}_lyr_1'  # TODO adapt this to the number of layers
+                        # TODO adapt this to the number of layers
+                        layer_id = f'{stack_id}_lyr_1'
                         layer_object = ThinFilmMbe(
                             name=f'{layer_id}',
                             lab_id=layer_id,
@@ -1783,8 +1800,13 @@ class ExperimentMbePDI(Experiment, EntryData):
         #             == growth_entry["results"]["eln"]["lab_ids"][0]
         #         ):
         #             found_id = True
-        #             self.growth_run_constant_parameters = GrowthMbe1PDIConstantParametersReference(
-        #                 reference=f"../uploads/{archive.m_context.upload_id}/archive/{growth_entry['entry_id']}#data"
+        #             self.growth_run_constant_parameters = (
+        #                 GrowthMbe1PDIConstantParametersReference(
+        #                     reference=(
+        #                         f"../uploads/{archive.m_context.upload_id}"
+        #                         f"/archive/{growth_entry['entry_id']}#data"
+        #                     )
+        #                 )
         #             )
         #         for search_quantities in growth_entry["search_quantities"]:
         #             if (
@@ -1798,11 +1820,15 @@ class ExperimentMbePDI(Experiment, EntryData):
         #                 self.composition = search_quantities["str_value"][0]
         #     if not found_id:
         #         logger.warning(
-        #             f"The lab_id '{self.growth_run_constant_parameters.lab_id}' was not found in any 'GrowthMbe1PDIConstantParameters' entry in Nomad. Check if it exist and try to reference it manually."
+        #             f"The lab_id '{self.growth_run_constant_parameters.lab_id}' "
+        #             f"was not found in any 'GrowthMbe1PDIConstantParameters' "
+        #             f"entry in Nomad. Check if it exist and try to reference "
+        #             f"it manually."
         #         )
         # else:
         #     logger.warning(
-        #         "No lab_id for 'GrowthMbe1PDIConstantParameters' found. The archive couldn't be referenced."
+        #         "No lab_id for 'GrowthMbe1PDIConstantParameters' found. "
+        #         "The archive couldn't be referenced."
         #     )
 
     # def normalize(self, archive, logger: BoundLogger) -> None:
@@ -1813,23 +1839,36 @@ class ExperimentMbePDI(Experiment, EntryData):
     ## Potential weak code in next lines:
     ## I want to get back to GrowthRun entry (already created by tabular parser)
     ## and set the "reference" quantity in grwon_samples.
-    ## Here two example codes by Theodore Chang, first touches the raw file, second touches the processed file.
+    ## Here two example codes by Theodore Chang, first touches the raw file,
+    ## second touches the processed file.
     #### ONE
     ## 1. get the file name of archive/entry containing grown_sample_ref
     ## 2. overwrite yaml for this entry
     ## 3. reprocess
-    # grown_sample_ref.reference = f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, filename)}#data'
+    # upload_id = archive.m_context.upload_id
+    # grown_sample_ref.reference = (
+    #     f'../uploads/{upload_id}/archive/{hash(upload_id, filename)}#data'
+    # )
     # grown_sample_archive = grown_sample_ref
     # while not isinstance(grown_sample_archive, EntryArchive):
     #     grown_sample_archive=grown_sample_archive.m_parent
     # grown_sample_file_name:str = grown_sample_archive.metadata.mainfile
     # create_archive(
-    #     grown_sample_archive.m_to_dict(), archive.m_context, grown_sample_file_name, filetype, logger,bypass_check=True)
+    #     grown_sample_archive.m_to_dict(),
+    #     archive.m_context,
+    #     grown_sample_file_name,
+    #     filetype,
+    #     logger,
+    #     bypass_check=True,
+    # )
     #### TWO
     ## alternatively directly overwite the processed msg file
     # grown_sample_upload_id:str = grown_sample_archive.metadata.upload_id
     # grown_sample_entry_id:str = grown_sample_archive.metadata.entry_id
-    # StagingUploadFiles(grown_sample_upload_id).write_archive(grown_sample_entry_id, grown_sample_archive.m_to_dict())
+    # StagingUploadFiles(grown_sample_upload_id).write_archive(
+    #     grown_sample_entry_id,
+    #     grown_sample_archive.m_to_dict(),
+    # )
 
 
 m_package.__init_metainfo__()

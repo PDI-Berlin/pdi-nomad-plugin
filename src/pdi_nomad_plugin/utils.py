@@ -46,7 +46,7 @@ from nomad.datamodel.metainfo.basesections import (
     ExperimentStep,
 )
 from nomad.units import ureg
-from nomad.utils import hash
+from nomad.utils import hash as nomad_hash
 
 timezone = 'Europe/Berlin'
 
@@ -68,13 +68,16 @@ def get_reference(upload_id, entry_id):
 
 
 def get_entry_id(upload_id, filename):
-    from nomad.utils import hash
-
-    return hash(upload_id, filename)
+    return nomad_hash(upload_id, filename)
 
 
 def get_hash_ref(upload_id, filename):
     return f'{get_reference(upload_id, get_entry_id(upload_id, filename))}#data'
+
+
+def get_hdf5_ref(upload_id, hdf_filename, dataset_path):
+    """Build HDF5 reference path for upload."""
+    return f'/uploads/{upload_id}/raw/{hdf_filename}#/{dataset_path}'
 
 
 def nan_equal(a, b):
@@ -315,21 +318,24 @@ def fetch_substrate(archive, sample_id, substrate_id, logger):
         user_id=archive.metadata.main_author.user_id,
     )
     if not search_result.data:
-        logger.warn(
-            f'Substrate entry [{substrate_id}] was not found, upload and reprocess to reference it in ThinFilmStack entry [{sample_id}]'
+        logger.warning(
+            f'Substrate entry [{substrate_id}] was not found, '
+            f'upload and reprocess to reference it in ThinFilmStack '
+            f'entry [{sample_id}]'
         )
         return None
     if len(search_result.data) > 1:
-        logger.warn(
+        logger.warning(
             f'Found {search_result.pagination.total} entries with lab_id: '
             f'"{substrate_id}". Will use the first one found.'
         )
         return None
     if len(search_result.data) >= 1:
-        upload_id = search_result.data[0]['upload_id']
         from nomad.app.v1.routers.uploads import get_upload_with_read_access
         from nomad.files import UploadFiles
 
+        upload_id = search_result.data[0]['upload_id']
+        entry_id = search_result.data[0]['entry_id']
         upload_files = UploadFiles.get(upload_id)
 
         substrate_context = ServerContext(
@@ -344,11 +350,13 @@ def fetch_substrate(archive, sample_id, substrate_id, logger):
         )
 
         if upload_files.raw_path_is_file(substrate_context.raw_path()):
-            substrate_reference_str = f'../uploads/{search_result.data[0]["upload_id"]}/archive/{search_result.data[0]["entry_id"]}#data'
+            substrate_reference_str = f'../uploads/{upload_id}/archive/{entry_id}#data'
             return substrate_reference_str
         else:
-            logger.warn(
-                f"The path '../uploads/{search_result.data[0]['upload_id']}/archive/{search_result.data[0]['entry_id']}#data' is not a file, upload and reprocess to reference it in ThinFilmStack entry [{sample_id}]"
+            logger.warning(
+                f"The path '../uploads/{upload_id}/archive/{entry_id}#data' "
+                f'is not a file, upload and reprocess to reference it in '
+                f'ThinFilmStack entry [{sample_id}]'
             )
             return None
 
@@ -370,16 +378,18 @@ def link_experiment(archive, growth_id, growth_run_filename, reference_wrapper, 
         user_id=archive.metadata.main_author.user_id,
     )
     if not search_result.data:
-        logger.warn(
-            f'{growth_id} Experiment entry not found. Create a new Experiment entry and link manually the Growth entry in it.'
+        logger.warning(
+            f'{growth_id} Experiment entry not found. Create a new Experiment '
+            f'entry and link manually the Growth entry in it.'
         )
     if len(search_result.data) > 1:
         exp_archives = []
         for exp_archive in search_result.data:
             exp_archives.append(exp_archive['upload_id'])
         logger.error(
-            f'Found {search_result.pagination.total} Experiment entries with growth_id: '
-            f'"{growth_id}". Cannot link multiple experiments to the same growth.'
+            f'Found {search_result.pagination.total} Experiment entries '
+            f'with growth_id: "{growth_id}". Cannot link multiple '
+            f'experiments to the same growth. '
             f'Check the following uploads: {exp_archives}'
         )
         return
@@ -408,7 +418,9 @@ def link_experiment(archive, growth_id, growth_run_filename, reference_wrapper, 
                 else json.load(file)
             )
             updated_file['data']['growth_run_logfiles'] = reference_wrapper(
-                reference=f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, growth_run_filename)}#data',
+                reference=get_hash_ref(
+                    archive.m_context.upload_id, growth_run_filename
+                ),
             ).m_to_dict()
         with exp_context.raw_file(exp_mainfile, 'w') as newfile:
             if exp_mainfile.split('.')[-1] == 'json':
@@ -427,34 +439,39 @@ def link_growth_process(archive, growth_id, logger):
         owner='all',
         query={
             'search_quantities': {
-                'id': 'data.lab_id#pdi_nomad_plugin.mbe.processes.GrowthMbePDI',  # TODO this shouldn't be hardcoded
+                # TODO this shouldn't be hardcoded
+                'id': 'data.lab_id#pdi_nomad_plugin.mbe.processes.GrowthMbePDI',
                 'str_value': growth_id,
             }
         },
         user_id=archive.metadata.main_author.user_id,
     )
     if not search_result.data:
-        logger.warn(
+        logger.warning(
             f'{growth_id} Process not found. Link it manually after creating it.'
         )
     if len(search_result.data) > 1:
         logger.warning(
-            f"Found {search_result.pagination.total} entries with growth_id: '{growth_id}'."
+            f'Found {search_result.pagination.total} entries '
+            f"with growth_id: '{growth_id}'."
         )
         entries_same_upload = []
         for entry in search_result.data:
             if entry['upload_id'] != archive.m_context.upload_id:
                 logger.warning(
                     f'Found entry (entry_id: {entry["entry_id"]}) '
-                    f'with same growth_id {growth_id} but in different upload (upload_id: {entry["upload_id"]}). '
-                    f'It will not be linked to the current experiment (upload_id: {archive.m_context.upload_id}).'
+                    f'with same growth_id {growth_id} but in different '
+                    f'upload (upload_id: {entry["upload_id"]}). '
+                    f'It will not be linked to the current experiment '
+                    f'(upload_id: {archive.m_context.upload_id}).'
                 )
             else:
                 entries_same_upload.append(entry['entry_id'])
         if len(entries_same_upload) > 1:
             logger.error(
-                f'Found {len(entries_same_upload)} entries with same growth_id in the current upload: '
-                f'"{growth_id}". Cannot link multiple experiments.'
+                f'Found {len(entries_same_upload)} entries with same '
+                f'growth_id in the current upload: "{growth_id}". '
+                f'Cannot link multiple experiments.'
             )
         elif len(entries_same_upload) == 1:
             entryid = entries_same_upload[0]
@@ -463,11 +480,13 @@ def link_growth_process(archive, growth_id, logger):
             )
             logger.info(
                 f'Linked growth process with entry_id "{entryid}" '
-                f'and growth_id "{growth_id}" to experiment with entry_id {archive.metadata.entry_id}'
+                f'and growth_id "{growth_id}" to experiment '
+                f'with entry_id {archive.metadata.entry_id}'
             )
         return ref_string
     if len(search_result.data) == 1:
-        ref_string = f'../uploads/{archive.m_context.upload_id}/archive/{search_result.data[0]["entry_id"]}#data'
+        entry_id = search_result.data[0]['entry_id']
+        ref_string = f'../uploads/{archive.m_context.upload_id}/archive/{entry_id}#data'
     logger.info(f'Linked growth process {growth_id} to {ref_string}')
     return ref_string
 
@@ -489,8 +508,9 @@ def link_growth_process(archive, growth_id, logger):
 #         user_id=archive.metadata.main_author.user_id,
 #     )
 #     if not search_result.data:
-#         logger.warn(
-#             f'{growth_id} Experiment not found. Cannot link sample holder into the growth process.'
+#         logger.warning(
+#             f'{growth_id} Experiment not found. '
+#             f'Cannot link sample holder into the growth process.'
 #         )
 #     if len(search_result.data) > 1:
 #         logger.error(
@@ -534,13 +554,13 @@ def set_sample_status(
     )
 
     if sample_reference:
+        filename = sample_reference.m_parent.metadata.mainfile
         if (
             hasattr(sample_reference, 'fresh')
             and hasattr(sample_reference, 'as_delivered')
             and hasattr(sample_reference, 'processed')
             and hasattr(sample_reference, 'grown')
         ):
-            filename = sample_reference.m_parent.metadata.mainfile
             with context.raw_file(
                 filename, 'r'
             ) as file:  # TODO it only works with a specific context
@@ -560,13 +580,16 @@ def set_sample_status(
                     yaml.dump(sample_dict, newfile)
             context.upload.process_updated_raw_file(filename, allow_modify=True)
         else:
-            logger.warn(
-                f'Sample {filename} with entry_id {sample_reference.m_parent.metadata.entry_id} does not have status attribute. Please use a sample class with status.'
+            entry_id = sample_reference.m_parent.metadata.entry_id
+            logger.warning(
+                f'Sample {filename} with entry_id {entry_id} does not have '
+                f'status attribute. Please use a sample class with status.'
             )
             return
     else:
-        logger.warn(
-            f'Sample {sample_reference} is not a valid reference. Upload and reprocess to set the status.'
+        logger.warning(
+            f'Sample {sample_reference} is not a valid reference. '
+            f'Upload and reprocess to set the status.'
         )
 
 
@@ -783,7 +806,8 @@ def create_hdf5_file(
 
 def xlsx_to_dict(xlsx):
     """
-    Extracts the sheets from an xlsx file and returns them as a dictionary of DataFrames.
+    Extracts the sheets from an xlsx file and returns them as a
+    dictionary of DataFrames.
     """
     sheets = [
         'MBE config files',
@@ -831,7 +855,8 @@ def calculate_impinging_flux(
             float(fitting[sources_row['EPIC_loop']]['BEPtoFlux']),
             ureg('nanometer ** -2 * second ** -1 * mbar ** -1'),
         )
-        # with source_object.vapor_source.temperature.value as temperature: # Native parsing mode
+        # with source_object.vapor_source.temperature.value as temperature:
+        # Native parsing mode
 
         impinging_flux = (
             bep_to_flux_pint.magnitude

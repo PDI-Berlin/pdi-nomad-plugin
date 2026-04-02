@@ -92,8 +92,6 @@ select = [
 ]
 
 ignore = [
-    "F403", # 'from module import *' used; unable to detect undefined names
-    "E501", # Line too long
     "PLR0912", # Too many branches
     "PLR0913", # Too many arguments in function definition
     "PLR0915", # Too many statements

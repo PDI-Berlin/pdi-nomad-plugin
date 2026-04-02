@@ -434,7 +434,8 @@ class Crucible(ArchiveSection):
 
 class EffusionCellHeaterPower(SourcePower):
     """
-    The working output power measured from the effusion cell termocouple (dimensionless).
+    The working output power measured from the effusion cell termocouple
+    (dimensionless).
     """
 
     m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
@@ -479,7 +480,9 @@ class ImpingingFluxPDI(ImpingingFlux):
     m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
     bep_to_flux = Quantity(
         type=float,
-        description='The conversion factor from Beam Equivalent Pressure (BEP) to the flux.',
+        description=(
+            'The conversion factor from Beam Equivalent Pressure (BEP) to the flux.'
+        ),
         unit='meter ** -2 * second ** -1 * pascal ** -1',
     )
     t_0_parameter = Quantity(
@@ -886,11 +889,16 @@ class FilledSubstrateHolderPDI(SubstrateHolderPDI, EntryData):
         super().normalize(archive, logger)
         if len(self.positions) > 0 and self.substrate_holder is None:
             logger.error(
-                'FilledSubstrateHolderPDI: positions list is not None and Empty Substrate Holder template is not linked. Delete all positions to import metadata from Empty Substrate Holder.'
+                'FilledSubstrateHolderPDI: positions list is not None and Empty '
+                'Substrate Holder template is not linked. Delete all positions '
+                'to import metadata from Empty Substrate Holder.'
             )
         if len(self.positions) > 0 and self.substrate_holder is not None:
-            logger.warn(
-                'FilledSubstrateHolderPDI: positions list is not None and Empty Substrate Holder template is linked. No metadata will be imported from Empty Substrate Holder. Delete all positions to import metadata from Empty Holder.'
+            logger.warning(
+                'FilledSubstrateHolderPDI: positions list is not None and Empty '
+                'Substrate Holder template is linked. No metadata will be '
+                'imported from Empty Substrate Holder. Delete all positions '
+                'to import metadata from Empty Holder.'
             )
         if not len(self.positions) > 0 and self.substrate_holder is not None:
             materials_list = []

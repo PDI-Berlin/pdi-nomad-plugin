@@ -23,7 +23,6 @@ from nomad.metainfo import (
     SectionProxy,
     SubSection,
 )
-from nomad.utils import hash
 from nomad_material_processing.general import (
     Annealing,
     AnnealingRecipe,
@@ -35,7 +34,12 @@ from nomad_material_processing.general import (
     Recipe,
 )
 
-from pdi_nomad_plugin.utils import create_archive, merge_sections, set_sample_status
+from pdi_nomad_plugin.utils import (
+    create_archive,
+    get_hash_ref,
+    merge_sections,
+    set_sample_status,
+)
 
 m_package = SchemaPackage()
 
@@ -164,8 +168,8 @@ class EtchingPDI(ProcessPDI, Etching):
 
 class EtchingRecipePDI(EtchingPDI, EtchingRecipe):
     """
-    A recipe for selectively remove material from a surface using chemical or physical processes
-    to create specific patterns or structures.
+    A recipe for selectively remove material from a surface using chemical
+    or physical processes to create specific patterns or structures.
     """
 
     m_def = Section(
@@ -183,7 +187,8 @@ class EtchingRecipePDI(EtchingPDI, EtchingRecipe):
 
 class AnnealingRecipePDI(AnnealingRecipe):
     """
-    A recipe for the process of heating a material to a specific temperature for a specific time.
+    A recipe for the process of heating a material to a specific temperature
+    for a specific time.
     """
 
     m_def = Section(
@@ -457,7 +462,9 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
                 generated_samples.append(
                     CompositeSystemReference(
                         name=children_object.name,
-                        reference=f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, children_filename)}#data',
+                        reference=get_hash_ref(
+                            archive.m_context.upload_id, children_filename
+                        ),
                     ),
                 )
             self.children_samples = generated_samples

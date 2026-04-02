@@ -8,6 +8,17 @@ from nomad.config.models.ui import (
     Filters,
 )
 
+# Column keys for SubstrateMbe
+_SUB_MBE = 'pdi_nomad_plugin.mbe.materials.SubstrateMbe'
+_COL_NAME = f'data.name#{_SUB_MBE}'
+_COL_DATE = f'data.delivery_date#{_SUB_MBE}'
+_COL_LAB_ID = f'data.lab_id#{_SUB_MBE}'
+_COL_DELIVERED = f'data.as_delivered#{_SUB_MBE}'
+_COL_FRESH = f'data.fresh#{_SUB_MBE}'
+_COL_PROCESSED = f'data.processed#{_SUB_MBE}'
+_COL_GROWN = f'data.grown#{_SUB_MBE}'
+_COL_ORIENT = f'data.crystal_properties.orientation#{_SUB_MBE}'
+
 substrateapp = AppEntryPoint(
     name='Substrates',
     description='Explore Substrates catalogue in PDi institute.',
@@ -17,27 +28,26 @@ substrateapp = AppEntryPoint(
         category='PDI',
         columns=Columns(
             selected=[
-                'data.name#pdi_nomad_plugin.mbe.materials.SubstrateMbe',
-                'data.delivery_date#pdi_nomad_plugin.mbe.materials.SubstrateMbe',
-                'data.lab_id#pdi_nomad_plugin.mbe.materials.SubstrateMbe',
-                'data.as_delivered#pdi_nomad_plugin.mbe.materials.SubstrateMbe',
-                'data.fresh#pdi_nomad_plugin.mbe.materials.SubstrateMbe',
-                'data.processed#pdi_nomad_plugin.mbe.materials.SubstrateMbe',
-                'data.grown#pdi_nomad_plugin.mbe.materials.SubstrateMbe',
-                'data.crystal_properties.orientation#pdi_nomad_plugin.mbe.materials.SubstrateMbe',
+                _COL_NAME,
+                _COL_DATE,
+                _COL_LAB_ID,
+                _COL_DELIVERED,
+                _COL_FRESH,
+                _COL_PROCESSED,
+                _COL_GROWN,
+                _COL_ORIENT,
             ],
             options={
-                'data.name#pdi_nomad_plugin.mbe.materials.SubstrateMbe': Column(),
-                'data.delivery_date#pdi_nomad_plugin.mbe.materials.SubstrateMbe': Column(),
-                'data.lab_id#pdi_nomad_plugin.mbe.materials.SubstrateMbe': Column(),
-                'data.as_delivered#pdi_nomad_plugin.mbe.materials.SubstrateMbe': Column(),
-                'data.fresh#pdi_nomad_plugin.mbe.materials.SubstrateMbe': Column(),
-                'data.processed#pdi_nomad_plugin.mbe.materials.SubstrateMbe': Column(),
-                'data.grown#pdi_nomad_plugin.mbe.materials.SubstrateMbe': Column(),
-                'data.crystal_properties.orientation#pdi_nomad_plugin.mbe.materials.SubstrateMbe': Column(),
-                #     'data.geometry.width#nomad_ikz_plugin.movpe.schema.SubstrateMovpe': Column(
-                #         label='Width', unit='mm'
-                #     ),
+                _COL_NAME: Column(),
+                _COL_DATE: Column(),
+                _COL_LAB_ID: Column(),
+                _COL_DELIVERED: Column(),
+                _COL_FRESH: Column(),
+                _COL_PROCESSED: Column(),
+                _COL_GROWN: Column(),
+                _COL_ORIENT: Column(),
+                # 'data.geometry.width#nomad_ikz_plugin.movpe.schema.SubstrateMovpe':
+                #     Column(label='Width', unit='mm'),
             },
         ),
         filter_menus=FilterMenus(
