@@ -46,7 +46,7 @@ from nomad.datamodel.metainfo.basesections import (
     ExperimentStep,
 )
 from nomad.units import ureg
-from nomad.utils import hash
+from nomad.utils import hash as nomad_hash
 
 timezone = 'Europe/Berlin'
 
@@ -68,9 +68,7 @@ def get_reference(upload_id, entry_id):
 
 
 def get_entry_id(upload_id, filename):
-    from nomad.utils import hash
-
-    return hash(upload_id, filename)
+    return nomad_hash(upload_id, filename)
 
 
 def get_hash_ref(upload_id, filename):
@@ -408,7 +406,9 @@ def link_experiment(archive, growth_id, growth_run_filename, reference_wrapper, 
                 else json.load(file)
             )
             updated_file['data']['growth_run_logfiles'] = reference_wrapper(
-                reference=f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, growth_run_filename)}#data',
+                reference=get_hash_ref(
+                    archive.m_context.upload_id, growth_run_filename
+                ),
             ).m_to_dict()
         with exp_context.raw_file(exp_mainfile, 'w') as newfile:
             if exp_mainfile.split('.')[-1] == 'json':

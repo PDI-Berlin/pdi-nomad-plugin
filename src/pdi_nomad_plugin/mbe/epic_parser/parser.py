@@ -32,7 +32,6 @@ from nomad.datamodel.metainfo.basesections import (
 from nomad.metainfo import Quantity
 from nomad.parsing import MatchingParser
 from nomad.units import ureg
-from nomad.utils import hash
 
 from pdi_nomad_plugin.characterization.schema import (
     LaserReflectance,
@@ -78,6 +77,7 @@ from pdi_nomad_plugin.utils import (
     create_hdf5_file,
     fill_datetime,
     fill_quantity,
+    get_hash_ref,
     link_experiment,
     read_fitting,
     read_shutters,
@@ -513,7 +513,10 @@ class ParserEpicPDI(MatchingParser):
                 child_archives['instrument'].data.port_list.append(port_object)
 
                 # reference the instrument.port_list into the process.sources
-                source_object.port = f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, instrument_filename)}#data/port_list/{sources_index}'
+                source_object.port = (
+                    get_hash_ref(archive.m_context.upload_id, instrument_filename)
+                    + f'/port_list/{sources_index}'
+                )
                 # child_archives["instrument"].data.port_list[sources_index] # Native parsing mode
 
                 if sources_row['source_length']:

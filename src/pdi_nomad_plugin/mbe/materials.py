@@ -15,7 +15,6 @@ from nomad.metainfo import (
     Section,
     SubSection,
 )
-from nomad.utils import hash
 from nomad_material_processing.general import (
     CrystallineSubstrate,
     ThinFilm,
@@ -32,6 +31,7 @@ from pdi_nomad_plugin.general.schema import (
 )
 from pdi_nomad_plugin.utils import (
     create_archive,
+    get_hash_ref,
 )
 
 m_package = SchemaPackage()
@@ -306,7 +306,9 @@ class SubstrateBatchMbe(SubstrateMbe, EntryData):
                     self.substrates.append(
                         CompositeSystemReference(
                             name=substrate_object.name,
-                            reference=f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, substrate_filename)}#data',
+                            reference=get_hash_ref(
+                                archive.m_context.upload_id, substrate_filename
+                            ),
                         ),
                     )
             self.trigger_create_substrate = False

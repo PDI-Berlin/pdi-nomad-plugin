@@ -23,7 +23,6 @@ from nomad.metainfo import (
     SectionProxy,
     SubSection,
 )
-from nomad.utils import hash
 from nomad_material_processing.general import (
     Annealing,
     AnnealingRecipe,
@@ -35,7 +34,12 @@ from nomad_material_processing.general import (
     Recipe,
 )
 
-from pdi_nomad_plugin.utils import create_archive, merge_sections, set_sample_status
+from pdi_nomad_plugin.utils import (
+    create_archive,
+    get_hash_ref,
+    merge_sections,
+    set_sample_status,
+)
 
 m_package = SchemaPackage()
 
@@ -457,7 +461,9 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
                 generated_samples.append(
                     CompositeSystemReference(
                         name=children_object.name,
-                        reference=f'../uploads/{archive.m_context.upload_id}/archive/{hash(archive.m_context.upload_id, children_filename)}#data',
+                        reference=get_hash_ref(
+                            archive.m_context.upload_id, children_filename
+                        ),
                     ),
                 )
             self.children_samples = generated_samples
