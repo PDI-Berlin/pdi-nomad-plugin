@@ -33,6 +33,7 @@ from nomad_material_processing.general import (
 from pdi_nomad_plugin.utils import (
     create_archive,
     get_hash_ref,
+    get_reference,
     merge_sections,
     set_sample_status,
 )
@@ -464,6 +465,22 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
                     m_context=archive.m_context,
                     metadata=EntryMetadata(upload_id=archive.m_context.upload_id),
                 )
+
+                # try setting the parent reference of the children to the parent sample
+                # reference if the `parent_sample` subsection exists in the children
+                # object.
+                try:
+                    children_object.m_setdefault('parent_sample')
+                    children_object.parent_sample.reference = (
+                        get_reference(
+                            self.parent_sample.reference.m_parent.m_context.upload_id,
+                            self.parent_sample.reference.m_parent.entry_id,
+                        )
+                        + '#data'
+                    )
+                except Exception:
+                    pass
+
                 create_archive(
                     children_archive.m_to_dict(),
                     archive.m_context,
