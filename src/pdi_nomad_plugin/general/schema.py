@@ -1,11 +1,7 @@
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from structlog.stdlib import (
-        BoundLogger,
-    )
-
 import numpy as np
+from nomad.datamodel import EntryArchive, EntryMetadata
 from nomad.datamodel.data import ArchiveSection, EntryData, EntryDataCategory
 from nomad.datamodel.metainfo.annotations import ELNAnnotation, ELNComponentEnum
 from nomad.datamodel.metainfo.basesections import (
@@ -40,6 +36,11 @@ from pdi_nomad_plugin.utils import (
     merge_sections,
     set_sample_status,
 )
+
+if TYPE_CHECKING:
+    from structlog.stdlib import (
+        BoundLogger,
+    )
 
 m_package = SchemaPackage()
 
@@ -417,7 +418,6 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
         sample reference. This method is triggered when the `trigger_cut_sample`
         quantity is set to True.
         """
-        from nomad.datamodel import EntryArchive, EntryMetadata
 
         filetype = 'yaml'
         if not self.number_of_samples:
