@@ -894,7 +894,7 @@ class FilledSubstrateHolderPDI(SubstrateHolderPDI, EntryData):
                 'to import metadata from Empty Substrate Holder.'
             )
         if len(self.positions) > 0 and self.substrate_holder is not None:
-            logger.warn(
+            logger.warning(
                 'FilledSubstrateHolderPDI: positions list is not None and Empty '
                 'Substrate Holder template is linked. No metadata will be '
                 'imported from Empty Substrate Holder. Delete all positions '

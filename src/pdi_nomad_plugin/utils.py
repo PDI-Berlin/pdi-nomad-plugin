@@ -318,14 +318,14 @@ def fetch_substrate(archive, sample_id, substrate_id, logger):
         user_id=archive.metadata.main_author.user_id,
     )
     if not search_result.data:
-        logger.warn(
+        logger.warning(
             f'Substrate entry [{substrate_id}] was not found, '
             f'upload and reprocess to reference it in ThinFilmStack '
             f'entry [{sample_id}]'
         )
         return None
     if len(search_result.data) > 1:
-        logger.warn(
+        logger.warning(
             f'Found {search_result.pagination.total} entries with lab_id: '
             f'"{substrate_id}". Will use the first one found.'
         )
@@ -354,7 +354,7 @@ def fetch_substrate(archive, sample_id, substrate_id, logger):
             substrate_reference_str = f'../uploads/{upload_id}/archive/{entry_id}#data'
             return substrate_reference_str
         else:
-            logger.warn(
+            logger.warning(
                 f"The path '../uploads/{upload_id}/archive/{entry_id}#data' "
                 f'is not a file, upload and reprocess to reference it in '
                 f'ThinFilmStack entry [{sample_id}]'
@@ -379,7 +379,7 @@ def link_experiment(archive, growth_id, growth_run_filename, reference_wrapper, 
         user_id=archive.metadata.main_author.user_id,
     )
     if not search_result.data:
-        logger.warn(
+        logger.warning(
             f'{growth_id} Experiment entry not found. Create a new Experiment '
             f'entry and link manually the Growth entry in it.'
         )
@@ -448,7 +448,7 @@ def link_growth_process(archive, growth_id, logger):
         user_id=archive.metadata.main_author.user_id,
     )
     if not search_result.data:
-        logger.warn(
+        logger.warning(
             f'{growth_id} Process not found. Link it manually after creating it.'
         )
     if len(search_result.data) > 1:
@@ -509,7 +509,7 @@ def link_growth_process(archive, growth_id, logger):
 #         user_id=archive.metadata.main_author.user_id,
 #     )
 #     if not search_result.data:
-#         logger.warn(
+#         logger.warning(
 #             f'{growth_id} Experiment not found. '
 #             f'Cannot link sample holder into the growth process.'
 #         )
@@ -582,13 +582,13 @@ def set_sample_status(
             context.upload.process_updated_raw_file(filename, allow_modify=True)
         else:
             entry_id = sample_reference.m_parent.metadata.entry_id
-            logger.warn(
+            logger.warning(
                 f'Sample {filename} with entry_id {entry_id} does not have '
                 f'status attribute. Please use a sample class with status.'
             )
             return
     else:
-        logger.warn(
+        logger.warning(
             f'Sample {sample_reference} is not a valid reference. '
             f'Upload and reprocess to set the status.'
         )
