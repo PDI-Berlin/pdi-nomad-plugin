@@ -18,6 +18,7 @@ from nomad.metainfo import (
 from nomad_material_processing.general import (
     CrystallineSubstrate,
     Geometry,
+    SubstrateReference,
     ThinFilm,
     ThinFilmStack,
     ThinFilmStackReference,
@@ -155,6 +156,12 @@ class SubstrateMbe(CrystallineSubstrate, EntryData):
             component='StringEditQuantity',
             label='Notes',
         ),
+    )
+    parent_sample = SubSection(
+        description="""
+        The parent sample from which the current substrate was cut.
+        """,
+        section_def=SubstrateReference,
     )
 
     def normalize(self, archive, logger):
