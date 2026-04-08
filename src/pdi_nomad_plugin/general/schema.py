@@ -443,11 +443,8 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
             children_object = self.parent_sample.reference.m_copy(deep=False)
             if self.children_geometry:
                 children_object.geometry = self.children_geometry
-                children_object.geometry.height = (
-                    self.parent_sample.reference.geometry.height
-                )
             else:
-                logger.warning('No children geometry found. Using parent geometry.')
+                logger.warning('No children geometry found. Leaving it empty.')
 
             for sample_index in range(1, self.number_of_samples + 1):
                 child_name = (
