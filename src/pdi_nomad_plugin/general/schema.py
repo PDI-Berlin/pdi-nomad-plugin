@@ -1,11 +1,7 @@
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from structlog.stdlib import (
-        BoundLogger,
-    )
-
 import numpy as np
+from nomad.datamodel import EntryArchive, EntryMetadata
 from nomad.datamodel.data import ArchiveSection, EntryData, EntryDataCategory
 from nomad.datamodel.metainfo.annotations import ELNAnnotation, ELNComponentEnum
 from nomad.datamodel.metainfo.basesections import (
@@ -37,9 +33,15 @@ from nomad_material_processing.general import (
 from pdi_nomad_plugin.utils import (
     create_archive,
     get_hash_ref,
+    get_reference,
     merge_sections,
     set_sample_status,
 )
+
+if TYPE_CHECKING:
+    from structlog.stdlib import (
+        BoundLogger,
+    )
 
 m_package = SchemaPackage()
 
@@ -384,6 +386,15 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
             component=ELNComponentEnum.FileEditQuantity,
         ),
     )
+    trigger_cut_sample = Quantity(
+        type=bool,
+        description='Cut the sample based on the given number of samples and parent '
+        'sample reference.',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.ActionEditQuantity,
+        ),
+        label='Cut Sample',
+    )
     children_geometry = SubSection(
         section_def=Geometry,
         description='Section containing the geometry of the substrate.',
@@ -402,29 +413,31 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
         repeats=True,
     )
 
-    def normalize(self, archive, logger: 'BoundLogger') -> None:
+    def cut_sample(self, archive, logger: 'BoundLogger') -> None:
         """
-        The normalizer sets the sample status if a reference to a sample is given.
+        Method to cut the sample based on the given number of samples and parent
+        sample reference. This method is triggered when the `trigger_cut_sample`
+        quantity is set to True.
         """
-        from nomad.datamodel import EntryArchive, EntryMetadata
-
-        super().normalize(archive, logger)
 
         filetype = 'yaml'
         if not self.number_of_samples:
             logger.error(
                 "Error in SampleCut: 'number_of_samples' expected, but None found."
             )
-        if not self.parent_sample:
+            return
+        if not self.parent_sample or not self.parent_sample.reference:
             logger.error(
                 "Error in SampleCut: 'parent_sample' expected, but None found."
             )
+            return
         if self.children_samples:
             logger.error(
                 f'Error in SampleCut: No children samples expected,'
                 f' but {len(self.children_samples)} children samples given.'
                 f' Remove the children samples and save again to generate children.'
             )
+            return
         generated_samples = []
         if self.parent_sample and self.number_of_samples:
             children_object = self.parent_sample.reference.m_copy(deep=False)
@@ -452,6 +465,22 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
                     m_context=archive.m_context,
                     metadata=EntryMetadata(upload_id=archive.m_context.upload_id),
                 )
+
+                # try setting the parent reference of the children to the parent sample
+                # reference if the `parent_sample` subsection exists in the children
+                # object.
+                try:
+                    children_object.m_setdefault('parent_sample')
+                    children_object.parent_sample.reference = (
+                        get_reference(
+                            self.parent_sample.reference.m_parent.m_context.upload_id,
+                            self.parent_sample.reference.m_parent.entry_id,
+                        )
+                        + '#data'
+                    )
+                except Exception:
+                    pass
+
                 create_archive(
                     children_archive.m_to_dict(),
                     archive.m_context,
@@ -488,6 +517,21 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
                 if self.parent_sample.reference.grown
                 else False,
             )
+
+    def normalize(self, archive, logger: 'BoundLogger') -> None:
+        """
+        The normalizer triggers the `cut_sample` method if the `trigger_cut_sample`
+        quantity is set to True.
+        """
+
+        super().normalize(archive, logger)
+        if self.trigger_cut_sample:
+            try:
+                self.cut_sample(archive, logger)
+            except Exception as e:
+                logger.error(f'Error occurred while cutting sample: {e}')
+            finally:
+                self.trigger_cut_sample = False
 
 
 m_package.__init_metainfo__()

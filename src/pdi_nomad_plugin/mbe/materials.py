@@ -17,6 +17,7 @@ from nomad.metainfo import (
 )
 from nomad_material_processing.general import (
     CrystallineSubstrate,
+    Geometry,
     ThinFilm,
     ThinFilmStack,
     ThinFilmStackReference,
@@ -391,6 +392,10 @@ class ThinFilmStackMbePDI(SystemPDI, ThinFilmStack, EntryData):
         the parent sample of the current sample.
         """,
         section_def=ThinFilmStackReference,
+    )
+    geometry = SubSection(
+        section_def=Geometry,
+        description='Section containing the geometry of the thin film.',
     )
 
 
