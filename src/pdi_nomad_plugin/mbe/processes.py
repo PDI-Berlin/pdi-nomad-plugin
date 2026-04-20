@@ -1630,8 +1630,13 @@ class ExperimentMbePDI(Experiment, EntryData):
                 for sample_holder_position in self.substrate_holder.reference.positions:
                     # position on a holder can be empty, filled with a substrate only,
                     # or filled with a ThinFilmStack
-                    if not sample_holder_position.substrate:
+                    if (
+                        not sample_holder_position.substrate
+                        or not sample_holder_position.substrate.reference
+                    ):
                         continue
+                    else:
+                        curr_pos_substrate = sample_holder_position.substrate.reference
 
                     parts = archive.metadata.mainfile.rsplit('/', 1)
                     experiment_path = f'{parts[0]}/' if len(parts) > 1 else ''
@@ -1663,26 +1668,22 @@ class ExperimentMbePDI(Experiment, EntryData):
                         lab_id=stack_id,
                         datetime=self.datetime,
                     )
-                    if isinstance(
-                        sample_holder_position.substrate.reference, SubstrateMbe
-                    ):
+                    if isinstance(curr_pos_substrate, SubstrateMbe):
                         new_thin_film_stack.substrate = SubstrateReference(
-                            name=sample_holder_position.substrate.reference.lab_id,
-                            reference=sample_holder_position.substrate.reference,
+                            name=curr_pos_substrate.lab_id,
+                            reference=curr_pos_substrate,
                         )
                     elif isinstance(
-                        sample_holder_position.substrate.reference,
+                        curr_pos_substrate,
                         ThinFilmStackMbePDI,
                     ):
                         new_thin_film_stack.substrate = SubstrateReference(
-                            name=sample_holder_position.substrate.reference.substrate.reference.lab_id,
-                            reference=sample_holder_position.substrate.reference.substrate.reference,
+                            name=curr_pos_substrate.substrate.reference.lab_id,
+                            reference=curr_pos_substrate.substrate.reference,
                         )
                         # get the layers from the thin film stack placed in the holder
                         layers = []
-                        for (
-                            thin_film_layer
-                        ) in sample_holder_position.substrate.reference.layers:
+                        for thin_film_layer in curr_pos_substrate.layers:
                             layers.append(thin_film_layer)
                         new_thin_film_stack.layers = layers
                     else:
@@ -1690,7 +1691,7 @@ class ExperimentMbePDI(Experiment, EntryData):
                             f'Unexpected substrate reference type for position '
                             f'{sample_holder_position.name} in substrate holder. '
                             f'Expected SubstrateMbe or ThinFilmStackMbePDI, but got '
-                            f'{type(sample_holder_position.substrate.reference)}. '
+                            f'{type(curr_pos_substrate)}. '
                             f'Skipping sample creation for this position.'
                         )
                         continue
