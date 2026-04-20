@@ -441,6 +441,7 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
         generated_samples = []
         if self.parent_sample and self.number_of_samples:
             children_object = self.parent_sample.reference.m_copy(deep=False)
+            children_object.parent_sample = None
             if self.children_geometry:
                 children_object.geometry = self.children_geometry
             else:
