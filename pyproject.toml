@@ -15,7 +15,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
 ]
 name = "pdi-nomad-plugin"
-version = "1.0.7"
+dynamic = ["version"]
 description = "A plugin for PDI NOMAD containing principal techniques."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -132,3 +132,5 @@ instrument_schema = "pdi_nomad_plugin.mbe:instrument_schema"
 processes_schema = "pdi_nomad_plugin.mbe:processes_schema"
 epic_mbe_parser = "pdi_nomad_plugin.mbe.epic_parser:epic_parser"
 # mbe_app = "pdi_nomad_plugin.mbe.mbe_app:substrateapp"
+
+[tool.setuptools_scm]
