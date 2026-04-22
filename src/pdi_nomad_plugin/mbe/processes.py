@@ -81,7 +81,11 @@ from pdi_nomad_plugin.mbe.instrument import (
     Shutter,
     SourcePDI,
 )
-from pdi_nomad_plugin.mbe.materials import ThinFilmMbe, ThinFilmStackMbePDI
+from pdi_nomad_plugin.mbe.materials import (
+    SubstrateMbe,
+    ThinFilmMbe,
+    ThinFilmStackMbePDI,
+)
 from pdi_nomad_plugin.utils import (
     add_impinging_flux_to_hdf5,
     add_units_to_hdf5,
@@ -1624,70 +1628,103 @@ class ExperimentMbePDI(Experiment, EntryData):
                 growth_id = self.lab_id
                 self.samples = []
                 for sample_holder_position in self.substrate_holder.reference.positions:
-                    if sample_holder_position.substrate:
-                        parts = archive.metadata.mainfile.rsplit('/', 1)
-                        experiment_path = f'{parts[0]}/' if len(parts) > 1 else ''
-                        filetype = 'yaml'
-                        stack_id = f'{growth_id}_{sample_holder_position.name}'
-                        # TODO adapt this to the number of layers
-                        layer_id = f'{stack_id}_lyr_1'
-                        layer_object = ThinFilmMbe(
-                            name=f'{layer_id}',
-                            lab_id=layer_id,
+                    # position on a holder can be empty, filled with a substrate only,
+                    # or filled with a ThinFilmStack
+                    if (
+                        not sample_holder_position.substrate
+                        or not sample_holder_position.substrate.reference
+                    ):
+                        continue
+                    else:
+                        curr_pos_substrate = sample_holder_position.substrate.reference
+
+                    parts = archive.metadata.mainfile.rsplit('/', 1)
+                    experiment_path = f'{parts[0]}/' if len(parts) > 1 else ''
+                    filetype = 'yaml'
+                    stack_id = f'{growth_id}_{sample_holder_position.name}'
+                    # TODO adapt this to the number of layers
+                    layer_id = f'{stack_id}_lyr_1'
+                    layer_object = ThinFilmMbe(
+                        name=f'{layer_id}',
+                        lab_id=layer_id,
+                    )
+                    layer_archive = EntryArchive(
+                        m_context=archive.m_context,
+                        data=layer_object,
+                    )
+                    layer_filename = f'{experiment_path}{layer_id}.archive.{filetype}'
+                    layer_reference = create_archive(
+                        layer_archive.m_to_dict(),
+                        archive.m_context,
+                        layer_filename,
+                        filetype,
+                        logger,
+                    )
+
+                    # Create an entry for the new thin film stack coming from the
+                    # experiment.
+                    new_thin_film_stack = ThinFilmStackMbePDI(
+                        name=stack_id,
+                        lab_id=stack_id,
+                        datetime=self.datetime,
+                    )
+                    if isinstance(curr_pos_substrate, SubstrateMbe):
+                        new_thin_film_stack.substrate = SubstrateReference(
+                            name=curr_pos_substrate.lab_id,
+                            reference=curr_pos_substrate,
                         )
-                        layer_archive = EntryArchive(
-                            m_context=archive.m_context,
-                            data=layer_object,
+                    elif isinstance(
+                        curr_pos_substrate,
+                        ThinFilmStackMbePDI,
+                    ):
+                        new_thin_film_stack.substrate = SubstrateReference(
+                            name=curr_pos_substrate.substrate.reference.lab_id,
+                            reference=curr_pos_substrate.substrate.reference,
                         )
-                        layer_filename = (
-                            f'{experiment_path}{layer_id}.archive.{filetype}'
+                        # get the layers from the thin film stack placed in the holder
+                        layers = []
+                        for thin_film_layer in curr_pos_substrate.layers:
+                            layers.append(thin_film_layer)
+                        new_thin_film_stack.layers = layers
+                    else:
+                        logger.warning(
+                            f'Unexpected substrate reference type for position '
+                            f'{sample_holder_position.name} in substrate holder. '
+                            f'Expected SubstrateMbe or ThinFilmStackMbePDI, but got '
+                            f'{type(curr_pos_substrate)}. '
+                            f'Skipping sample creation for this position.'
                         )
-                        layer_reference = create_archive(
-                            layer_archive.m_to_dict(),
-                            archive.m_context,
-                            layer_filename,
-                            filetype,
-                            logger,
+                        continue
+                    # TODO check why m_add_sub_section does not work
+                    # sample_object.m_add_sub_section(
+                    #             ThinFilmStackMbePDI.layers, ThinFilmReference(
+                    #         reference=layer_reference,
+                    #         ))
+
+                    # Add the new layer coming from the experiment
+                    new_thin_film_stack.layers.append(
+                        ThinFilmReference(
+                            name=layer_id,
+                            reference=layer_reference,
                         )
-                        sample_object = ThinFilmStackMbePDI(
-                            name=stack_id,
-                            lab_id=stack_id,
-                            datetime=self.datetime,
-                            substrate=SubstrateReference(
-                                name=sample_holder_position.substrate.reference.lab_id,
-                                reference=sample_holder_position.substrate.reference,
+                    )
+                    stack_filename = f'{experiment_path}{stack_id}.archive.{filetype}'
+
+                    sample_archive = EntryArchive(
+                        m_context=archive.m_context,
+                        data=new_thin_film_stack,
+                    )
+                    self.samples.append(
+                        CompositeSystemReference(
+                            reference=create_archive(
+                                sample_archive.m_to_dict(),
+                                archive.m_context,
+                                stack_filename,
+                                filetype,
+                                logger,
                             ),
                         )
-                        # TODO check why m_add_sub_section does not work
-                        # sample_object.m_add_sub_section(
-                        #             ThinFilmStackMbePDI.layers, ThinFilmReference(
-                        #         reference=layer_reference,
-                        #         ))
-                        sample_object.layers.append(
-                            ThinFilmReference(
-                                name=layer_id,
-                                reference=layer_reference,
-                            )
-                        )
-                        stack_filename = (
-                            f'{experiment_path}{stack_id}.archive.{filetype}'
-                        )
-
-                        sample_archive = EntryArchive(
-                            m_context=archive.m_context,
-                            data=sample_object,
-                        )
-                        self.samples.append(
-                            CompositeSystemReference(
-                                reference=create_archive(
-                                    sample_archive.m_to_dict(),
-                                    archive.m_context,
-                                    stack_filename,
-                                    filetype,
-                                    logger,
-                                ),
-                            )
-                        )
+                    )
 
         # recalculate the growth start time and rewrite the HDF5 file
         if self.recalculate_growth_start_time:
