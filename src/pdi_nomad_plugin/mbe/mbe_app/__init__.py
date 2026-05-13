@@ -1,4 +1,6 @@
+import yaml
 from nomad.config.models.plugins import AppEntryPoint
+
 from nomad.config.models.ui import (
     App,
     Column,
@@ -6,6 +8,7 @@ from nomad.config.models.ui import (
     FilterMenu,
     FilterMenus,
     Filters,
+    Dashboard,
 )
 
 # Column keys for SubstrateMbe
@@ -50,6 +53,50 @@ substrateapp = AppEntryPoint(
                 #     Column(label='Width', unit='mm'),
             },
         ),
+        dashboard=Dashboard(
+            widgets=yaml.safe_load("""
+            - type: terms
+              scale: linear
+              search_quantity: data.fresh#pdi_nomad_plugin.mbe.materials.SubstrateMbe
+              layout:
+                xxl:
+                  minH: 3
+                  minW: 3
+                  h: 9
+                  w: 6
+                  y: 0
+                  x: 0
+                xl:
+                  minH: 3
+                  minW: 3
+                  h: 9
+                  w: 6
+                  y: 0
+                  x: 0
+                lg:
+                  minH: 3
+                  minW: 3
+                  h: 9
+                  w: 6
+                  y: 0
+                  x: 0
+                md:
+                  minH: 3
+                  minW: 3
+                  h: 9
+                  w: 6
+                  y: 0
+                  x: 0
+                sm:
+                  minH: 3
+                  minW: 3
+                  h: 9
+                  w: 6
+                  y: 0
+                  x: 0
+            """)
+        ),
+        
         filter_menus=FilterMenus(
             options={
                 'material': FilterMenu(label='Material'),
