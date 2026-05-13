@@ -1,14 +1,13 @@
 import yaml
 from nomad.config.models.plugins import AppEntryPoint
-
 from nomad.config.models.ui import (
     App,
     Column,
     Columns,
+    Dashboard,
     FilterMenu,
     FilterMenus,
     Filters,
-    Dashboard,
 )
 
 # Column keys for SubstrateMbe
@@ -96,7 +95,6 @@ substrateapp = AppEntryPoint(
                   x: 0
             """)
         ),
-        
         filter_menus=FilterMenus(
             options={
                 'material': FilterMenu(label='Material'),
