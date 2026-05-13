@@ -19,7 +19,7 @@ _COL_DELIVERED = f'data.as_delivered#{_SUB_MBE}'
 _COL_FRESH = f'data.fresh#{_SUB_MBE}'
 _COL_PROCESSED = f'data.processed#{_SUB_MBE}'
 _COL_GROWN = f'data.grown#{_SUB_MBE}'
-_COL_ORIENT = f'data.crystal_properties.orientation#{_SUB_MBE}'
+#_COL_ORIENT = f'data.crystal_properties.orientation#{_SUB_MBE}'
 
 substrateapp = AppEntryPoint(
     name='Substrates',
@@ -37,7 +37,7 @@ substrateapp = AppEntryPoint(
                 _COL_FRESH,
                 _COL_PROCESSED,
                 _COL_GROWN,
-                _COL_ORIENT,
+                #_COL_ORIENT,
             ],
             options={
                 _COL_NAME: Column(),
@@ -47,7 +47,7 @@ substrateapp = AppEntryPoint(
                 _COL_FRESH: Column(),
                 _COL_PROCESSED: Column(),
                 _COL_GROWN: Column(),
-                _COL_ORIENT: Column(),
+                #_COL_ORIENT: Column(),
                 # 'data.geometry.width#nomad_ikz_plugin.movpe.schema.SubstrateMovpe':
                 #     Column(label='Width', unit='mm'),
             },
