@@ -760,7 +760,7 @@ def merge_sections(  # noqa: PLR0912
             'the same type and do not have a common ancestry.'
         )
     for name, _ in update.m_def.all_quantities.items():
-        if not update.m_is_set(name):
+        if not update.m_is_set(name) or name not in section.m_def.all_quantities:
             continue
         if not section.m_is_set(name):
             section.m_set(name, update.m_get(name))
