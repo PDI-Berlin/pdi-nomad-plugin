@@ -759,12 +759,12 @@ def merge_sections(  # noqa: PLR0912
             f'Cannot merge "{type(section)}" with "{type(update)}" as they are not of '
             'the same type and do not have a common ancestry.'
         )
-    for name, quantity in update.m_def.all_quantities.items():
-        if not update.m_is_set(quantity):
+    for name, _ in update.m_def.all_quantities.items():
+        if not update.m_is_set(name):
             continue
-        if not section.m_is_set(quantity):
-            section.m_set(quantity, update.m_get(quantity))
-        elif _not_equal(section.m_get(quantity), update.m_get(quantity)):
+        if not section.m_is_set(name):
+            section.m_set(name, update.m_get(name))
+        elif _not_equal(section.m_get(name), update.m_get(name)):
             warning = f'Merging sections with different values for quantity "{name}".'
             if logger:
                 logger.warning(warning)
