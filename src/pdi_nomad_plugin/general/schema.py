@@ -321,6 +321,10 @@ class BackSideCoatingPDI(ProcessPDI, Process, EntryData):
         """
         super().normalize(archive, logger)
 
+        # merge recipe
+        if self.recipe is not None:
+            merge_sections(self, self.recipe, logger)
+
         # set sample status
         if self.samples:
             for sample in self.samples:
