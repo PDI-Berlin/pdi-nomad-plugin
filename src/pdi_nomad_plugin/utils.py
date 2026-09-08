@@ -641,7 +641,7 @@ def handle_unit(dataframe, unit_header):
     return unit
 
 
-def epiclog_parse_timeseries(
+def epiclog_parse_timeseries(  # noqa: PLR0917
     timezone, growth_starttime, folder_path, dataframe, data_header, unit_header=None
 ):
     """
@@ -842,7 +842,7 @@ def xlsx_to_dict(xlsx):
     )
 
 
-def calculate_impinging_flux(
+def calculate_impinging_flux(  # noqa: PLR0917
     logger, sources_row, fitting, temperature_pint, time_vector, shutters
 ):
     a_param = None
@@ -950,7 +950,7 @@ def read_shutters(file_path, config_sheet, growth_start_time, timezone):
 
 
 # TODO get a better code for this function
-def add_units_to_hdf5(
+def add_units_to_hdf5(  # noqa: PLR0917
     archive,
     logger,
     hdf_filename,

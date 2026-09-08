@@ -51,45 +51,210 @@ substrateapp = AppEntryPoint(
         ),
         dashboard=Dashboard(
             widgets=yaml.safe_load("""
-            - type: terms
-              scale: linear
-              search_quantity: data.fresh#pdi_nomad_plugin.mbe.materials.SubstrateMbe
-              layout:
-                xxl:
-                  minH: 3
-                  minW: 3
-                  h: 9
-                  w: 6
-                  y: 0
-                  x: 0
-                xl:
-                  minH: 3
-                  minW: 3
-                  h: 9
-                  w: 6
-                  y: 0
-                  x: 0
-                lg:
-                  minH: 3
-                  minW: 3
-                  h: 9
-                  w: 6
-                  y: 0
-                  x: 0
-                md:
-                  minH: 3
-                  minW: 3
-                  h: 9
-                  w: 6
-                  y: 0
-                  x: 0
-                sm:
-                  minH: 3
-                  minW: 3
-                  h: 9
-                  w: 6
-                  y: 0
-                  x: 0
+- type: terms
+  show_input: true
+  scale: linear
+  search_quantity: data.grown#pdi_nomad_plugin.mbe.materials.SubstrateMbe
+  title: grown
+  layout:
+    xxl:
+      minH: 3
+      minW: 3
+      h: 9
+      w: 6
+      y: 0
+      x: 0
+    xl:
+      minH: 3
+      minW: 3
+      h: 4
+      w: 6
+      y: 0
+      x: 0
+    lg:
+      minH: 3
+      minW: 3
+      h: 4
+      w: 5
+      y: 0
+      x: 0
+    md:
+      minH: 3
+      minW: 3
+      h: 9
+      w: 6
+      y: 0
+      x: 12
+    sm:
+      minH: 3
+      minW: 3
+      h: 3
+      w: 3
+      y: 9
+      x: 9
+- type: periodic_table
+  scale: linear
+  search_quantity: results.material.elements
+  title: elements
+  layout:
+    xxl:
+      minH: 3
+      minW: 3
+      h: 9
+      w: 12
+      y: 0
+      x: 6
+    xl:
+      minH: 3
+      minW: 3
+      h: 8
+      w: 14
+      y: 0
+      x: 12
+    lg:
+      minH: 3
+      minW: 3
+      h: 7
+      w: 13
+      y: 0
+      x: 10
+    md:
+      minH: 3
+      minW: 3
+      h: 9
+      w: 12
+      y: 0
+      x: 0
+    sm:
+      minH: 3
+      minW: 3
+      h: 9
+      w: 12
+      y: 0
+      x: 0
+- type: terms
+  show_input: true
+  scale: linear
+  search_quantity: data.processed#pdi_nomad_plugin.mbe.materials.SubstrateMbe
+  title: processed
+  layout:
+    xxl:
+      minH: 3
+      minW: 3
+      h: 9
+      w: 6
+      y: 0
+      x: 18
+    xl:
+      minH: 3
+      minW: 3
+      h: 4
+      w: 6
+      y: 0
+      x: 6
+    lg:
+      minH: 3
+      minW: 3
+      h: 4
+      w: 5
+      y: 0
+      x: 5
+    md:
+      minH: 3
+      minW: 3
+      h: 9
+      w: 6
+      y: 9
+      x: 0
+    sm:
+      minH: 3
+      minW: 3
+      h: 3
+      w: 3
+      y: 9
+      x: 6
+- type: terms
+  show_input: true
+  scale: linear
+  search_quantity: data.fresh#pdi_nomad_plugin.mbe.materials.SubstrateMbe
+  title: fresh
+  layout:
+    xxl:
+      minH: 3
+      minW: 3
+      h: 9
+      w: 6
+      y: 0
+      x: 24
+    xl:
+      minH: 3
+      minW: 3
+      h: 4
+      w: 6
+      y: 4
+      x: 0
+    lg:
+      minH: 3
+      minW: 3
+      h: 3
+      w: 5
+      y: 4
+      x: 0
+    md:
+      minH: 3
+      minW: 3
+      h: 9
+      w: 6
+      y: 9
+      x: 6
+    sm:
+      minH: 3
+      minW: 3
+      h: 3
+      w: 3
+      y: 9
+      x: 3
+- type: terms
+  show_input: true
+  scale: linear
+  search_quantity: data.as_delivered#pdi_nomad_plugin.mbe.materials.SubstrateMbe
+  title: as-delivered
+  layout:
+    xxl:
+      minH: 3
+      minW: 3
+      h: 9
+      w: 6
+      y: 0
+      x: 30
+    xl:
+      minH: 3
+      minW: 3
+      h: 4
+      w: 6
+      y: 4
+      x: 6
+    lg:
+      minH: 3
+      minW: 3
+      h: 3
+      w: 5
+      y: 4
+      x: 5
+    md:
+      minH: 3
+      minW: 3
+      h: 9
+      w: 6
+      y: 9
+      x: 12
+    sm:
+      minH: 3
+      minW: 3
+      h: 3
+      w: 3
+      y: 9
+      x: 0
             """)
         ),
         filter_menus=FilterMenus(
