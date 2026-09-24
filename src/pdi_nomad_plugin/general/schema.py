@@ -373,7 +373,7 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
     """
 
     m_def = Section(
-        a_eln={'hide': ['steps', 'samples', 'instruments']},
+        a_eln={'hide': ['steps', 'samples']},
         label='Sample Cut',
         categories=[PDICategory],
     )
