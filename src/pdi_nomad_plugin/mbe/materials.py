@@ -140,7 +140,7 @@ class SubstrateMbe(SystemPDI, CrystallineSubstrate, EntryData):
         super().normalize(archive, logger)
 
         logger.info('Running SubstrateMbe normalization')
-    
+
         # Initialize substrate status
         if self.as_delivered is None:
             self.as_delivered = True
