@@ -141,6 +141,16 @@ class SubstrateMbe(SystemPDI, CrystallineSubstrate, EntryData):
 
         logger.info('Running SubstrateMbe normalization')
 
+        # Initialize substrate status
+        if self.as_delivered is None:
+            self.as_delivered = True
+        if self.fresh is None:
+            self.fresh = False
+        if self.processed is None:
+            self.processed = False
+        if self.grown is None:
+            self.grown = False
+
         # -------------------------------------------------
         # Construct substrate ID if not explicitly given
         # -------------------------------------------------
