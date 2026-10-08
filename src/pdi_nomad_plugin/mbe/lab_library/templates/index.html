@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Lab Library</title>
+    <link rel="stylesheet" href="static/styles.css">
+</head>
+<body>
+<main class="page">
+    <div class="title-row">
+        <div>
+            <h1>Lab Library</h1>
+            <p class="subtitle">Reusable process recipes, holder templates, inserts, and cutting definitions stored in NOMAD.</p>
+        </div>
+    </div>
+
+    <section class="panel">
+        <div class="toolbar">
+            <div>
+                <div class="type-tabs" id="typeTabs"></div>
+                <div class="subtype-tabs hidden" id="subtypeTabs"></div>
+            </div>
+            <div class="search-box">
+                <label for="librarySearch">Search</label>
+                <input id="librarySearch" type="text" placeholder="ID, name, material, tag...">
+            </div>
+        </div>
+        <div id="libraryStatus" class="status">Loading library...</div>
+        <div id="libraryList" class="library-list"></div>
+    </section>
+</main>
+
+<div id="modalBackdrop" class="modal-backdrop hidden">
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <div class="modal-header">
+            <div>
+                <h2 id="modalTitle">Library item</h2>
+                <div id="modalSubtitle" class="modal-subtitle"></div>
+            </div>
+            <button id="closeModalButton" class="icon-button" type="button" aria-label="Close">×</button>
+        </div>
+
+        <div id="viewPanel" class="modal-body hidden"></div>
+
+        <form id="editorForm" class="modal-body hidden">
+            <div id="generatedIdBox" class="generated-id">
+                <div class="generated-label">Generated ID</div>
+                <div id="generatedIdValue" class="generated-value">—</div>
+                <div id="generatedIdHint" class="generated-hint"></div>
+            </div>
+
+            <div id="processingFields" class="editor-section hidden">
+                <div id="processingTemplateBlock">
+                    <div class="field-grid">
+                        <div>
+                            <label for="processingTemplate">Start from existing recipe</label>
+                            <select id="processingTemplate">
+                                <option value="">Blank recipe</option>
+                            </select>
+                        </div>
+                    </div>
+                    <p class="helper processing-template-helper">
+                        Choose “Blank recipe” to create a new definition from scratch,<br>
+                        or use an existing NOMAD recipe as a template.
+                    </p>
+                </div>
+                <div id="processingDynamicFields" class="dynamic-fields"></div>
+            </div>
+
+            <div id="sampleCutFields" class="editor-section hidden">
+                <div class="field-grid three">
+                    <div>
+                        <label for="cutParentSize">Parent size</label>
+                        <select id="cutParentSize"></select>
+                    </div>
+                    <div id="cutParentCustomWrap" class="hidden">
+                        <label for="cutParentCustom">Custom square size (mm)</label>
+                        <input id="cutParentCustom" type="number" step="0.1" min="0.1">
+                    </div>
+                    <div>
+                        <label for="cutChildCount">Children per parent</label>
+                        <select id="cutChildCount"></select>
+                    </div>
+                    <div>
+                        <label for="cutChildSize">Child size</label>
+                        <select id="cutChildSize"></select>
+                    </div>
+                    <div id="cutChildCustomWrap" class="hidden">
+                        <label for="cutChildCustom">Custom square size (mm)</label>
+                        <input id="cutChildCustom" type="number" step="0.1" min="0.1">
+                    </div>
+                </div>
+            </div>
+
+            <div id="holderFields" class="editor-section hidden">
+                <div class="field-grid three">
+                    <div>
+                        <label for="holderMaterial">Holder material</label>
+                        <select id="holderMaterial">
+                            <option value="H">Haynes</option>
+                            <option value="M">Molybdenum</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="holderNumber">Holder number</label>
+                        <input id="holderNumber" type="number" step="1" min="1" max="999">
+                    </div>
+                    <div>
+                        <label for="holderSize">Substrate size</label>
+                        <select id="holderSize"></select>
+                    </div>
+                    <div id="holderCustomSizeWrap" class="hidden">
+                        <label for="holderCustomSize">Custom square size (mm)</label>
+                        <input id="holderCustomSize" type="number" step="0.1" min="0.1">
+                    </div>
+                </div>
+
+                <div class="section-heading">
+                    <div>
+                        <h3>Holder positions</h3>
+                        <p>Substrate slots are square and all positions use the same selected substrate size.</p>
+                    </div>
+                    <button id="addHolderPositionButton" type="button">+ Add position</button>
+                </div>
+
+                <div class="holder-position-header">
+                    <div>Name</div><div>X (mm)</div><div>Y (mm)</div><div>Rho (mm)</div><div>Theta (°)</div><div></div>
+                </div>
+                <div id="holderPositions"></div>
+            </div>
+
+            <div id="insertFields" class="editor-section hidden">
+                <div class="field-grid three">
+                    <div>
+                        <label for="insertFamily">Insert family</label>
+                        <select id="insertFamily">
+                            <option value="XPS">XPS</option>
+                            <option value="MBE">MBE</option>
+                            <option value="CUSTOM">Other</option>
+                        </select>
+                    </div>
+                    <div id="insertFamilyCustomWrap" class="hidden">
+                        <label for="insertFamilyCustom">Custom family code</label>
+                        <input id="insertFamilyCustom" type="text" maxlength="12" placeholder="A-Z / 0-9">
+                    </div>
+                    <div>
+                        <label for="insertNumber">Insert number</label>
+                        <input id="insertNumber" type="number" step="1" min="1" max="999">
+                    </div>
+                    <div>
+                        <label for="insertOuterSize">Outer size</label>
+                        <select id="insertOuterSize"></select>
+                    </div>
+                    <div id="insertOuterCustomWrap" class="hidden">
+                        <label for="insertOuterCustom">Custom outer size (mm)</label>
+                        <input id="insertOuterCustom" type="number" step="0.1" min="0.1">
+                    </div>
+                    <div>
+                        <label for="insertInnerSize">Sample opening size</label>
+                        <select id="insertInnerSize"></select>
+                    </div>
+                    <div id="insertInnerCustomWrap" class="hidden">
+                        <label for="insertInnerCustom">Custom opening size (mm)</label>
+                        <input id="insertInnerCustom" type="number" step="0.1" min="0.1">
+                    </div>
+                </div>
+            </div>
+
+            <div id="targetUploadFields">
+                <label for="targetUpload">Target upload</label>
+                <select id="targetUpload"><option value="">Loading uploads...</option></select>
+                <div id="uploadStatus" class="status">Loading writable NOMAD uploads...</div>
+            </div>
+
+            <div class="modal-actions">
+                <div id="editorStatus" class="status"></div>
+                <button id="cancelEditorButton" type="button">Cancel</button>
+                <button id="saveEditorButton" class="primary" type="submit">Save new item</button>
+            </div>
+        </form>
+    </section>
+</div>
+
+<script src="static/app.js"></script>
+</body>
+</html>

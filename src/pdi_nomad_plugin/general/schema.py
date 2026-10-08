@@ -12,6 +12,7 @@ from nomad.datamodel.metainfo.basesections import (
 )
 from nomad.metainfo import (
     Category,
+    MEnum,
     Quantity,
     Reference,
     SchemaPackage,
@@ -22,8 +23,10 @@ from nomad.metainfo import (
 from nomad_material_processing.general import (
     Annealing,
     AnnealingRecipe,
+    AnnealingStep,
     Cleaning,
     CleaningRecipe,
+    CleaningStep,
     Etching,
     EtchingRecipe,
     Geometry,
@@ -187,6 +190,33 @@ class EtchingRecipePDI(EtchingPDI, EtchingRecipe):
     )
 
 
+class AnnealingStepPDI(AnnealingStep):
+    """PDI annealing step using operation temperature and optional ramp rate."""
+
+    m_def = Section(label='Annealing step')
+
+    operation_temperature = Quantity(
+        type=float,
+        unit='celsius',
+        description='Operation temperature held during this annealing step.',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+            label='Operation temperature',
+            defaultDisplayUnit='celsius',
+        ),
+    )
+
+    ramp_rate = Quantity(
+        type=float,
+        unit='kelvin / second',
+        description='Temperature ramp rate. The Lab Library UI accepts °C/min or °C/s.',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+            label='Ramp rate',
+        ),
+    )
+
+
 class AnnealingRecipePDI(AnnealingRecipe):
     """
     A recipe for the process of heating a material to a specific temperature
@@ -199,6 +229,52 @@ class AnnealingRecipePDI(AnnealingRecipe):
         categories=[PDICategory],
     )
 
+    atmosphere = Quantity(
+        type=str,
+        description='Annealing atmosphere: O2, N2, Ar, air, or vacuum.',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.StringEditQuantity,
+            label='Atmosphere',
+        ),
+    )
+
+    gas_flow_sccm = Quantity(
+        type=float,
+        description='Gas flow in standard cubic centimetres per minute (sccm).',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+            label='Gas flow (sccm)',
+        ),
+    )
+
+    rf_power_w = Quantity(
+        type=float,
+        description='RF plasma power used for annealing in the MBE growth chamber.',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+            label='RF power (W)',
+        ),
+    )
+
+    steps = SubSection(
+        section_def=AnnealingStepPDI,
+        repeats=True,
+        description='Annealing process steps.',
+    )
+
+
+class CleaningStepPDI(CleaningStep):
+    """
+    Cleaning step adapted to the equipment available at PDI.
+    """
+
+    m_def = Section(label='CleaningStepPDI')
+
+    agitation = Quantity(
+        type=MEnum('Hot plate', 'Ultrasonic bath'),
+        description='Agitation or heating method used during cleaning.',
+    )
+
 
 class CleaningRecipePDI(CleaningRecipe):
     """
@@ -208,6 +284,12 @@ class CleaningRecipePDI(CleaningRecipe):
     m_def = Section(
         label='CleaningRecipe',
         categories=[PDICategory],
+    )
+
+    steps = SubSection(
+        section_def=CleaningStepPDI,
+        repeats=True,
+        description='Cleaning process steps.',
     )
 
 
@@ -315,6 +397,26 @@ class BackSideCoatingPDI(ProcessPDI, Process, EntryData):
         section_def=CompositeSystemReference,
     )
 
+    coating_material = Quantity(
+        type=MEnum('Ti', 'SrRuO3'),
+        description='Material deposited on the back side of the substrate.',
+        a_eln={
+            'component': 'EnumEditQuantity',
+            'label': 'Coating material',
+        },
+    )
+
+    thickness = Quantity(
+        type=np.float64,
+        unit='meter',
+        description='Thickness of the back-side coating.',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+            label='Thickness',
+            defaultDisplayUnit='micrometer',
+        ),
+    )
+
     def normalize(self, archive, logger: 'BoundLogger') -> None:
         """
         The normalizer sets the sample status if a reference to a sample is given.
@@ -364,6 +466,77 @@ class BackSideCoatingRecipePDI(BackSideCoatingPDI, Recipe, EntryData):
             component=ELNComponentEnum.StringEditQuantity,
             label='Recipe ID',
         ),
+    )
+
+
+class SampleCutGeometryPDI(ArchiveSection):
+    """Two-dimensional geometry used by sample-cut recipes."""
+
+    m_def = Section(label='Sample Cut Geometry')
+
+    width = Quantity(
+        type=np.float64,
+        unit='meter',
+        description='Width of the parent or child sample.',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+            defaultDisplayUnit='millimeter',
+            label='Width',
+        ),
+    )
+
+    length = Quantity(
+        type=np.float64,
+        unit='meter',
+        description='Length of the parent or child sample.',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+            defaultDisplayUnit='millimeter',
+            label='Length',
+        ),
+    )
+
+
+class SampleCutRecipePDI(Recipe, EntryData):
+    """
+    Reusable parameter set for a sample-cut operation.
+
+    The recipe describes the expected parent geometry and the generated child
+    geometry/count. It deliberately contains no concrete parent reference,
+    generated child references, or action trigger; those belong to SampleCutPDI.
+    """
+
+    m_def = Section(
+        label='SampleCutRecipe',
+        categories=[PDICategory],
+    )
+
+    lab_id = Quantity(
+        type=str,
+        description='A unique human readable ID for the sample-cut recipe.',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.StringEditQuantity,
+            label='Recipe ID',
+        ),
+    )
+
+    input_geometry = SubSection(
+        section_def=SampleCutGeometryPDI,
+        description='Expected lateral geometry of each parent substrate.',
+    )
+
+    number_of_samples = Quantity(
+        type=int,
+        description='Number of child samples generated from each parent substrate.',
+        a_eln=ELNAnnotation(
+            component=ELNComponentEnum.NumberEditQuantity,
+            label='Number of child samples',
+        ),
+    )
+
+    children_geometry = SubSection(
+        section_def=SampleCutGeometryPDI,
+        description='Expected lateral geometry of each generated child substrate.',
     )
 
 
@@ -483,13 +656,14 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
                 except Exception:
                     pass
 
-                create_archive(
-                    children_archive.m_to_dict(),
-                    archive.m_context,
-                    children_filename,
-                    filetype,
-                    logger,
-                )
+                if not archive.m_context.raw_path_exists(children_filename):
+                    create_archive(
+                        children_archive.m_to_dict(),
+                        archive.m_context,
+                        children_filename,
+                        filetype,
+                        logger,
+                    )
                 generated_samples.append(
                     CompositeSystemReference(
                         name=children_object.name,

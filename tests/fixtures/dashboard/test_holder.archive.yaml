@@ -1,0 +1,17 @@
+# Empty physical holder template for testing the "New MBE Experiment" dashboard.
+# Positions are in meters (NOMAD stores lengths in SI units).
+data:
+  m_def: pdi_nomad_plugin.mbe.instrument.SubstrateHolderPDI
+  name: Test holder 3-slot
+  lab_id: TEST-HOLDER-01
+  number_of_positions: 3
+  positions:
+    - name: A
+      x_position: -0.015
+      y_position: 0.0
+    - name: B
+      x_position: 0.0
+      y_position: 0.0
+    - name: C
+      x_position: 0.015
+      y_position: 0.0

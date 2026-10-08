@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>New MBE Experiment</title>
+    <link rel="stylesheet" href="./static/styles.css">
+</head>
+<body>
+<div class="page">
+    <h1>New MBE Experiment</h1>
+    <p class="subtitle">
+        Load a physical holder, assign substrates, save the loadout independently,
+        and create the MBE experiment when a Growth Run ID is available.
+    </p>
+
+    <div class="layout">
+        <div class="card workflow-card">
+            <h2>Holder setup</h2>
+
+            <label for="holderSelect">1.) Holder</label>
+            <select id="holderSelect" onchange="selectHolder()">
+                <option value="">Loading holders...</option>
+            </select>
+            <p id="holderCatalogStatus" class="small"></p>
+
+            <label for="targetUpload">2.) Target upload</label>
+            <select id="targetUpload">
+                <option value="">Loading uploads...</option>
+            </select>
+            <p id="uploadStatus" class="small">Loading writable NOMAD uploads...</p>
+
+            <div class="workflow-step-title">3.) Save filled holder / empty filled holder</div>
+            <div class="button-stack">
+                <button id="saveFilledHolderButton" class="primary" type="button" onclick="saveFilledHolderToNomad()">
+                    Save filled holder
+                </button>
+                <button id="emptyHolderButton" class="secondary danger-outline" type="button" onclick="emptyCurrentHolder()">
+                    Empty filled holder
+                </button>
+            </div>
+            <p id="filledHolderSaveStatus" class="small">
+                A holder loadout can be saved without a Growth Run ID.
+            </p>
+
+            <hr>
+
+            <label for="growthRunId">4.) Growth Run ID</label>
+            <input id="growthRunId" placeholder="e.g. m84325" oninput="updateGrowthRunId()">
+
+            <div class="workflow-step-title">5.) Layer stack</div>
+            <p class="small">
+                Define the nominal layers from the substrate upwards.
+            </p>
+
+            <div id="layerStackList"></div>
+
+            <button
+                id="addLayerButton"
+                class="secondary full-width"
+                type="button"
+                onclick="addNominalLayer()"
+            >
+                + Add layer
+            </button>
+
+            <div id="layerStackPreview" class="layer-stack-preview"></div>
+
+            <div class="workflow-step-title">6.) Save experiment</div>
+            <button id="saveExperimentButton" class="primary full-width" type="button" onclick="saveExperimentToNomad()">
+                Save experiment
+            </button>
+            <p id="experimentSaveStatus" class="small">
+                Save the experiment when the holder is ready and the Growth Run ID is known.
+            </p>
+
+            <button id="startNewExperimentButton" class="secondary full-width" type="button" style="display:none;" onclick="startNewExperiment()">
+                Start new experiment
+            </button>
+
+            <div class="experiment-id">
+                <strong>Combined ID</strong><br>
+                <span id="combinedId">—</span>
+            </div>
+
+            <details class="debug-details">
+                <summary>Workflow state</summary>
+                <div id="statePreview" class="state-preview"></div>
+            </details>
+        </div>
+
+        <div class="card">
+            <div class="holder-title">
+                <h2>Holder positions</h2>
+                <span id="holderLabel" class="small">No holder selected</span>
+            </div>
+
+            <div id="holderImageWrap" class="holder-image-wrap" style="display:none;">
+                <img id="holderImage" alt="Substrate holder">
+            </div>
+
+            <div class="holder-workspace">
+                <div class="holder-visual-column">
+                    <div id="holderGrid" class="holder-grid"></div>
+                </div>
+
+                <div class="holder-history-column">
+                    <div
+                        id="positionControlsPanel"
+                        class="right-side-position-panel"
+                    ></div>
+                    <div class="treatment-history">
+                        <div class="picker-heading">
+                            <h3>Existing treatment history</h3>
+                            <button id="openProcessingButton" class="secondary" type="button" onclick="openSelectedSubstrateInProcessing()" disabled>
+                                Open in Substrate Processing
+                            </button>
+                        </div>
+                        <div id="treatmentHistory" class="treatment-history-list">
+                            <p class="small">Select a substrate to view its history.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="substratePicker" class="substrate-picker" style="display:none;">
+                <div class="picker-heading">
+                    <div>
+                        <h2>Substrate selection</h2>
+                        <p id="activePositionLabel" class="small"></p>
+                    </div>
+                </div>
+
+                <label for="substrateSearch">Substrate ID / search</label>
+                <input id="substrateSearch" type="text" placeholder="e.g. MN0815_22, YSZ, SrTiO3...">
+
+                <div class="substrate-filters">
+                    <div>
+                        <label for="filterMaterial">Material / formula</label>
+                        <select id="filterMaterial"><option value="">All</option></select>
+                    </div>
+                    <div>
+                        <label for="filterBatch">Crystal ID / batch</label>
+                        <select id="filterBatch"><option value="">All</option></select>
+                    </div>
+                    <div>
+                        <label for="filterOrientation">Orientation</label>
+                        <select id="filterOrientation"><option value="">All</option></select>
+                    </div>
+                    <div>
+                        <label for="filterOffcut">Offcut</label>
+                        <select id="filterOffcut"><option value="">All</option></select>
+                    </div>
+                    <div>
+                        <label for="filterDirection">Offcut direction</label>
+                        <select id="filterDirection"><option value="">All</option></select>
+                    </div>
+                    <div>
+                        <label for="filterStatus">Status</label>
+                        <select id="filterStatus">
+                            <option value="">All</option>
+                            <option value="as_delivered">As delivered</option>
+                            <option value="processed">Processed</option>
+                            <option value="grown">Grown</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="substrateResults" class="substrate-results">
+                    <p class="small">Loading substrate data...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="./static/app.js"></script>
+</body>
+</html>

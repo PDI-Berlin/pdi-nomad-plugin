@@ -21,9 +21,9 @@ readme = "README.md"
 requires-python = ">=3.10"
 authors = [
     { name = "Andrea Albino", email = "andrea.albino@physik.hu-berlin.de" },
-    { name = "Hampus Näsström", email = "hampus.naesstroem@physik.hu-berlin.de" },
+    { name = "Hampus NÃ¤sstrÃ¶m", email = "hampus.naesstroem@physik.hu-berlin.de" },
     { name = "Sarthak Kapoor", email = "sarthak.kapoor@physik.hu-berlin.de" },
-    { name = "Sebastian Brückner", email = "sebastian.brueckner@ikz-berlin.de" },
+    { name = "Sebastian BrÃ¼ckner", email = "sebastian.brueckner@ikz-berlin.de" },
 ]
 maintainers = [
     { name = "Andrea Albino", email = "andrea.albino@physik.hu-berlin.de" },
@@ -132,5 +132,24 @@ instrument_schema = "pdi_nomad_plugin.mbe:instrument_schema"
 processes_schema = "pdi_nomad_plugin.mbe:processes_schema"
 epic_mbe_parser = "pdi_nomad_plugin.mbe.epic_parser:epic_parser"
 mbe_app = "pdi_nomad_plugin.mbe.mbe_app:substrateapp"
+substrate_intake = "pdi_nomad_plugin.mbe.substrate_intake:substrate_intake"
+new_mbe_experiment = "pdi_nomad_plugin.mbe.new_mbe_experiment:new_mbe_experiment"
+processing = "pdi_nomad_plugin.mbe.processing:processing"
+lab_library = "pdi_nomad_plugin.mbe.lab_library:lab_library"
+
+
+[tool.setuptools.package-data]
+"pdi_nomad_plugin.mbe.new_mbe_experiment" = [
+    "templates/*.html",
+    "static/*",
+]
+"pdi_nomad_plugin.mbe.processing" = [
+    "templates/*.html",
+    "static/*",
+]
+"pdi_nomad_plugin.mbe.lab_library" = [
+    "templates/*.html",
+    "static/*",
+]
 
 [tool.setuptools_scm]
