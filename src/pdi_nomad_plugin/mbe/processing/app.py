@@ -34,7 +34,7 @@ PROCESS_TYPES = {
     },
     'sample_cut': {
         'label': 'Sample Cut',
-        'schema': 'pdi_nomad_plugin.general.schema.SampleCutRecipePDI',
+        'schema': 'pdi_nomad_plugin.general.schema.SampleCutPDI',
         'processSchema': 'pdi_nomad_plugin.general.schema.SampleCutPDI',
         'kind': 'sample_cut',
     },

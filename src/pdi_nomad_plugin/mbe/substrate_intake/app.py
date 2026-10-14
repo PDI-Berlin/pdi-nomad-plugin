@@ -1,4 +1,6 @@
 import math
+import re
+import unicodedata
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -39,28 +41,103 @@ class SubstrateIntakePreview(BaseModel):
     notes: str = ''
 
 
-def parse_orientation(value: str):
-    cleaned = (
-        value.strip()
-        .replace('(', '')
-        .replace(')', '')
-        .replace('[', '')
-        .replace(']', '')
-        .replace(' ', '')
-        .replace(',', '')
-    )
+# All 118 recognized element symbols. Validation is restricted to the UI/API
+# adapter; it does not duplicate or replace any NOMAD normalizer.
+ELEMENT_SYMBOLS = frozenset('H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu Hf Ta W Re Os Ir Pt Au Hg Tl Pb Bi Po At Rn Fr Ra Ac Th Pa U Np Pu Am Cm Bk Cf Es Fm Md No Lr Rf Db Sg Bh Hs Mt Ds Rg Cn Nh Fl Mc Lv Ts Og'.split())
 
-    if len(cleaned) != ORIENTATION_INDEX_COUNT or not cleaned.isdigit():
+
+def validate_chemical_formula(formula: str) -> str:
+    """Check chemical syntax and element symbols without creating new schemas.
+
+    Recognizes elemental and grouped formulas with integer or decimal indices;
+    it intentionally rejects trade names and ambiguous aliases as formulas.
+    """
+    value = unicodedata.normalize('NFKC', formula.strip())
+    if not value:
+        raise ValueError('Select a material or enter its chemical formula.')
+    parts = re.findall(r'[A-Z][a-z]?|\(|\)|(?:\d+(?:\.\d+)?)', value)
+    if not parts or ''.join(parts) != value:
+        raise ValueError('Invalid chemical formula; use real element symbols (e.g. SrTiO3).')
+
+    def parse_group(pos: int, nested: bool = False):
+        count = 0
+        while pos < len(parts):
+            token = parts[pos]
+            if token == ')':
+                if not nested or count == 0:
+                    raise ValueError('Unmatched or empty parentheses in chemical formula.')
+                return pos + 1, count
+            if token == '(':
+                pos, _ = parse_group(pos + 1, True)
+            elif token in ELEMENT_SYMBOLS:
+                pos += 1
+            else:
+                raise ValueError('Unknown element or invalid formula token: ' + token)
+            if pos < len(parts) and re.fullmatch(r'\d+(?:\.\d+)?', parts[pos]):
+                if float(parts[pos]) <= 0:
+                    raise ValueError('Stoichiometric coefficients must be positive.')
+                pos += 1
+            count += 1
+        if nested:
+            raise ValueError('Unclosed parenthesis in chemical formula.')
+        return pos, count
+
+    _, n = parse_group(0)
+    if n == 0:
+        raise ValueError('Chemical formula contains no elements.')
+    return value
+
+
+def safe_id_part(value: str) -> str:
+    """Keep original metadata unchanged; sanitize only ID/path components."""
+    value = unicodedata.normalize('NFKD', value.strip())
+    value = re.sub(r'[\s/\\]+', '-', value)
+    value = re.sub(r'[^A-Za-z0-9._-]+', '-', value)
+    value = re.sub(r'-+', '-', value)
+    return value.strip('-_.')
+
+
+def batch_lab_id(supplier_id: str, crystal_id: str, charge_id: str) -> str:
+    parts = [safe_id_part(x) for x in (supplier_id, crystal_id, charge_id)]
+    if not all(parts):
+        raise ValueError('Supplier ID, Crystal ID and Charge ID are required.')
+    return '_'.join(parts)
+
+
+def parse_triplet(value: str, kind: str):
+    """Accept three explicit signed indices; legacy (001) is also unambiguous."""
+    cleaned = value.strip().strip('()[]').strip()
+    if not cleaned:
         return None
+    # Legacy (001) input remains valid for image import / existing callers.
+    if re.fullmatch(r'\d{3}', cleaned):
+        tokens = list(cleaned)
+    else:
+        tokens = cleaned.replace(',', ' ').split()
+    if len(tokens) != 3 or not all(re.fullmatch(r'[+-]?\d+', x) for x in tokens):
+        raise ValueError(f'{kind}: specify three integer indices, e.g. 1 -1 0.')
+    indices = tuple(int(t) for t in tokens)
+    if indices == (0, 0, 0):
+        raise ValueError(f'{kind}: all three indices cannot be zero.')
+    return dict(zip(('h_index', 'k_index', 'l_index'), indices))
 
-    return {
-        'h_index': int(cleaned[0]),
-        'k_index': int(cleaned[1]),
-        'l_index': int(cleaned[2]),
-    }
+
+def parse_orientation(value: str):
+    return parse_triplet(value, 'Surface orientation')
 
 
-GEOMETRY_M_DEF = 'pdi_nomad_plugin.general.schema.SubstrateGeometryPDI'
+def parse_offcut_direction(value: str):
+    return parse_triplet(value, 'Offcut direction')
+
+
+def formatted_indices(indices, brackets):
+    if indices is None:
+        return None
+    left, right = brackets
+    return left + ' '.join(str(indices[key]) for key in ('h_index', 'k_index', 'l_index')) + right
+
+
+GEOMETRY_PREFIX = 'nomad_material_processing.general.'
 
 
 def parse_dimensions(width, length, height):
@@ -70,9 +147,9 @@ def parse_dimensions(width, length, height):
         raise ValueError('Specify width, length and thickness in mm.')
     if not all(math.isfinite(v) and v > 0 for v in values):
         raise ValueError('Width, length and thickness must be positive finite numbers.')
+    shape = 'SquareCuboid' if abs(width - length) <= GEOMETRY_EQUALITY_TOLERANCE else 'RectangleCuboid'
     return {
-        'm_def': GEOMETRY_M_DEF,
-        'shape': 'rectangle',
+        'm_def': GEOMETRY_PREFIX + shape,
         'width': width / 1000,
         'length': length / 1000,
         'height': height / 1000,
@@ -104,67 +181,84 @@ def parse_geometry(data: SubstrateIntakePreview):
         and 0 < angle <= MAX_SECTOR_ANGLE_DEG
     ):
         raise ValueError('Radius, thickness and angle must have valid positive values.')
-    return {
-        'm_def': GEOMETRY_M_DEF,
-        'shape': data.geometry_shape,
+    geometry = {
+        'm_def': GEOMETRY_PREFIX + (
+            'Cylinder' if data.geometry_shape == 'circle' else 'CylinderSector'
+        ),
         'radius': radius / 1000,
         'height': thickness / 1000,
-        'central_angle': angle,
     }
+    if data.geometry_shape == 'circular_sector':
+        geometry['central_angle'] = angle
+    return geometry
 
 
 @app.post('/api/preview')
 async def preview_substrate_batch(data: SubstrateIntakePreview):
-    orientation = parse_orientation(data.orientation)
     try:
+        lab_id = batch_lab_id(data.supplier_id, data.crystal_id, data.charge)
+        formula = validate_chemical_formula(data.material)
+        orientation = parse_orientation(data.orientation)
+        if orientation is None:
+            raise ValueError('Surface orientation (h k l) is required.')
+        offcut = parse_offcut_direction(data.offcut_direction)
+        if data.offcut_angle is not None:
+            if not math.isfinite(data.offcut_angle) or data.offcut_angle < 0:
+                raise ValueError('Offcut angle must be a non-negative number in degrees.')
+            if data.offcut_angle > 0 and offcut is None:
+                raise ValueError('Specify offcut direction [u v w] for a nonzero offcut.')
+        if offcut is not None and data.offcut_angle is None:
+            raise ValueError('Specify offcut angle in degrees for the offcut direction.')
+        if data.count < 1:
+            raise ValueError('Number of substrates must be at least one.')
         geometry = parse_geometry(data)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    # Existing SubstrateBatchMbe quantities only. Never change its schema or
+    # its normalizers. Raw supplier/crystal/charge values stay intact.
     archive_data = {
         'm_def': 'pdi_nomad_plugin.mbe.materials.SubstrateBatchMbe',
-        'supplier': data.supplier or None,
-        'supplier_id': data.supplier_id or None,
-        'material_designation': data.material or None,
-        'crystal_id': data.crystal_id or None,
-        'charge_id': data.charge or None,
+        'name': lab_id,
+        'lab_id': lab_id,
+        'supplier': data.supplier.strip() or None,
+        'supplier_id': data.supplier_id.strip(),
+        'material_designation': formula,
+        'crystal_id': data.crystal_id.strip(),
+        'charge_id': data.charge.strip(),
         'polishing': data.polishing or None,
         'offcut_angle': data.offcut_angle,
-        'offcut_direction': data.offcut_direction or None,
+        'offcut_direction': formatted_indices(offcut, '[]'),
         'number_of_substrates': data.count,
         'description': data.notes or None,
         'trigger_create_substrate': True,
+        'components': [
+            {
+                'm_def': 'nomad.datamodel.metainfo.basesections.PureSubstanceComponent',
+                'mass_fraction': 1,
+                'pure_substance': {'molecular_formula': formula},
+            }
+        ],
+        'crystal_properties': {
+            'surface_orientation': {'hkl_reciprocal': orientation},
+        },
+        'geometry': geometry,
     }
 
-    if data.material:
-        archive_data['components'] = [
-            {
-                'm_def': (
-                    'nomad.datamodel.metainfo.basesections.PureSubstanceComponent'
-                ),
-                'mass_fraction': 1,
-                'pure_substance': {
-                    'molecular_formula': data.material,
+    # Structured standard NOMAD section: miscut direction is direct-space
+    # hkl_direct ([uvw] in conventional crystallographic notation). Do not
+    # mistake this for surface_orientation.hkl_reciprocal.
+    if offcut is not None and data.offcut_angle is not None:
+        archive_data['crystal_properties']['miscut'] = {
+            'cartesian_miscut': {
+                'reference_orientation': {
+                    'hkl_direct': offcut,
+                    'angle': data.offcut_angle,
                 },
-            }
-        ]
-
-    if orientation is not None:
-        archive_data['crystal_properties'] = {
-            'surface_orientation': {
-                'hkl_reciprocal': orientation,
-            }
+            },
         }
 
-    if geometry is not None:
-        archive_data['geometry'] = geometry
-
-    preview = {
-        'data': archive_data,
-        'pending_mapping': {},
-    }
-
-    return preview
+    return {'data': archive_data, 'pending_mapping': {}}
 
 
 @app.get('/', response_class=HTMLResponse)
@@ -174,7 +268,7 @@ async def index():
     <html>
     <head>
         <meta charset="utf-8">
-        <title>Substrate Intake</title>
+        <title>Substrate Check-in</title>
         <style>
             body {
                 font-family: Arial, sans-serif;
@@ -305,7 +399,7 @@ async def index():
                 display: inline-block;
             }
 
-            /* SUBSTRATE INTAKE GUIDANCE */
+            /* SUBSTRATE CHECK-IN GUIDANCE */
 
 
 
@@ -315,6 +409,9 @@ async def index():
                 font-weight: 800;
                 margin-right: 3px;
             }
+
+            .triplet { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+            .triplet input { min-width: 0; }
 
             #polishing {
                 width: 100%;
@@ -330,7 +427,7 @@ async def index():
 
     <body>
         <div class="page">
-            <h1>Substrate Intake</h1>
+            <h1>Substrate Check-in</h1>
             <p>
                 Create a substrate batch and preview the individual
                 substrate entries.
@@ -381,37 +478,64 @@ async def index():
                     <label for="supplier">
                         <span class="field-number">1.</span> Supplier
                     </label>
-                    <input id="supplier" placeholder="e.g. CTC">
+                    <input id="supplier" placeholder="e.g. CrysTec">
 
                     <label for="supplier_id">
                         <span class="field-number">1.</span> Supplier ID
                     </label>
                     <input id="supplier_id" placeholder="e.g. CTC">
 
-                    <label for="material">Material / Crystal</label>
-                    <input id="material" placeholder="e.g. SrTiO3">
+                    <label for="material">Material / Crystal (chemical formula)</label>
+                    <select id="material" onchange="updateMaterialFields(); updatePreview()">
+                        <option value="">Select substrate material...</option>
+                        <option value="SrTiO3">SrTiO3</option>
+                        <option value="GdScO3">GdScO3</option>
+                        <option value="DyScO3">DyScO3</option>
+                        <option value="LaAlO3">LaAlO3</option>
+                        <option value="KTaO3">KTaO3</option>
+                        <option value="BaSnO3">BaSnO3</option>
+                        <option value="LaInO3">LaInO3</option>
+                        <option value="Al2O3">Al2O3</option>
+                        <option value="MgO">MgO</option>
+                        <option value="Si">Si</option>
+                        <option value="other">Other (enter formula)</option>
+                    </select>
+                    <div id="otherMaterialFields" style="display:none">
+                        <label for="other_material">Chemical formula</label>
+                        <input id="other_material" placeholder="e.g. Sr2FeMoO6">
+                        <p class="small">Real element symbols only; names or abbreviations need a documented formula.</p>
+                    </div>
 
                     <label for="crystal_id">
                         <span class="field-number">2.</span> Crystal ID
                     </label>
                     <input
                         id="crystal_id"
-                        placeholder="manufacturer crystal / boule ID"
+                        placeholder="e.g. MN2490"
                     >
 
-                    <label for="orientation">Orientation</label>
-                    <input id="orientation" placeholder="e.g. (001)">
+                    <label>Surface orientation (h k l)</label>
+                    <div class="triplet" role="group" aria-label="Surface orientation Miller indices">
+                        <input id="h_index" type="number" step="1" placeholder="h, e.g. 0" aria-label="h" required>
+                        <input id="k_index" type="number" step="1" placeholder="k, e.g. 0" aria-label="k" required>
+                        <input id="l_index" type="number" step="1" placeholder="l, e.g. 1" aria-label="l" required>
+                    </div>
+                    <p class="small">Three separate indices, including negative and multi-digit values.</p>
 
-                    <label for="offcut_angle">Offcut angle</label>
-                    <input id="offcut_angle" placeholder="e.g. 0.1°">
+                    <label for="offcut_angle">Offcut angle (°)</label>
+                    <input id="offcut_angle" type="number" step="any" min="0" placeholder="e.g. 0.1">
 
-                    <label for="offcut_direction">Offcut direction</label>
-                    <input id="offcut_direction" placeholder="e.g. towards [100]">
+                    <label>Offcut direction [u v w] (direct space)</label>
+                    <div class="triplet" role="group" aria-label="Offcut direction indices">
+                        <input id="u_index" type="number" step="1" placeholder="u, e.g. 1" aria-label="u">
+                        <input id="v_index" type="number" step="1" placeholder="v, e.g. 0" aria-label="v">
+                        <input id="w_index" type="number" step="1" placeholder="w, e.g. 0" aria-label="w">
+                    </div>
 
                     <label for="charge">
                         <span class="field-number">3.</span> Charge / Batch ID
                     </label>
-                    <input id="charge" placeholder="e.g. 0228-0025-25-MN2490">
+                    <input id="charge" placeholder="e.g. 0228/0025/25">
 
                     <label for="polishing">
                         <span class="field-number">4.</span> Polishing
@@ -553,10 +677,22 @@ async def index():
             }
 
             function cleanPart(value) {
-                return value
-                    .trim()
-                    .replace(/\\s+/g, '_')
-                    .replace(/[^A-Za-z0-9._-]/g, '');
+                return (value || '').trim().normalize('NFKD')
+                    .replace(/[\\s/\\\\]+/g, '-')
+                    .replace(/[^A-Za-z0-9._-]+/g, '-')
+                    .replace(/-+/g, '-')
+                    .replace(/^[-_.]+|[-_.]+$/g, '');
+            }
+
+            function updateMaterialFields() {
+                const other = document.getElementById('material').value === 'other';
+                document.getElementById('otherMaterialFields').style.display = other ? '' : 'none';
+            }
+
+            function readIndices(ids) {
+                const parts = ids.map(function(id) { return document.getElementById(id).value.trim(); });
+                if (parts.every(function(value) { return value === ''; })) return '';
+                return parts.join(' ');
             }
 
             function updatePreview() {
@@ -580,10 +716,13 @@ async def index():
                     count = 0;
                 }
 
-                const parts = [supplierId, crystalId, charge].filter(Boolean);
-                const batchName = parts.length
-                    ? parts.join('_')
-                    : 'SubstrateBatchMbe';
+                const parts = [supplierId, crystalId, charge];
+                if (parts.some(function(part) { return !part; })) {
+                    batchPreview.textContent = 'Enter Supplier ID, Crystal ID and Charge ID';
+                    preview.innerHTML = '';
+                    return;
+                }
+                const batchName = parts.join('_');
 
                 batchPreview.textContent = batchName;
                 preview.innerHTML = '';
@@ -600,6 +739,7 @@ async def index():
                 'supplier',
                 'supplier_id',
                 'material',
+                'other_material',
                 'crystal_id',
                 'charge',
                 'count'
@@ -613,17 +753,18 @@ async def index():
                 return {
                     supplier: document.getElementById('supplier').value,
                     supplier_id: document.getElementById('supplier_id').value,
-                    material: document.getElementById('material').value,
+                    material: document.getElementById('material').value === 'other'
+                        ? document.getElementById('other_material').value
+                        : document.getElementById('material').value,
                     crystal_id: document.getElementById('crystal_id').value,
                     charge: document.getElementById('charge').value,
                     polishing:
 document.getElementById('polishing').value,
-                    orientation: document.getElementById('orientation').value,
+                    orientation: readIndices(['h_index', 'k_index', 'l_index']),
                     offcut_angle: document.getElementById('offcut_angle').value
                         ? parseFloat(document.getElementById('offcut_angle').value)
                         : null,
-                    offcut_direction:
-                        document.getElementById('offcut_direction').value,
+                    offcut_direction: readIndices(['u_index', 'v_index', 'w_index']),
                     width_mm: document.getElementById('width_mm').value === ''
                         ? null : Number(document.getElementById('width_mm').value),
                     length_mm: document.getElementById('length_mm').value === ''
@@ -661,12 +802,18 @@ document.getElementById('polishing').value,
                 document.getElementById('supplier').value = '';
                 document.getElementById('supplier_id').value = '';
                 document.getElementById('material').value = '';
+                document.getElementById('other_material').value = '';
+                updateMaterialFields();
                 document.getElementById('crystal_id').value = '';
                 document.getElementById('charge').value = '';
                 document.getElementById('polishing').value = '';
-                document.getElementById('orientation').value = '';
+                ['h_index', 'k_index', 'l_index'].forEach(function(id) {
+                    document.getElementById(id).value = '';
+                });
                 document.getElementById('offcut_angle').value = '';
-                document.getElementById('offcut_direction').value = '';
+                ['u_index', 'v_index', 'w_index'].forEach(function(id) {
+                    document.getElementById(id).value = '';
+                });
                 document.getElementById('width_mm').value = '';
                 document.getElementById('length_mm').value = '';
                 document.getElementById('geometry_shape').value = 'rectangle';
@@ -695,9 +842,9 @@ document.getElementById('polishing').value,
                     });
 
                     if (!response.ok) {
-                        throw new Error(
-                            'Preview request failed: ' + response.status
-                        );
+                        const failure = await response.json().catch(function() { return {}; });
+                        throw new Error(failure.detail ||
+                            'Preview request failed: ' + response.status);
                     }
 
                     const data = await response.json();
@@ -765,8 +912,7 @@ document.getElementById('polishing').value,
 
                     const preview = await previewResponse.json();
 
-                    const filename =
-                        parts.join('_') + '.archive.yaml';
+                    const filename = preview.data.lab_id + '.archive.yaml';
 
                     const params = new URLSearchParams();
                     params.append('file_name', filename);
@@ -816,7 +962,7 @@ document.getElementById('polishing').value,
                     // Link to the upload so the user can jump straight to
                     // it, then clear the form for the next batch.
                     const uploadUrl =
-                        nomadApiBase().replace(/\/api\/v1$/, '') +
+                        nomadApiBase().replace(new RegExp('/api/v1$'), '') +
                         '/gui/user/uploads/upload/id/' +
                         encodeURIComponent(uploadId);
 

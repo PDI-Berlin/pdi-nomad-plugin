@@ -345,7 +345,7 @@ async function loadRecipes() {
         ];
         if (definition.kind === 'sample_cut') {
             include.push(
-                'data.input_geometry',
+                'data.parent_sample',
                 'data.number_of_samples',
                 'data.children_geometry'
             );
@@ -360,6 +360,8 @@ async function loadRecipes() {
                 uploadId: entry.upload_id,
                 name: data.lab_id || data.name || entry.entry_name || entry.entry_id,
                 inputGeometry: data.input_geometry || null,
+                sourceParentEntryId: definition.kind === 'sample_cut' ?
+                    referenceEntryId(data.parent_sample) : null,
                 numberOfSamples: data.number_of_samples || null,
                 childrenGeometry: data.children_geometry || null
             });
@@ -554,6 +556,107 @@ function renderSubstrates() {
 }
 
 
+// NOMAD Geometry subclasses are identified by m_def, not a custom shape field.
+// shape is read only to support old, not-yet-migrated archives.
+const NOMAD_GEOMETRY = 'nomad_material_processing.general.';
+
+function geometryKind(geometry) {
+    if (!geometry || typeof geometry !== 'object') return null;
+    const type = String(geometry.m_def || '').split('.').pop();
+    if (type === 'SquareCuboid') return 'square';
+    if (type === 'RectangleCuboid' || type === 'Parallelepiped') return 'rectangle';
+    if (type === 'Cylinder') return 'circle';
+    if (type === 'CylinderSector') return 'circular_sector';
+    if (type === 'IrregularParallelSurfaces') return 'irregular';
+    // Legacy read-only compatibility. New archives never use these fields.
+    if (geometry.shape === 'rectangle') return 'rectangle';
+    if (geometry.shape === 'circle') return 'circle';
+    if (geometry.shape === 'circular_sector') return 'circular_sector';
+    return null;
+}
+
+function geometryFromForm(card) {
+    const type = card.querySelector('.cut-shape').value;
+    const readMm = function(selector) {
+        const input = card.querySelector(selector);
+        if (!input || input.value.trim() === '') return null;
+        const value = Number(input.value);
+        return Number.isFinite(value) && value > 0 ? value / 1000 : null;
+    };
+    if (type === 'square' || type === 'rectangle') {
+        const width = readMm('.cut-width');
+        const length = readMm('.cut-length');
+        if (!width || !length) {
+            throw new Error('Specify positive child width and length (mm).');
+        }
+        if (type === 'square' && Math.abs(width - length) > 1e-9) {
+            throw new Error('Square child geometry needs equal width and length.');
+        }
+        return {
+            m_def: NOMAD_GEOMETRY + (type === 'square' ? 'SquareCuboid' : 'RectangleCuboid'),
+            width: width, length: length
+        };
+    }
+    if (type === 'circle' || type === 'circular_sector') {
+        const radius = readMm('.cut-radius');
+        if (!radius) throw new Error('Specify a positive child radius (mm).');
+        const result = {
+            m_def: NOMAD_GEOMETRY + (type === 'circle' ? 'Cylinder' : 'CylinderSector'),
+            radius: radius
+        };
+        if (type === 'circular_sector') {
+            const angle = Number(card.querySelector('.cut-angle').value);
+            if (!(angle > 0 && angle <= 360)) {
+                throw new Error('Sector angle must be between 0 and 360 degrees.');
+            }
+            result.central_angle = angle;
+        }
+        return result;
+    }
+    throw new Error('Unsupported child geometry: ' + type);
+}
+
+function prefillCutFromSubstrate(card) {
+    const selected = substrates.filter(function(s) { return s.selected && !substrateHasBeenCut(s); });
+    if (!selected.length || !selected[0].geometry) {
+        throw new Error('Select a parent substrate with a NOMAD Geometry first.');
+    }
+    const parent = selected[0].geometry;
+    const kind = geometryKind(parent);
+    if (!['square','rectangle','circle','circular_sector'].includes(kind)) {
+        throw new Error('Cannot prefill unsupported parent geometry.');
+    }
+    card.querySelector('.cut-shape').value = kind;
+    const setMm = function(selector, value) {
+        card.querySelector(selector).value =
+            Number.isFinite(geometryNumber(value)) ? 1000 * geometryNumber(value) : '';
+    };
+    setMm('.cut-width', parent.width);
+    setMm('.cut-length', parent.length);
+    setMm('.cut-radius', parent.radius);
+    // Parent thickness is always inherited at cut execution.
+    card.querySelector('.cut-angle').value = kind === 'circular_sector' ?
+        geometryNumber(parent.central_angle) || 90 : 90;
+    updateCutFieldVisibility(card);
+}
+
+function updateCutFieldVisibility(card) {
+    const cut = card.querySelector('.sample-cut-manual');
+    if (!cut) return;
+    const manual = !card.querySelector('.recipe-select').value;
+    cut.style.display = manual ? 'block' : 'none';
+    const kind = card.querySelector('.cut-shape').value;
+    card.querySelectorAll('.cut-rect').forEach(function(field) {
+        field.style.display = kind === 'square' || kind === 'rectangle' ? '' : 'none';
+    });
+    card.querySelectorAll('.cut-round').forEach(function(field) {
+        field.style.display = kind === 'circle' || kind === 'circular_sector' ? '' : 'none';
+    });
+    card.querySelectorAll('.cut-sector').forEach(function(field) {
+        field.style.display = kind === 'circular_sector' ? '' : 'none';
+    });
+}
+
 function geometryNumber(value) {
     if (typeof value === 'number' && Number.isFinite(value)) {
         return value;
@@ -584,84 +687,82 @@ function geometryXY(geometry) {
 
 function sampleCutChildGeometry(parentGeometry, recipeGeometry) {
     if (!recipeGeometry || typeof recipeGeometry !== 'object') {
-        throw new Error('Sample-cut recipe has no valid child geometry.');
+        throw new Error('Child geometry is missing.');
     }
-    const shape = recipeGeometry.shape || 'rectangle';
-    const output = {
-        m_def: 'pdi_nomad_plugin.general.schema.SubstrateGeometryPDI',
-        shape: shape
-    };
-    if (shape === 'rectangle') {
+    const kind = geometryKind(recipeGeometry);
+    const height = geometryNumber(parentGeometry && parentGeometry.height);
+    if (!(height > 0)) {
+        throw new Error('Parent geometry has no thickness. SampleCut cannot infer child thickness.');
+    }
+    const output = {height: height};
+    if (kind === 'square' || kind === 'rectangle') {
         const width = geometryNumber(recipeGeometry.width);
         const length = geometryNumber(recipeGeometry.length);
         if (!(width > 0 && length > 0)) {
-            throw new Error('Cut recipe needs positive width and length.');
+            throw new Error('Child width and length must be positive.');
         }
+        const square = kind === 'square' || Math.abs(width - length) <= 1e-9;
+        output.m_def = NOMAD_GEOMETRY + (square ? 'SquareCuboid' : 'RectangleCuboid');
         output.width = width;
         output.length = length;
-    } else if (shape === 'circle' || shape === 'circular_sector') {
+        return output;
+    }
+    if (kind === 'circle' || kind === 'circular_sector') {
         const radius = geometryNumber(recipeGeometry.radius);
-        const angle = shape === 'circle' ? 360 :
-            geometryNumber(recipeGeometry.central_angle);
-        if (!(radius > 0 && angle > 0 && angle <= 360)) {
-            throw new Error('Cut recipe needs valid radius and sector angle.');
-        }
+        if (!(radius > 0)) throw new Error('Child radius must be positive.');
+        output.m_def = NOMAD_GEOMETRY + (kind === 'circle' ? 'Cylinder' : 'CylinderSector');
         output.radius = radius;
-        output.central_angle = angle;
-    } else {
-        throw new Error('Unsupported cut geometry: ' + shape);
+        if (kind === 'circular_sector') {
+            const angle = geometryNumber(recipeGeometry.central_angle);
+            if (!(angle > 0 && angle <= 360)) throw new Error('Invalid sector angle.');
+            output.central_angle = angle;
+        }
+        return output;
     }
-    const height = geometryNumber(recipeGeometry.height) ??
-        geometryNumber(parentGeometry && parentGeometry.height);
-    if (!(height > 0)) {
-        throw new Error('Child substrate thickness is missing.');
-    }
-    output.height = height;
-    return output;
+    throw new Error('Unsupported existing NOMAD Geometry subclass.');
 }
 
 function geometryMatches(first, second) {
     if (!first || !second) return false;
-    const shapeA = first.shape || 'rectangle';
-    const shapeB = second.shape || 'rectangle';
-    if (shapeA !== shapeB) return false;
+    const a = geometryKind(first);
+    const b = geometryKind(second);
+    const rectangular = ['square','rectangle'];
+    if (a !== b && !(rectangular.includes(a) && rectangular.includes(b))) return false;
+    // Linear sizes are in meters. Ignore thickness for matching a cutting footprint.
     const tolerance = 0.00005;
-    if (shapeA === 'circle' || shapeA === 'circular_sector') {
-        const a = geometryNumber(first.radius);
-        const b = geometryNumber(second.radius);
-        const aa = shapeA === 'circle' ? 360 : geometryNumber(first.central_angle);
-        const bb = shapeB === 'circle' ? 360 : geometryNumber(second.central_angle);
-        return a > 0 && b > 0 && Math.abs(a - b) <= tolerance &&
-            aa > 0 && bb > 0 && Math.abs(aa - bb) < 1e-6;
+    if (a === 'circle' || a === 'circular_sector') {
+        const r1 = geometryNumber(first.radius);
+        const r2 = geometryNumber(second.radius);
+        if (!(r1 > 0 && r2 > 0 && Math.abs(r1 - r2) <= tolerance)) return false;
+        if (a === 'circle') return true;
+        const angle1 = geometryNumber(first.central_angle);
+        const angle2 = geometryNumber(second.central_angle);
+        return angle1 > 0 && angle2 > 0 && Math.abs(angle1 - angle2) < 1e-6;
     }
-    const a = geometryXY(first);
-    const b = geometryXY(second);
-    if (!a || !b) return false;
-    return (Math.abs(a.width - b.width) <= tolerance &&
-            Math.abs(a.length - b.length) <= tolerance) ||
-           (Math.abs(a.width - b.length) <= tolerance &&
-            Math.abs(a.length - b.width) <= tolerance);
+    const xy1 = geometryXY(first);
+    const xy2 = geometryXY(second);
+    if (!xy1 || !xy2) return false;
+    return (Math.abs(xy1.width - xy2.width) <= tolerance &&
+            Math.abs(xy1.length - xy2.length) <= tolerance) ||
+           (Math.abs(xy1.width - xy2.length) <= tolerance &&
+            Math.abs(xy1.length - xy2.width) <= tolerance);
 }
 
 function geometryDisplay(geometry) {
-    if (geometry && (geometry.shape === 'circle' ||
-                     geometry.shape === 'circular_sector')) {
+    const kind = geometryKind(geometry);
+    if (kind === 'circle' || kind === 'circular_sector') {
         const radius = geometryNumber(geometry.radius);
-        const angle = geometry.shape === 'circle' ? 360 :
-            geometryNumber(geometry.central_angle);
+        const angle = kind === 'circle' ? 360 : geometryNumber(geometry.central_angle);
         return radius > 0 ?
-            ('R ' + (1000 * radius).toFixed(2) + ' mm, ' + angle + '°') :
-            'Not specified';
+            ('R ' + (1000 * radius).toFixed(2) + ' mm' +
+             (kind === 'circular_sector' ? ', ' + angle + '°' : '')) : 'Not specified';
     }
+    if (kind !== 'square' && kind !== 'rectangle') return 'Not specified';
     const value = geometryXY(geometry);
     if (!value) return 'Not specified';
-
     function mm(number) {
-        return (number * 1000).toLocaleString(undefined, {
-            maximumFractionDigits: 3
-        });
+        return (number * 1000).toLocaleString(undefined, {maximumFractionDigits: 3});
     }
-
     return mm(value.width) + ' × ' + mm(value.length) + ' mm';
 }
 
@@ -687,52 +788,64 @@ function updateProcessCardMode(card) {
 function updateSampleCutDetails(card) {
     const details = card.querySelector('.sample-cut-details');
     if (!details || details.style.display === 'none') return;
-
     const recipeSelect = card.querySelector('.recipe-select');
-    const recipe = recipes.find(function(item) {
-        return item.entryId === recipeSelect.value;
-    });
-
+    const recipe = recipes.find(function(item) { return item.entryId === recipeSelect.value; });
     const parent = card.querySelector('.sample-cut-parent-geometry');
     const output = card.querySelector('.sample-cut-output');
-
-    if (!recipe) {
-        parent.textContent = 'Select a cut recipe';
-        output.textContent = 'Select a cut recipe';
-        return;
+    updateCutFieldVisibility(card);
+    if (recipe) {
+        const originalParent = substrateByEntryId(recipe.sourceParentEntryId);
+        parent.textContent = originalParent ? geometryDisplay(originalParent.geometry) :
+            'Previous parent not in current substrate catalogue';
+        output.textContent = String(recipe.numberOfSamples || '?') + ' × ' +
+            geometryDisplay(recipe.childrenGeometry);
+    } else {
+        const selected = substrates.filter(function(s) { return s.selected && !substrateHasBeenCut(s); });
+        parent.textContent = selected.length ? geometryDisplay(selected[0].geometry) : 'Select parent substrate';
+        try {
+            const geometry = geometryFromForm(card);
+            output.textContent = String(Number(card.querySelector('.cut-count').value) || '?') +
+                ' × ' + geometryDisplay(geometry);
+        } catch (_) { output.textContent = 'Specify output geometry and child count'; }
     }
+}
 
-    parent.textContent = geometryDisplay(recipe.inputGeometry);
-    output.textContent =
-        String(recipe.numberOfSamples || '?') +
-        ' × ' +
-        geometryDisplay(recipe.childrenGeometry);
+function planarArea(geometry) {
+    const kind = geometryKind(geometry);
+    if (kind === 'square' || kind === 'rectangle') {
+        const xy = geometryXY(geometry);
+        return xy && xy.width > 0 && xy.length > 0 ? xy.width * xy.length : null;
+    }
+    if (kind === 'circle' || kind === 'circular_sector') {
+        const r = geometryNumber(geometry.radius);
+        const angle = kind === 'circle' ? 360 : geometryNumber(geometry.central_angle);
+        return r > 0 && angle > 0 && angle <= 360 ? Math.PI * r * r * angle / 360 : null;
+    }
+    return null;
 }
 
 function validateSampleCutRecipe(recipe, selectedSubstrates, processIndex) {
-    if (!recipe) {
-        throw new Error(
-            'Process ' + (processIndex + 1) + ': select a cut recipe.'
-        );
+    if (!recipe || !Number.isInteger(Number(recipe.numberOfSamples)) ||
+        Number(recipe.numberOfSamples) < 1 || !recipe.childrenGeometry) {
+        throw new Error('Process ' + (processIndex + 1) +
+            ': specify a positive child count and valid child geometry.');
     }
-    if (!recipe.numberOfSamples || !recipe.childrenGeometry) {
-        throw new Error(
-            'Process ' + (processIndex + 1) +
-            ': selected cut recipe is missing child count or child geometry.'
-        );
-    }
-
-    if (recipe.inputGeometry) {
-        const incompatible = selectedSubstrates.filter(function(substrate) {
-            return !substrate.geometry ||
-                !geometryMatches(substrate.geometry, recipe.inputGeometry);
-        });
-        if (incompatible.length) {
-            throw new Error(
-                'Process ' + (processIndex + 1) +
-                ': substrate geometry does not match the selected cut recipe: ' +
-                incompatible.map(function(item) { return item.labId; }).join(', ')
-            );
+    for (const substrate of selectedSubstrates) {
+        if (!substrate.geometry) {
+            throw new Error('Parent ' + substrate.labId + ' has no Geometry in NOMAD.');
+        }
+        if (recipe.inputGeometry && !geometryMatches(substrate.geometry, recipe.inputGeometry)) {
+            throw new Error('Process ' + (processIndex + 1) +
+                ': parent geometry does not match cut configuration: ' + substrate.labId);
+        }
+        // Validate the canonical output using this parent's inherited thickness.
+        const childGeometry = sampleCutChildGeometry(substrate.geometry, recipe.childrenGeometry);
+        const parentArea = planarArea(substrate.geometry);
+        const childArea = planarArea(childGeometry);
+        if (parentArea !== null && childArea !== null &&
+            Number(recipe.numberOfSamples) * childArea > parentArea * 1.000001) {
+            throw new Error('Requested child pieces have a greater total area than parent ' +
+                substrate.labId + '. Adjust child dimensions or count.');
         }
     }
 }
@@ -740,8 +853,14 @@ function validateSampleCutRecipe(recipe, selectedSubstrates, processIndex) {
 function updateRecipeSelect(card) {
     const type = card.querySelector('.process-type').value;
     const select = card.querySelector('.recipe-select');
-    const matching = recipes.filter(function(recipe) { return recipe.type === type; });
-    select.innerHTML = '<option value="">' + (matching.length ? 'Select recipe...' : 'No recipes found') + '</option>';
+    const isCut = isSampleCutType(type);
+    const matching = recipes.filter(function(recipe) {
+        return recipe.type === type && (!isCut ||
+            (recipe.numberOfSamples && recipe.childrenGeometry));
+    });
+    select.innerHTML = '<option value="">' +
+        (isCut ? 'Custom cut (from selected parent)' :
+        (matching.length ? 'Select recipe...' : 'No recipes found')) + '</option>';
     matching.forEach(function(recipe) {
         const option = document.createElement('option');
         option.value = recipe.entryId;
@@ -749,7 +868,7 @@ function updateRecipeSelect(card) {
         option.textContent = recipe.name;
         select.appendChild(option);
     });
-    select.disabled = matching.length === 0;
+    select.disabled = !isCut && matching.length === 0;
     updateProcessCardMode(card);
 }
 
@@ -800,8 +919,26 @@ function addProcess() {
                         <div class="sample-cut-readonly sample-cut-output">Select a cut recipe</div>
                     </div>
                 </div>
+                <div class="sample-cut-manual">
+                    <div class="sample-cut-detail-grid">
+                        <div><label>Number of child substrates per parent</label><input class="cut-count" type="number" min="1" step="1" value="2"></div>
+                        <div><label>Child geometry</label><select class="cut-shape">
+                            <option value="square">Square cuboid</option>
+                            <option value="rectangle">Rectangular cuboid</option>
+                            <option value="circle">Circular wafer</option>
+                            <option value="circular_sector">Circular sector</option>
+                        </select></div>
+                        <div class="cut-rect"><label>Child width (mm)</label><input class="cut-width" type="number" min="0" step="any"></div>
+                        <div class="cut-rect"><label>Child length (mm)</label><input class="cut-length" type="number" min="0" step="any"></div>
+                        <div class="cut-round"><label>Child radius (mm)</label><input class="cut-radius" type="number" min="0" step="any"></div>
+                        <div class="cut-sector"><label>Central angle (°)</label><input class="cut-angle" type="number" min="0" max="360" step="any" value="90"></div>
+                        <div class="sample-cut-note">Thickness is inherited from the selected parent substrate.</div>
+                    </div>
+                    <button class="prefill-cut-from-parent" type="button">Copy selected parent geometry as starting point</button>
+                    <div class="sample-cut-note">Edit dimensions to the actual cut pieces; copying the parent's full size does not automatically divide it.</div>
+                </div>
                 <div class="sample-cut-note">
-                    Cut parameters are fixed by the selected SampleCutRecipePDI.
+                    Use custom settings or reuse a previous official SampleCutPDI as a parameter template. All results are saved with the original NOMAD schema.
                 </div>
             </div>
             <label>Comments</label><textarea class="process-comments" placeholder="Optional"></textarea>
@@ -824,6 +961,14 @@ function addProcess() {
         updateSampleCutDetails(card);
         updateSaveSummary();
     });
+    card.querySelector('.prefill-cut-from-parent').addEventListener('click', function() {
+        try { prefillCutFromSubstrate(card); updateSampleCutDetails(card); }
+        catch (err) { document.getElementById('processStatus').textContent = err.message; }
+    });
+    card.querySelectorAll('.sample-cut-manual input, .sample-cut-manual select').forEach(function(input) {
+        input.addEventListener('input', function() { updateSampleCutDetails(card); });
+        input.addEventListener('change', function() { updateSampleCutDetails(card); });
+    });
     card.querySelector('.collapse-button').addEventListener('click', function() { card.classList.remove('open'); });
     card.querySelector('.remove-button').addEventListener('click', function() { card.remove(); renumberProcesses(); });
     updateRecipeSelect(card);
@@ -834,7 +979,27 @@ function processDefinitions() {
     return Array.from(document.querySelectorAll('.process-card')).map(function(card) {
         const type = card.querySelector('.process-type').value;
         const recipeSelect = card.querySelector('.recipe-select');
-        const recipe = recipes.find(function(item) { return item.entryId === recipeSelect.value; });
+        const savedRecipe = recipes.find(function(item) { return item.entryId === recipeSelect.value; });
+        let recipe = savedRecipe || null;
+        if (isSampleCutType(type)) {
+            if (savedRecipe) {
+                const source = substrateByEntryId(savedRecipe.sourceParentEntryId);
+                if (!source || !source.geometry) {
+                    throw new Error('Previous cut parent geometry cannot be retrieved. Use custom settings.');
+                }
+                recipe = Object.assign({}, savedRecipe, {inputGeometry: source.geometry});
+            } else {
+                const selected = substrates.filter(function(s) { return s.selected && !substrateHasBeenCut(s); });
+                if (!selected.length || !selected[0].geometry) {
+                    throw new Error('Select a parent substrate with geometry before configuring SampleCut.');
+                }
+                recipe = {
+                    numberOfSamples: Number(card.querySelector('.cut-count').value),
+                    inputGeometry: selected[0].geometry,
+                    childrenGeometry: geometryFromForm(card)
+                };
+            }
+        }
         return {
             type: type,
             kind: recipeSchemas[type] ? recipeSchemas[type].kind || 'process' : 'process',
@@ -1001,7 +1166,9 @@ async function saveProcesses() {
     const uploadId = document.getElementById('targetUpload').value;
     const selected = substrates.filter(function(item) { return item.selected && !substrateHasBeenCut(item); });
     const invalidSelected = substrates.filter(function(item) { return item.selected && substrateHasBeenCut(item); });
-    const definitions = processDefinitions();
+    let definitions;
+    try { definitions = processDefinitions(); }
+    catch (err) { status.textContent = 'Error: ' + err.message; return; }
     if (invalidSelected.length) {
         status.textContent = 'Cut parent substrates are no longer physically available and cannot be processed.';
         return;

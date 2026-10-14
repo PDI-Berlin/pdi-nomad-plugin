@@ -610,7 +610,7 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
         label='Cut Sample',
     )
     children_geometry = SubSection(
-        section_def=SubstrateGeometryPDI,
+        section_def=Geometry,
         description='Section containing the geometry of the substrate.',
     )
     parent_sample = SubSection(
@@ -657,15 +657,7 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
             children_object = self.parent_sample.reference.m_copy(deep=False)
             children_object.parent_sample = None
             if self.children_geometry:
-                # Materialize a new section rather than attaching the process-owned
-                # child subsection to another archive (avoids parent conflicts).
-                children_object.geometry = SubstrateGeometryPDI.m_from_dict(
-                    {
-                        key: value
-                        for key, value in self.children_geometry.m_to_dict().items()
-                        if key != 'm_def'
-                    }
-                )
+                children_object.geometry = self.children_geometry
             else:
                 logger.warning('No children geometry found. Leaving it empty.')
 
@@ -701,14 +693,13 @@ class SampleCutPDI(ProcessPDI, Process, EntryData):
                 except Exception:
                     pass
 
-                if not archive.m_context.raw_path_exists(children_filename):
-                    create_archive(
-                        children_archive.m_to_dict(),
-                        archive.m_context,
-                        children_filename,
-                        filetype,
-                        logger,
-                    )
+                create_archive(
+                    children_archive.m_to_dict(),
+                    archive.m_context,
+                    children_filename,
+                    filetype,
+                    logger,
+                )
                 generated_samples.append(
                     CompositeSystemReference(
                         name=children_object.name,
