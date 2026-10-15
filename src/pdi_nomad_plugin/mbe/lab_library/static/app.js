@@ -352,7 +352,9 @@ function itemDetail(item) {
     if (currentType === 'holder') {
         const positions = Array.isArray(data.positions) ? data.positions : [];
         const size = inferHolderSizeMm(data);
-        return positions.length + ' position(s)' + (size ? ' · ' + formatNumber(size) + ' × ' + formatNumber(size) + ' mm' : '');
+        return positions.length + ' position(s)' +
+            (size ? ' · ' + formatNumber(size) + ' × ' + formatNumber(size) + ' mm' : '') +
+            ' · ' + holderWorkflowLabel(data);
     }
     if (currentType === 'insert') {
         return (
@@ -593,22 +595,93 @@ function canonicalPhysicalHolderItems(items) {
 }
 
 
-function managedHolderTags(data) {
-    const id =
-        String(
-            data.lab_id ||
-            data.name ||
-            ''
-        ).trim();
-
-    const state =
-        holderSystemState(data);
-
-    return Array.from(
-        new Set(
-            [id, state].filter(Boolean)
-        )
+/*
+ * Lab Library edits holder geometry, not the operational workflow state.
+ * Keep existing user/instrument tags and exactly one reserved state tag.
+ * A duplicate/new holder intentionally starts at "empty".
+ */
+function managedHolderTags(data, originalData) {
+    const id = String(data.lab_id || data.name || '').trim();
+    const prior = originalData || {};
+    const priorIds = new Set(
+        [prior.lab_id, prior.name]
+            .map(function(value) { return String(value || '').trim(); })
+            .filter(Boolean)
     );
+    const state = holderSystemState(data);
+    const existing = Array.isArray(data.tags) ? data.tags : [];
+    const otherTags = existing.filter(function(tag) {
+        return typeof tag === 'string' &&
+            Boolean(tag.trim()) &&
+            !HOLDER_SYSTEM_STATES.includes(tag) &&
+            tag !== id &&
+            !priorIds.has(tag);
+    });
+
+    return Array.from(new Set([id, ...otherTags, state].filter(Boolean)));
+}
+
+function holderWorkflowLabel(data) {
+    const state = holderSystemState(data);
+    const hasExplicitState = Array.isArray(data && data.tags) &&
+        data.tags.some(function(tag) {
+            return HOLDER_SYSTEM_STATES.includes(tag);
+        });
+    if (!hasExplicitState) return 'Empty (assumed: no workflow tag)';
+    if (state === 'ungrown') return 'Filled (ungrown)';
+    if (state === 'grown') return 'Grown';
+    return 'Empty';
+}
+
+/*
+ * An MBE experiment can change the same physical holder's state while
+ * its Lab Library editor is open. Refuse a stale edit rather than
+ * silently overwriting the newer state or any additional tags.
+ * NOMAD does not provide an atomic compare-and-swap here: a simultaneous
+ * write between this check and PUT remains an integration limitation.
+ */
+function holderTagSnapshot(tags) {
+    return Array.from(new Set(
+        (Array.isArray(tags) ? tags : [])
+            .filter(function(tag) { return typeof tag === 'string'; })
+    )).sort();
+}
+
+async function assertHolderTagsNotChanged(item) {
+    if (!item || !item.entryId) {
+        throw new Error('Cannot verify the current physical holder state.');
+    }
+
+    const response = await fetch(
+        nomadApiBase() + '/entries/' +
+            encodeURIComponent(item.entryId) + '/archive/query',
+        {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({required: '*'})
+        }
+    );
+    if (!response.ok) {
+        throw new Error('Could not verify current holder tags (' +
+            response.status + '). Nothing was saved.');
+    }
+
+    const result = await response.json();
+    const latest = result && result.data && result.data.archive &&
+        result.data.archive.data;
+    if (!latest || typeof latest !== 'object') {
+        throw new Error('Current holder archive could not be read. Nothing was saved.');
+    }
+
+    const original = item.data || {};
+    if (String(latest.lab_id || '') !== String(original.lab_id || '') ||
+        JSON.stringify(holderTagSnapshot(latest.tags)) !==
+            JSON.stringify(holderTagSnapshot(original.tags))) {
+        throw new Error(
+            'Holder ID or tags changed in NOMAD since this editor opened. ' +
+            'Close and reload the Lab Library before editing. Nothing was saved.'
+        );
+    }
 }
 
 
@@ -990,6 +1063,11 @@ function openView(item) {
 
     let metadata = '';
     metadata += viewRow('ID', data.lab_id || '—');
+    if (currentType === 'holder') {
+        metadata += viewRow('Holder workflow', holderWorkflowLabel(data));
+        metadata += viewRow('Holder tags',
+            Array.isArray(data.tags) ? data.tags.join(', ') : '—');
+    }
     metadata += viewRow(
         'State',
         usage.locked
@@ -3916,7 +3994,10 @@ function editorArchiveData() {
         data.number_of_positions =
             data.positions.length;
 
-                data.tags = managedHolderTags(data);
+        data.tags = managedHolderTags(
+            data,
+            editorMode === 'edit' && editorItem ? editorItem.data : null
+        );
 }
 
     if (currentType === 'insert') {
@@ -3978,6 +4059,9 @@ async function saveEditor(event) {
                     'This item is now referenced by NOMAD and is locked. ' +
                     'No changes were written.'
                 );
+            }
+            if (currentType === 'holder') {
+                await assertHolderTagsNotChanged(editorItem);
             }
 
             uploadId = editorItem.uploadId;
