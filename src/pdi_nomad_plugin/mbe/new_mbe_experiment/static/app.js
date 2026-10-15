@@ -5481,17 +5481,29 @@ function filledHolderArchiveData() {
 }
 
 
+/*
+ * A successful HTTP PUT only confirms that NOMAD accepted the upload.
+ * A Filled Holder / Experiment must not advance the physical holder's
+ * lifecycle until the API also confirms its entry processing.
+ *
+ * Use NOMAD's existing processing result; do not run or replace normalizers.
+ */
 async function uploadArchiveDataV2(uploadId, filename, data, overwrite) {
     const params = new URLSearchParams();
     params.append('file_name', filename);
     params.append('overwrite_if_exists', overwrite ? 'true' : 'false');
     params.append('trigger_processing', 'true');
     params.append('wait_for_processing', 'true');
+    params.append('include_archive', 'true');
+
     const response = await fetch(
         nomadApiBase() + '/uploads/' + encodeURIComponent(uploadId) + '/raw/?' + params.toString(),
         {
             method: 'PUT',
-            headers: {'Content-Type': 'application/json'},
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
             body: JSON.stringify({data: data}, null, 2)
         }
     );
@@ -5499,10 +5511,52 @@ async function uploadArchiveDataV2(uploadId, filename, data, overwrite) {
         let detail = '';
         try {
             const errorData = await response.json();
-            detail = errorData.detail ? ': ' + errorData.detail : '';
+            detail = errorData.detail ? ': ' + JSON.stringify(errorData.detail) : '';
         } catch (_) {}
         throw new Error('Archive upload failed (' + response.status + ')' + detail);
     }
+
+    let result;
+    try {
+        result = await response.json();
+    } catch (_) {
+        throw new Error(
+            'NOMAD accepted ' + filename +
+            ' but did not return a JSON processing result. ' +
+            'Inspect the entry before retrying the upload.'
+        );
+    }
+
+    const processing = result && result.processing;
+    const entry = processing && processing.entry;
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        throw new Error(
+            'NOMAD did not confirm entry processing for ' + filename +
+            '. Inspect the upload and holder status before retrying.'
+        );
+    }
+
+    const errors = Array.isArray(entry.errors) ? entry.errors : [];
+    const warnings = Array.isArray(entry.warnings) ? entry.warnings : [];
+    const processStatus = String(entry.process_status || '').toUpperCase();
+
+    if (errors.length || ['FAILURE', 'FAILED', 'ERROR'].includes(processStatus)) {
+        throw new Error(
+            'NOMAD processing failed for ' + filename + ': ' +
+            (errors.length ? errors.map(String).join('; ') : processStatus)
+        );
+    }
+    if (entry.process_running === true || processStatus !== 'SUCCESS') {
+        throw new Error(
+            'NOMAD has not confirmed successful processing of ' + filename +
+            ' (status: ' + (processStatus || 'missing') + '). ' +
+            'Inspect the entry before changing the holder status.'
+        );
+    }
+    if (warnings.length) {
+        console.warn('NOMAD processing warnings for ' + filename + ':', warnings);
+    }
+    return result;
 }
 
 
@@ -5670,18 +5724,19 @@ async function saveFilledHolderToNomad(options) {
     }
 
     if (button) button.disabled = true;
+    let filledArchiveSaved = false;
+    let holderMarkedUngrown = false;
     try {
         if (status && !options.silent) status.textContent = existing ? 'Updating filled holder...' : 'Saving filled holder...';
         const data = filledHolderArchiveData();
         await uploadArchiveDataV2(uploadId, filename, data, overwrite);
+        filledArchiveSaved = true;
 
         /*
-         * The FilledSubstrateHolderPDI is the occupancy
-         * snapshot. The physical SubstrateHolderPDI carries
-         * the current workflow state.
+         * Remember the persisted loadout before changing the physical
+         * holder status, so a failed status update does not prompt us
+         * to create a duplicate FilledSubstrateHolder.
          */
-        await setPhysicalHolderWorkflowStatus('ungrown');
-
         experimentState.holder.filledHolder = {
             entryId: entryId,
             uploadId: uploadId,
@@ -5692,6 +5747,13 @@ async function saveFilledHolderToNomad(options) {
             metadata: {upload_id: uploadId, mainfile: filename, published: false}
         };
         experimentState.currentFilledDirty = false;
+
+        /*
+         * The FilledSubstrateHolderPDI is an occupancy snapshot.
+         * The SubstrateHolderPDI carries the current workflow status.
+         */
+        await setPhysicalHolderWorkflowStatus('ungrown');
+        holderMarkedUngrown = true;
         if (status && !options.silent) status.textContent = 'Filled holder saved. You can close the app and continue later.';
         updateStatePreview();
 
@@ -5724,8 +5786,17 @@ async function saveFilledHolderToNomad(options) {
 
         return nomadArchiveReference(uploadId, entryId);
     } catch (error) {
-        if (status && !options.silent) status.textContent = 'Error: ' + error.message;
-        throw error;
+        let message = error.message;
+        if (filledArchiveSaved && !holderMarkedUngrown) {
+            message = 'Filled holder archive saved, but the physical holder status ' +
+                'could not be confirmed: ' + message +
+                '. Inspect the entries before retrying.';
+        } else if (holderMarkedUngrown) {
+            message = 'Filled holder saved and marked ungrown, but refreshing ' +
+                'the UI failed: ' + message;
+        }
+        if (status && !options.silent) status.textContent = 'Error: ' + message;
+        throw new Error(message);
     } finally {
         if (button) button.disabled = false;
     }
@@ -5780,6 +5851,8 @@ async function saveExperimentToNomad() {
     button.disabled = true;
 
     let filledSavedThisAttempt = false;
+    let experimentArchiveSaved = false;
+    let holderMarkedGrown = false;
 
     try {
         let filledReference;
@@ -5839,8 +5912,7 @@ async function saveExperimentToNomad() {
             experimentData,
             false
         );
-
-        rememberLayerCompositions();
+        experimentArchiveSaved = true;
 
         /*
          * Experiment exists successfully:
@@ -5849,7 +5921,9 @@ async function saveExperimentToNomad() {
         await setPhysicalHolderWorkflowStatus(
             'grown'
         );
+        holderMarkedGrown = true;
 
+        rememberLayerCompositions();
         experimentState.experimentSaved =
             true;
 
@@ -5910,13 +5984,22 @@ async function saveExperimentToNomad() {
         updateStatePreview();
 
     } catch (error) {
-        status.textContent =
-            (
-                filledSavedThisAttempt
-                    ? 'Filled holder was saved, but the experiment failed: '
-                    : 'Error: '
-            ) +
-            error.message;
+        if (holderMarkedGrown) {
+            status.textContent =
+                'Experiment saved and holder marked grown, but refreshing the page failed: ' +
+                error.message;
+        } else if (experimentArchiveSaved) {
+            status.textContent =
+                'Experiment archive saved and processed, but marking the physical holder ' +
+                'grown failed: ' + error.message +
+                '. Do not create a second experiment; check the existing entry and holder.';
+        } else if (filledSavedThisAttempt) {
+            status.textContent =
+                'Filled holder was saved, but the experiment was not confirmed: ' +
+                error.message;
+        } else {
+            status.textContent = 'Error: ' + error.message;
+        }
 
     } finally {
         button.disabled =
