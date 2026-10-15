@@ -5400,6 +5400,99 @@ function renderTreatmentQueue() {
 }
 
 
+/*
+ * Use only existing NOMAD Geometry sections in a Filled Holder.
+ * Physical holder slots currently use the existing two-dimensional
+ * RectangularGeometryPDI, which is NOT derived from Geometry.
+ * Keep the footprint and leave height unset rather than inventing it.
+ */
+function geometryForFilledHolderSlot(slot, positionName) {
+    if (!slot) return null;
+    const def = String(slot.m_def || '');
+    const isLegacyRectangle = (
+        def === 'pdi_nomad_plugin.mbe.instrument.RectangularGeometryPDI' ||
+        (!def && slot.width != null && slot.length != null &&
+            slot.radius == null)
+    );
+
+    if (isLegacyRectangle) {
+        const width = Number(slot.width);
+        const length = Number(slot.length);
+        if (!(Number.isFinite(width) && width > 0 &&
+              Number.isFinite(length) && length > 0)) {
+            throw new Error(
+                'Invalid rectangular slot dimensions for position ' +
+                positionName + '.'
+            );
+        }
+        const isSquare = Math.abs(width - length) <= 1e-12;
+        return {
+            m_def: 'nomad_material_processing.general.' +
+                (isSquare ? 'SquareCuboid' : 'RectangleCuboid'),
+            width: width,
+            length: length
+        };
+    }
+
+    const allowed = new Set([
+        'nomad_material_processing.general.SquareCuboid',
+        'nomad_material_processing.general.RectangleCuboid',
+        'nomad_material_processing.general.Cylinder',
+        'nomad_material_processing.general.CylinderSector'
+    ]);
+    if (!allowed.has(def)) {
+        throw new Error(
+            'Unsupported slot geometry for position ' + positionName +
+            ': ' + (def || '(no m_def)')
+        );
+    }
+    const copy = JSON.parse(JSON.stringify(slot));
+    delete copy.m_parent_sub_section;
+    return copy;
+}
+
+/*
+ * Polar rho/theta in the physical holder describe a radial distance
+ * (meters) and an in-plane angle (degrees). The Filled Holder defines
+ * its rho/theta differently and without units. Thus store only the
+ * well-defined x/y coordinates (meters); keep the physical holder as
+ * the authoritative source for the original polar data.
+ */
+function xyForFilledHolderPosition(position, positionName) {
+    const present = function(value) {
+        return value !== null && value !== undefined && value !== '';
+    };
+    if (present(position.rho) && present(position.theta)) {
+        const rho = Number(position.rho);
+        const theta = Number(position.theta);
+        if (!Number.isFinite(rho) || rho < 0 ||
+            !Number.isFinite(theta)) {
+            throw new Error(
+                'Invalid rho/theta for position ' + positionName + '.'
+            );
+        }
+        const radians = theta * Math.PI / 180;
+        return {
+            x_position: rho * Math.cos(radians),
+            y_position: rho * Math.sin(radians)
+        };
+    }
+    if (present(position.x_position) && present(position.y_position)) {
+        const x = Number(position.x_position);
+        const y = Number(position.y_position);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+            throw new Error(
+                'Invalid x/y coordinates for position ' + positionName + '.'
+            );
+        }
+        return {x_position: x, y_position: y};
+    }
+    throw new Error(
+        'Position ' + positionName +
+        ' has no complete physical-holder coordinates.'
+    );
+}
+
 function filledHolderArchiveData() {
     if (!experimentState.holder) throw new Error('Select a holder first.');
     if (!experimentState.holder.uploadId || !experimentState.holder.entryId) {
@@ -5411,7 +5504,15 @@ function filledHolderArchiveData() {
         const positionName = entry[0];
         const position = entry[1];
         if (!position.position_usage) return;
-        const item = {name: positionName, position_usage: position.position_usage};
+        const item = {
+            name: positionName,
+            position_usage: position.position_usage,
+            ...xyForFilledHolderPosition(position, positionName)
+        };
+        const slot = geometryForFilledHolderSlot(
+            position.slot_geometry, positionName
+        );
+        if (slot) item.slot_geometry = slot;
         if (position.position_usage === 'substrate') {
             if (!position.substrate) {
                 throw new Error('Position ' + positionName + ' is marked as substrate but no substrate is selected.');
@@ -5469,7 +5570,7 @@ function filledHolderArchiveData() {
         existing.data.name : experimentState.holder.id + ' fill ' + dateLabel;
     const existingTags = existing && existing.data && Array.isArray(existing.data.tags) ? existing.data.tags : [];
 
-    return {
+    const archive = {
         m_def: 'pdi_nomad_plugin.mbe.instrument.FilledSubstrateHolderPDI',
         name: name,
         lab_id: experimentState.holder.id,
@@ -5478,6 +5579,17 @@ function filledHolderArchiveData() {
         substrate_holder: nomadArchiveReference(experimentState.holder.uploadId, experimentState.holder.entryId),
         positions: positions
     };
+
+    // The original normalizer does not import holder metadata when
+    // positions are already present. Preserve this existing field here.
+    const physicalData = experimentState.holder.archiveData || {};
+    if (Array.isArray(physicalData.holder_material) &&
+        physicalData.holder_material.length) {
+        archive.holder_material = JSON.parse(
+            JSON.stringify(physicalData.holder_material)
+        );
+    }
+    return archive;
 }
 
 
