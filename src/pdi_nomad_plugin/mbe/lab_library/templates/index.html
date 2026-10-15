@@ -70,27 +70,58 @@
 
             <div id="sampleCutFields" class="editor-section hidden">
                 <div class="field-grid three">
-                    <div>
-                        <label for="cutParentSize">Parent size</label>
-                        <select id="cutParentSize"></select>
-                    </div>
-                    <div id="cutParentCustomWrap" class="hidden">
-                        <label for="cutParentCustom">Custom square size (mm)</label>
-                        <input id="cutParentCustom" type="number" step="0.1" min="0.1">
-                    </div>
-                    <div>
-                        <label for="cutChildCount">Children per parent</label>
-                        <select id="cutChildCount"></select>
-                    </div>
-                    <div>
-                        <label for="cutChildSize">Child size</label>
-                        <select id="cutChildSize"></select>
-                    </div>
-                    <div id="cutChildCustomWrap" class="hidden">
-                        <label for="cutChildCustom">Custom square size (mm)</label>
-                        <input id="cutChildCustom" type="number" step="0.1" min="0.1">
-                    </div>
+                    <div><label for="cutChildCount">Children per parent</label><select id="cutChildCount"></select></div>
                 </div>
+                <p class="helper">The recipe stores expected parent and child geometries.
+                    The actual parent sample is selected in Substrate Processing.</p>
+                <h3>Expected parent geometry</h3>
+                <div id="cutParentGeometryFields" class="field-grid three">
+                    <div>
+                        <label for="cutParentShape">Shape</label>
+                        <select id="cutParentShape">
+                            <option value="rectangle">Rectangle / square</option>
+                            <option value="circle">Circle</option>
+                            <option value="circular_sector">Circular sector</option>
+                        </select>
+                    </div>
+                    <div class="cut-rectangle"><label for="cutParentWidth">Width (mm)</label>
+                        <input id="cutParentWidth" type="number" min="0" step="any"></div>
+                    <div class="cut-rectangle"><label for="cutParentLength">Length (mm)</label>
+                        <input id="cutParentLength" type="number" min="0" step="any"></div>
+                    <div class="cut-radius hidden"><label for="cutParentRadius">Radius (mm)</label>
+                        <input id="cutParentRadius" type="number" min="0" step="any"></div>
+                    <div class="cut-sector hidden"><label for="cutParentAngle">Central angle (°)</label>
+                        <input id="cutParentAngle" type="number" min="0" max="360" step="any"></div>
+                    <div><label for="cutParentHeight">Thickness (mm, optional)</label>
+                        <input id="cutParentHeight" type="number" min="0" step="any" placeholder="Not specified"></div>
+                </div>
+
+                <p class="helper">A parent recipe thickness is informational; the processing app
+                    checks lateral footprint against the selected parent.</p>
+                <h3>Child geometry</h3>
+                <div id="cutChildGeometryFields" class="field-grid three">
+                    <div>
+                        <label for="cutChildShape">Shape</label>
+                        <select id="cutChildShape">
+                            <option value="rectangle">Rectangle / square</option>
+                            <option value="circle">Circle</option>
+                            <option value="circular_sector">Circular sector</option>
+                        </select>
+                    </div>
+                    <div class="cut-rectangle"><label for="cutChildWidth">Width (mm)</label>
+                        <input id="cutChildWidth" type="number" min="0" step="any"></div>
+                    <div class="cut-rectangle"><label for="cutChildLength">Length (mm)</label>
+                        <input id="cutChildLength" type="number" min="0" step="any"></div>
+                    <div class="cut-radius hidden"><label for="cutChildRadius">Radius (mm)</label>
+                        <input id="cutChildRadius" type="number" min="0" step="any"></div>
+                    <div class="cut-sector hidden"><label for="cutChildAngle">Central angle (°)</label>
+                        <input id="cutChildAngle" type="number" min="0" max="360" step="any"></div>
+                    <div><label for="cutChildHeight">Thickness (mm, optional)</label>
+                        <input id="cutChildHeight" type="number" min="0" step="any" placeholder="Not specified"></div>
+                </div>
+
+                <p class="helper">If child thickness is omitted, Substrate Processing inherits the
+                    actual parent's thickness. Dimensions are stored in meters in NOMAD.</p>
             </div>
 
             <div id="holderFields" class="editor-section hidden">

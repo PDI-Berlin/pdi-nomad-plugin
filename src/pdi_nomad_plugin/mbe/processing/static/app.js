@@ -342,15 +342,22 @@ function readExistingCutTemplateGeometry(value) {
         return value;
     }
     const kind = String(value.shape || '').toLowerCase();
+    const thickness = geometryNumber(value.height);
+    // SampleCutGeometryPDI has optional physical thickness. Retain an explicitly
+    // stored value; do not fabricate it when the recipe omits height.
+    if (value.height !== undefined && value.height !== null &&
+        !(thickness > 0)) return null;
     const width = geometryNumber(value.width);
     const length = geometryNumber(value.length);
     if ((kind === '' || kind === 'rectangle') && width > 0 && length > 0) {
         const square = Math.abs(width - length) <= 1e-9;
-        return {
+        const result = {
             m_def: NOMAD_GEOMETRY + (square ? 'SquareCuboid' : 'RectangleCuboid'),
             width: width,
             length: length
         };
+        if (thickness > 0) result.height = thickness;
+        return result;
     }
     const radius = geometryNumber(value.radius);
     if (radius > 0 && (kind === 'circle' || kind === 'circular_sector')) {
@@ -358,6 +365,7 @@ function readExistingCutTemplateGeometry(value) {
             m_def: NOMAD_GEOMETRY + (kind === 'circle' ? 'Cylinder' : 'CylinderSector'),
             radius: radius
         };
+        if (thickness > 0) result.height = thickness;
         if (kind === 'circular_sector') {
             const angle = geometryNumber(value.central_angle);
             if (!(angle > 0 && angle <= 360)) return null;
@@ -743,9 +751,11 @@ function sampleCutChildGeometry(parentGeometry, recipeGeometry) {
         throw new Error('Child geometry is missing.');
     }
     const kind = geometryKind(recipeGeometry);
-    const height = geometryNumber(parentGeometry && parentGeometry.height);
+    const specifiedHeight = geometryNumber(recipeGeometry.height);
+    const parentHeight = geometryNumber(parentGeometry && parentGeometry.height);
+    const height = specifiedHeight > 0 ? specifiedHeight : parentHeight;
     if (!(height > 0)) {
-        throw new Error('Parent geometry has no thickness. SampleCut cannot infer child thickness.');
+        throw new Error('Neither child geometry nor parent geometry specifies a valid thickness.');
     }
     const output = {height: height};
     if (kind === 'square' || kind === 'rectangle') {

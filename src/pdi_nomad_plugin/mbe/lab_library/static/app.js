@@ -62,6 +62,143 @@ function formatSquareSize(geometry) {
     return formatNumber(w) + ' × ' + formatNumber(l) + ' mm';
 }
 
+// SampleCutRecipePDI uses SampleCutGeometryPDI with an existing shape enum:
+// rectangle, circle, circular_sector. All lengths are stored in meters.
+function cutRecipeShape(geometry) {
+    if (!geometry || typeof geometry !== 'object') return 'rectangle';
+    const shape = String(geometry.shape || '').toLowerCase();
+    if (['rectangle', 'circle', 'circular_sector'].includes(shape)) return shape;
+    // Backward compatibility: older square recipes did not store shape.
+    if (geometryNumber(geometry.radius) > 0) {
+        return geometryNumber(geometry.central_angle) > 0 &&
+            geometryNumber(geometry.central_angle) < 360
+            ? 'circular_sector' : 'circle';
+    }
+    return 'rectangle';
+}
+
+function cutRecipeGeometryLabel(geometry) {
+    if (!geometry) return '—';
+    const shape = cutRecipeShape(geometry);
+    const height = geometryNumber(geometry.height);
+    let footprint = '—';
+    if (shape === 'rectangle') {
+        footprint = formatSquareSize(geometry);
+    } else {
+        const radius = geometryNumber(geometry.radius);
+        if (radius > 0) {
+            footprint = 'R ' + formatNumber(radius * 1000) + ' mm';
+            if (shape === 'circular_sector') {
+                const angle = geometryNumber(geometry.central_angle);
+                footprint += ', ' + formatNumber(angle) + '° sector';
+            } else {
+                footprint += ', circle';
+            }
+        }
+    }
+    if (height > 0) footprint += ', thickness ' + formatNumber(height * 1000) + ' mm';
+    return footprint;
+}
+
+function cutRecipeGeometryId(geometry) {
+    const shape = geometry.shape;
+    const clean = function(number) {
+        return formatNumber(number).replace('.', 'p');
+    };
+    if (shape === 'rectangle') {
+        const width = geometry.width * 1000;
+        const length = geometry.length * 1000;
+        return Math.abs(width - length) < 1e-8
+            ? clean(width)
+            : 'RECT_' + clean(width) + 'X' + clean(length);
+    }
+    const radius = clean(geometry.radius * 1000);
+    return shape === 'circle'
+        ? 'CIRCLE_R' + radius
+        : 'SECTOR_R' + radius + '_A' + clean(geometry.central_angle);
+}
+
+function cutGeometryField(id) {
+    return document.getElementById(id);
+}
+
+function cutGeometryPositiveMm(id, label, optional) {
+    const raw = String(cutGeometryField(id).value || '').trim();
+    if (optional && raw === '') return null;
+    const value = Number(raw);
+    if (!raw || !Number.isFinite(value) || value <= 0) {
+        throw new Error(label + ' must be positive (mm).');
+    }
+    return value / 1000;
+}
+
+function readCutRecipeGeometry(prefix, previous) {
+    const shape = cutGeometryField(prefix + 'Shape').value;
+    const data = previous && typeof previous === 'object'
+        ? JSON.parse(JSON.stringify(previous)) : {};
+    // Keep old subsection metadata; remove stale dimensions when shape changes.
+    ['width', 'length', 'radius', 'central_angle', 'height'].forEach(function(key) {
+        delete data[key];
+    });
+    // Existing template subsection uses SampleCutGeometryPDI, not a runtime
+    // NOMAD geometry subclass. Do not introduce a foreign m_def in a recipe.
+    if (String(data.m_def || '').startsWith('nomad_material_processing.general.')) {
+        delete data.m_def;
+    }
+    data.shape = shape;
+    if (shape === 'rectangle') {
+        data.width = cutGeometryPositiveMm(prefix + 'Width', 'Width', false);
+        data.length = cutGeometryPositiveMm(prefix + 'Length', 'Length', false);
+    } else if (shape === 'circle' || shape === 'circular_sector') {
+        data.radius = cutGeometryPositiveMm(prefix + 'Radius', 'Radius', false);
+        if (shape === 'circular_sector') {
+            const raw = String(cutGeometryField(prefix + 'Angle').value || '').trim();
+            const angle = Number(raw);
+            if (!raw || !Number.isFinite(angle) || angle <= 0 || angle > 360) {
+                throw new Error('Central angle must be greater than 0° and at most 360°.');
+            }
+            data.central_angle = angle;
+        }
+    } else {
+        throw new Error('Unsupported SampleCutGeometryPDI shape: ' + shape);
+    }
+    const height = cutGeometryPositiveMm(prefix + 'Height', 'Thickness', true);
+    if (height !== null) data.height = height;
+    return data;
+}
+
+function populateCutRecipeGeometry(prefix, geometry, defaultSizeMm) {
+    const shape = cutRecipeShape(geometry);
+    cutGeometryField(prefix + 'Shape').value = shape;
+    const readMm = function(value, fallback) {
+        const number = geometryNumber(value);
+        return number > 0 ? formatNumber(number * 1000) : fallback;
+    };
+    cutGeometryField(prefix + 'Width').value = readMm(geometry && geometry.width, String(defaultSizeMm));
+    cutGeometryField(prefix + 'Length').value = readMm(geometry && geometry.length, String(defaultSizeMm));
+    cutGeometryField(prefix + 'Radius').value = readMm(geometry && geometry.radius, String(defaultSizeMm / 2));
+    cutGeometryField(prefix + 'Angle').value =
+        String(geometryNumber(geometry && geometry.central_angle) || 90);
+    cutGeometryField(prefix + 'Height').value = readMm(geometry && geometry.height, '');
+    updateCutRecipeGeometryVisibility(prefix);
+}
+
+function updateCutRecipeGeometryVisibility(prefix) {
+    const shape = cutGeometryField(prefix + 'Shape').value;
+    const rectangle = shape === 'rectangle';
+    const sector = shape === 'circular_sector';
+    const group = document.getElementById(prefix + 'GeometryFields');
+    group.querySelectorAll('.cut-rectangle').forEach(function(el) {
+        el.classList.toggle('hidden', !rectangle);
+    });
+    group.querySelectorAll('.cut-radius').forEach(function(el) {
+        el.classList.toggle('hidden', rectangle);
+    });
+    group.querySelectorAll('.cut-sector').forEach(function(el) {
+        el.classList.toggle('hidden', !sector);
+    });
+}
+
 function tagsArray(value) {
     return String(value || '')
         .split(',')
@@ -344,9 +481,9 @@ function itemDetail(item) {
     if (currentType === 'processing_recipe') return scalarSummary(data) || 'Recipe parameters stored in NOMAD';
     if (currentType === 'sample_cut_recipe') {
         return (
-            'Parent ' + formatSquareSize(data.input_geometry) +
+            'Parent ' + cutRecipeGeometryLabel(data.input_geometry) +
             ' → ' + (data.number_of_samples || '—') +
-            ' × ' + formatSquareSize(data.children_geometry)
+            ' × ' + cutRecipeGeometryLabel(data.children_geometry)
         );
     }
     if (currentType === 'holder') {
@@ -1416,10 +1553,14 @@ function generatedId() {
     }
 
     if (currentType === 'sample_cut_recipe') {
-        const parent = selectedSquareSize('cutParentSize', 'cutParentCustom');
-        const child = selectedSquareSize('cutChildSize', 'cutChildCustom');
-        const count = Number(document.getElementById('cutChildCount').value || 1);
-        return 'CUT_' + formatNumber(parent) + '_TO_' + formatNumber(count) + 'X' + formatNumber(child);
+        const parent = readCutRecipeGeometry('cutParent');
+        const child = readCutRecipeGeometry('cutChild');
+        const count = Number(document.getElementById('cutChildCount').value);
+        if (!Number.isInteger(count) || count < 1) {
+            throw new Error('Children per parent must be a positive integer.');
+        }
+        return 'CUT_' + cutRecipeGeometryId(parent) +
+            '_TO_' + count + 'X' + cutRecipeGeometryId(child);
     }
 
     if (currentType === 'holder') {
@@ -3633,11 +3774,19 @@ function populateEditor(data) {
 
     if (currentType === 'sample_cut_recipe') {
         document.getElementById('sampleCutFields').classList.remove('hidden');
-        const parent = geometryXY(data.input_geometry);
-        const child = geometryXY(data.children_geometry);
-        setSizeSelect('cutParentSize','cutParentCustomWrap','cutParentCustom',parent ? parent.width * 1000 : 10);
-        setSizeSelect('cutChildSize','cutChildCustomWrap','cutChildCustom',child ? child.width * 1000 : 5);
-        document.getElementById('cutChildCount').value = String(Number(data.number_of_samples) || 4);
+        populateCutRecipeGeometry('cutParent', data.input_geometry, 10);
+        populateCutRecipeGeometry('cutChild', data.children_geometry, 5);
+        const childCount = Number(data.number_of_samples) || 4;
+        const countSelect = document.getElementById('cutChildCount');
+        if (!Array.from(countSelect.options).some(function(option) {
+            return option.value === String(childCount);
+        })) {
+            const option = document.createElement('option');
+            option.value = String(childCount);
+            option.textContent = String(childCount);
+            countSelect.appendChild(option);
+        }
+        countSelect.value = String(childCount);
     }
 
     if (currentType === 'holder') {
@@ -4185,13 +4334,13 @@ function editorArchiveData() {
     }
 
     if (currentType === 'sample_cut_recipe') {
-        const parent = selectedSquareSize('cutParentSize','cutParentCustom');
-        const child = selectedSquareSize('cutChildSize','cutChildCustom');
         const count = Number(document.getElementById('cutChildCount').value);
-        if (!Number.isInteger(count) || count < 1) throw new Error('Children per parent must be a positive integer.');
-        data.input_geometry = {width:parent/1000, length:parent/1000};
+        if (!Number.isInteger(count) || count < 1) {
+            throw new Error('Children per parent must be a positive integer.');
+        }
+        data.input_geometry = readCutRecipeGeometry('cutParent', data.input_geometry);
         data.number_of_samples = count;
-        data.children_geometry = {width:child/1000, length:child/1000};
+        data.children_geometry = readCutRecipeGeometry('cutChild', data.children_geometry);
     }
 
     if (currentType === 'holder') {
@@ -4463,7 +4612,7 @@ async function loadUploads() {
 }
 
 function populateStaticControls() {
-    ['cutParentSize','cutChildSize','holderSize','insertOuterSize','insertInnerSize'].forEach(function(id) {
+    ['holderSize','insertOuterSize','insertInnerSize'].forEach(function(id) {
         fillSizeSelect(id, true);
     });
 
@@ -4475,11 +4624,20 @@ function populateStaticControls() {
         childCount.appendChild(option);
     });
 
-    attachSizeToggle('cutParentSize','cutParentCustomWrap');
-    attachSizeToggle('cutChildSize','cutChildCustomWrap');
     attachSizeToggle('holderSize','holderCustomSizeWrap');
     attachSizeToggle('insertOuterSize','insertOuterCustomWrap');
     attachSizeToggle('insertInnerSize','insertInnerCustomWrap');
+
+    ['cutParent', 'cutChild'].forEach(function(prefix) {
+        const group = document.getElementById(prefix + 'GeometryFields');
+        group.querySelectorAll('input, select').forEach(function(input) {
+            input.addEventListener('input', updateGeneratedId);
+            input.addEventListener('change', function() {
+                updateCutRecipeGeometryVisibility(prefix);
+                updateGeneratedId();
+            });
+        });
+    });
 
     ['holderMaterial','holderNumber','cutChildCount','insertNumber','insertFamily'].forEach(function(id) {
         document.getElementById(id).addEventListener('input', function() {
@@ -4493,7 +4651,7 @@ function populateStaticControls() {
         });
     });
 
-    ['holderCustomSize','cutParentCustom','cutChildCustom','insertOuterCustom','insertInnerCustom','insertFamilyCustom'].forEach(function(id) {
+    ['holderCustomSize','insertOuterCustom','insertInnerCustom','insertFamilyCustom'].forEach(function(id) {
         document.getElementById(id).addEventListener('input', updateGeneratedId);
     });
 }
