@@ -34,7 +34,9 @@ PROCESS_TYPES = {
     },
     'sample_cut': {
         'label': 'Sample Cut',
-        'schema': 'pdi_nomad_plugin.general.schema.SampleCutPDI',
+        # Read existing Lab Library recipe entries; execution remains SampleCutPDI.
+        # No schema/normalizer changes. Older SampleCutPDI actions stay queryable.
+        'schema': 'pdi_nomad_plugin.general.schema.SampleCutRecipePDI',
         'processSchema': 'pdi_nomad_plugin.general.schema.SampleCutPDI',
         'kind': 'sample_cut',
     },

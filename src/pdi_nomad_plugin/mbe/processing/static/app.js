@@ -333,24 +333,54 @@ async function loadSubstrates() {
     });
 }
 
+// Adapt *existing* legacy library-template geometry for display/validation only.
+// SampleCutPDI execution persists only official NOMAD Geometry subclasses.
+function readExistingCutTemplateGeometry(value) {
+    if (!value || typeof value !== 'object') return null;
+    const existingType = String(value.m_def || '');
+    if (existingType.startsWith('nomad_material_processing.general.')) {
+        return value;
+    }
+    const kind = String(value.shape || '').toLowerCase();
+    const width = geometryNumber(value.width);
+    const length = geometryNumber(value.length);
+    if ((kind === '' || kind === 'rectangle') && width > 0 && length > 0) {
+        const square = Math.abs(width - length) <= 1e-9;
+        return {
+            m_def: NOMAD_GEOMETRY + (square ? 'SquareCuboid' : 'RectangleCuboid'),
+            width: width,
+            length: length
+        };
+    }
+    const radius = geometryNumber(value.radius);
+    if (radius > 0 && (kind === 'circle' || kind === 'circular_sector')) {
+        const result = {
+            m_def: NOMAD_GEOMETRY + (kind === 'circle' ? 'Cylinder' : 'CylinderSector'),
+            radius: radius
+        };
+        if (kind === 'circular_sector') {
+            const angle = geometryNumber(value.central_angle);
+            if (!(angle > 0 && angle <= 360)) return null;
+            result.central_angle = angle;
+        }
+        return result;
+    }
+    return null;
+}
+
 async function loadRecipes() {
     const result = [];
     for (const [type, definition] of Object.entries(recipeSchemas)) {
+        const isCut = definition.kind === 'sample_cut';
         const include = [
-            'entry_id',
-            'upload_id',
-            'entry_name',
-            'data.name',
-            'data.lab_id'
+            'entry_id', 'upload_id', 'entry_name', 'data.name', 'data.lab_id'
         ];
-        if (definition.kind === 'sample_cut') {
+        if (isCut) {
             include.push(
-                'data.parent_sample',
-                'data.number_of_samples',
+                'data.input_geometry', 'data.number_of_samples',
                 'data.children_geometry'
             );
         }
-
         const entries = await queryEntries(definition.schema, 200, include);
         entries.forEach(function(entry) {
             const data = entry.data || {};
@@ -359,13 +389,36 @@ async function loadRecipes() {
                 entryId: entry.entry_id,
                 uploadId: entry.upload_id,
                 name: data.lab_id || data.name || entry.entry_name || entry.entry_id,
-                inputGeometry: data.input_geometry || null,
-                sourceParentEntryId: definition.kind === 'sample_cut' ?
-                    referenceEntryId(data.parent_sample) : null,
+                inputGeometry: isCut ? readExistingCutTemplateGeometry(data.input_geometry) : null,
+                sourceParentEntryId: null,
                 numberOfSamples: data.number_of_samples || null,
-                childrenGeometry: data.children_geometry || null
+                childrenGeometry: isCut ? readExistingCutTemplateGeometry(data.children_geometry) : null
             });
         });
+
+        // Preserve the previous functionality: completed SampleCutPDI actions can
+        // still be reused as parameter templates, without ever changing them.
+        if (isCut && definition.processSchema !== definition.schema) {
+            const historic = await queryEntries(definition.processSchema, 200, [
+                'entry_id', 'upload_id', 'entry_name', 'data.name',
+                'data.parent_sample', 'data.number_of_samples',
+                'data.children_geometry'
+            ]);
+            historic.forEach(function(entry) {
+                const data = entry.data || {};
+                result.push({
+                    type: type,
+                    entryId: entry.entry_id,
+                    uploadId: entry.upload_id,
+                    name: '(Previous cut) ' +
+                        (data.lab_id || data.name || entry.entry_name || entry.entry_id),
+                    inputGeometry: null,
+                    sourceParentEntryId: referenceEntryId(data.parent_sample),
+                    numberOfSamples: data.number_of_samples || null,
+                    childrenGeometry: readExistingCutTemplateGeometry(data.children_geometry)
+                });
+            });
+        }
     }
     return result;
 }
@@ -795,7 +848,9 @@ function updateSampleCutDetails(card) {
     updateCutFieldVisibility(card);
     if (recipe) {
         const originalParent = substrateByEntryId(recipe.sourceParentEntryId);
-        parent.textContent = originalParent ? geometryDisplay(originalParent.geometry) :
+        const input = recipe.inputGeometry ||
+            (originalParent && originalParent.geometry) || null;
+        parent.textContent = input ? geometryDisplay(input) :
             'Previous parent not in current substrate catalogue';
         output.textContent = String(recipe.numberOfSamples || '?') + ' × ' +
             geometryDisplay(recipe.childrenGeometry);
@@ -856,7 +911,8 @@ function updateRecipeSelect(card) {
     const isCut = isSampleCutType(type);
     const matching = recipes.filter(function(recipe) {
         return recipe.type === type && (!isCut ||
-            (recipe.numberOfSamples && recipe.childrenGeometry));
+            (recipe.numberOfSamples && recipe.childrenGeometry &&
+             (recipe.inputGeometry || recipe.sourceParentEntryId)));
     });
     select.innerHTML = '<option value="">' +
         (isCut ? 'Custom cut (from selected parent)' :
@@ -938,7 +994,7 @@ function addProcess() {
                     <div class="sample-cut-note">Edit dimensions to the actual cut pieces; copying the parent's full size does not automatically divide it.</div>
                 </div>
                 <div class="sample-cut-note">
-                    Use custom settings or reuse a previous official SampleCutPDI as a parameter template. All results are saved with the original NOMAD schema.
+                    Select an existing Lab Library cut recipe, use custom settings, or reuse a previous cut as a template. Execution always uses SampleCutPDI.
                 </div>
             </div>
             <label>Comments</label><textarea class="process-comments" placeholder="Optional"></textarea>
@@ -983,11 +1039,21 @@ function processDefinitions() {
         let recipe = savedRecipe || null;
         if (isSampleCutType(type)) {
             if (savedRecipe) {
-                const source = substrateByEntryId(savedRecipe.sourceParentEntryId);
-                if (!source || !source.geometry) {
-                    throw new Error('Previous cut parent geometry cannot be retrieved. Use custom settings.');
+                let inputGeometry = savedRecipe.inputGeometry;
+                if (!inputGeometry && savedRecipe.sourceParentEntryId) {
+                    const source = substrateByEntryId(savedRecipe.sourceParentEntryId);
+                    if (!source || !source.geometry) {
+                        throw new Error(
+                            'Previous cut parent geometry cannot be retrieved. ' +
+                            'Use custom settings.'
+                        );
+                    }
+                    inputGeometry = source.geometry;
                 }
-                recipe = Object.assign({}, savedRecipe, {inputGeometry: source.geometry});
+                if (!inputGeometry) {
+                    throw new Error('Selected cut recipe has no usable parent geometry.');
+                }
+                recipe = Object.assign({}, savedRecipe, {inputGeometry: inputGeometry});
             } else {
                 const selected = substrates.filter(function(s) { return s.selected && !substrateHasBeenCut(s); });
                 if (!selected.length || !selected[0].geometry) {
