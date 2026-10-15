@@ -1144,6 +1144,11 @@ function openView(item) {
             '</div>';
     }
 
+    if (currentType === 'processing_recipe' &&
+        ['cleaning', 'annealing', 'back_side_coating'].includes(currentSubtype)) {
+        formHtml += additionalRecipeReadonlyView(data);
+    }
+
     const yamlText =
         'data:\n' + archiveToYaml(data, 2);
 
@@ -2607,7 +2612,6 @@ function renderCleaningFields(seedData) {
     }
 
     const method = String((seedData || {}).method || '');
-    const acid = /acid|hf/i.test(method);
 
     container.classList.add('cleaning-editor');
 
@@ -2616,8 +2620,11 @@ function renderCleaningFields(seedData) {
             <div>
                 <label for="chemicalTreatmentType">Treatment type</label>
                 <select id="chemicalTreatmentType">
-                    <option value="Solvent cleaning" ${acid ? '' : 'selected'}>Solvent cleaning</option>
-                    <option value="Acid treatment" ${acid ? 'selected' : ''}>Acid / HF treatment</option>
+                    <option value="Solvent cleaning" ${method === 'Solvent cleaning' || !method ? 'selected' : ''}>Solvent cleaning</option>
+                    <option value="Acid treatment" ${method === 'Acid treatment' ? 'selected' : ''}>Acid / HF treatment</option>
+                    ${method && !['Solvent cleaning', 'Acid treatment'].includes(method)
+                        ? `<option value="${escapeHtml(method)}" selected>Existing: ${escapeHtml(method)}</option>`
+                        : ''}
                 </select>
             </div>
 
@@ -2695,11 +2702,17 @@ function renderCleaningFields(seedData) {
             const agitation = row.querySelector('.cleaning-agitation').value;
             const comment = row.querySelector('.cleaning-comment').value.trim();
 
-            const step = {};
+            // Editing the visible controls must not erase other existing
+            // NOMAD-defined step quantities or nested reagent properties.
+            const step = JSON.parse(JSON.stringify(
+                row.__recipeSourceStep || steps[index] || {}
+            ));
 
             if (reagent) {
                 step.name = reagent;
-                step.cleaning_reagents = {name: reagent};
+                step.cleaning_reagents = Object.assign(
+                    {}, step.cleaning_reagents || {}, {name: reagent}
+                );
             }
 
             if (durationRaw !== '') {
@@ -2712,8 +2725,11 @@ function renderCleaningFields(seedData) {
 
             if (agitation && agitation !== '__none__') {
                 step.agitation = agitation;
+            } else {
+                delete step.agitation;
             }
             if (comment) step.comment = comment;
+            else delete step.comment;
 
             steps[index] = step;
         });
@@ -2721,6 +2737,12 @@ function renderCleaningFields(seedData) {
 
     function redraw() {
         stepContainer.innerHTML = steps.map(cleaningStepHtml).join('');
+        Array.from(stepContainer.querySelectorAll('.cleaning-step-row'))
+            .forEach(function(row, index) {
+                row.__recipeSourceStep = JSON.parse(JSON.stringify(
+                    steps[index] || {}
+                ));
+            });
 
         stepContainer.querySelectorAll('.cleaning-reagent').forEach(function(select) {
             select.addEventListener('change', function() {
@@ -2959,6 +2981,15 @@ function renderAnnealingFields(seedData) {
     }
 
     const instrumentSelect = document.getElementById('annealingInstrument');
+    if (instrument && !Array.from(instrumentSelect.options).some(function(option) {
+        return option.value === instrument;
+    })) {
+        const existing = document.createElement('option');
+        existing.value = instrument;
+        existing.textContent = 'Existing instrument: ' + instrument;
+        existing.selected = true;
+        instrumentSelect.appendChild(existing);
+    }
     const atmosphereSelect = document.getElementById('annealingAtmosphere');
     const gasFlowInput = document.getElementById('annealingGasFlow');
     const rfWrap = document.getElementById('annealingRfPowerWrap');
@@ -3116,7 +3147,9 @@ function renderAnnealingFields(seedData) {
             const comment =
                 row.querySelector('.annealing-comment').value.trim();
 
-            const step = {};
+            const step = JSON.parse(JSON.stringify(
+                row.__recipeSourceStep || steps[index] || {}
+            ));
 
             if (operationTemperature !== '') {
                 step.operation_temperature = Number(operationTemperature);
@@ -3137,6 +3170,8 @@ function renderAnnealingFields(seedData) {
             }
 
             if (comment) step.comment = comment;
+            else delete step.comment;
+            if (rampRate === '') delete step.ramp_rate;
 
             steps[index] = step;
         });
@@ -3145,6 +3180,12 @@ function renderAnnealingFields(seedData) {
     function redraw() {
         stepContainer.innerHTML =
             steps.map(annealingStepHtml).join('');
+        Array.from(stepContainer.querySelectorAll('.annealing-step-row'))
+            .forEach(function(row, index) {
+                row.__recipeSourceStep = JSON.parse(JSON.stringify(
+                    steps[index] || {}
+                ));
+            });
 
         updateGeneratedId();
 
@@ -3268,13 +3309,15 @@ function renderBackSideCoatingFields(seedData) {
 }
 
 
-function renderSchemaScalarFields(container, seedData) {
+function renderSchemaScalarFields(container, seedData, overrideSpecs) {
     const definition = currentDefinition() || {};
-    const specs = Array.isArray(definition.field_specs)
-        ? definition.field_specs
-        : (definition.fields || []).map(function(name) {
-            return {name: name, kind: 'text', unit: null};
-        });
+    const specs = overrideSpecs || (
+        Array.isArray(definition.field_specs)
+            ? definition.field_specs
+            : (definition.fields || []).map(function(name) {
+                return {name: name, kind: 'text', unit: null};
+            })
+    );
 
     specs.forEach(function(spec) {
         const field = spec.name;
@@ -3383,22 +3426,164 @@ function renderEtchingFields(seedData) {
     updateGeneratedId();
 }
 
+// Existing recipe-specific forms cover common quantities. Additional fields
+// from the installed NOMAD metainfo are shown rather than silently discarded.
+const EDITED_RECIPE_FIELDS = {
+    cleaning: ['name', 'description', 'method', 'duration', 'steps'],
+    annealing: [
+        'name', 'description', 'duration', 'steps', 'atmosphere',
+        'gas_flow_sccm', 'rf_power_w', 'location', 'instruments'
+    ],
+    back_side_coating: [
+        'name', 'description', 'coating_material', 'thickness',
+        'coating_reagents', 'temperature', 'duration'
+    ]
+};
+
+function additionalRecipeSpecs() {
+    const def = currentDefinition() || {};
+    const edited = new Set(EDITED_RECIPE_FIELDS[currentSubtype] || []);
+    return {
+        fields: (def.field_specs || []).filter(function(spec) {
+            return !edited.has(spec.name) && !spec.name.startsWith('trigger_');
+        }),
+        sections: (def.subsection_specs || []).filter(function(spec) {
+            return !edited.has(spec.name) &&
+                !['samples', 'instruments', 'parent_sample', 'children_samples']
+                    .includes(spec.name);
+        })
+    };
+}
+
+function renderRecipeAdditionalFields(seedData) {
+    const specs = additionalRecipeSpecs();
+    if (!specs.fields.length && !specs.sections.length) return;
+    const container = document.getElementById('processingDynamicFields');
+    const details = document.createElement('details');
+    details.className = 'additional-recipe-fields';
+    const summary = document.createElement('summary');
+    summary.textContent = 'Additional existing NOMAD recipe fields';
+    details.appendChild(summary);
+    const hint = document.createElement('p');
+    hint.className = 'helper';
+    hint.textContent = 'These fields come from the installed schema. Values ' +
+        'already present in an existing recipe are retained when editing.';
+    details.appendChild(hint);
+    const scalar = document.createElement('div');
+    scalar.className = 'field-grid';
+    details.appendChild(scalar);
+    renderSchemaScalarFields(scalar, seedData || {}, specs.fields);
+    specs.sections.forEach(function(spec) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'schema-subsection additional-subsection';
+        wrapper.dataset.section = spec.name;
+        wrapper.dataset.repeats = spec.repeats ? 'true' : 'false';
+        const label = document.createElement('label');
+        label.textContent = friendlyFieldLabel(spec.name) +
+            (spec.repeats ? ' (JSON list)' : ' (JSON object)');
+        label.title = 'Existing NOMAD subsection: ' + spec.schema;
+        const textarea = document.createElement('textarea');
+        textarea.className = 'schema-subsection-json';
+        textarea.rows = 4;
+        textarea.placeholder = spec.repeats
+            ? '[{"name": "..."}]' : '{"name": "..."}';
+        if ((seedData || {})[spec.name] !== undefined) {
+            textarea.value = JSON.stringify(seedData[spec.name], null, 2);
+            details.open = true;
+        }
+        wrapper.append(label, textarea);
+        details.appendChild(wrapper);
+    });
+    const right = container.querySelector(
+        '.cleaning-right-column, .annealing-right-column'
+    );
+    (right || container).appendChild(details);
+}
+
+function additionalRecipeReadonlyView(data) {
+    const specs = additionalRecipeSpecs();
+    const fields = specs.fields.filter(function(spec) {
+        return data[spec.name] !== undefined && data[spec.name] !== null;
+    }).map(function(spec) {
+        return readonlyViewField(
+            friendlyFieldLabel(spec.name) +
+                (spec.unit ? ' (' + spec.unit + ')' : ''),
+            data[spec.name]
+        );
+    }).join('');
+    const sections = specs.sections.filter(function(spec) {
+        return data[spec.name] !== undefined && data[spec.name] !== null;
+    }).map(function(spec) {
+        return readonlyViewTextarea(
+            friendlyFieldLabel(spec.name),
+            JSON.stringify(data[spec.name], null, 2)
+        );
+    }).join('');
+    return fields || sections
+        ? '<h3>Additional NOMAD recipe fields</h3><div class="field-grid">' +
+            fields + '</div>' + sections
+        : '';
+}
+
+function readRecipeAdditionalFields(data) {
+    const details = document.querySelector('.additional-recipe-fields');
+    if (!details) return;
+    details.querySelectorAll('.dynamic-field').forEach(function(wrapper) {
+        const name = wrapper.dataset.field;
+        const kind = wrapper.dataset.kind || 'text';
+        const input = wrapper.querySelector('.schema-field-value');
+        if (!input || input.value === '') {
+            delete data[name];
+        } else if (kind === 'number') {
+            const parsed = Number(input.value);
+            if (!Number.isFinite(parsed)) {
+                throw new Error(friendlyFieldLabel(name) + ' must be numeric.');
+            }
+            data[name] = parsed;
+        } else if (kind === 'boolean') {
+            data[name] = input.value === 'true';
+        } else {
+            data[name] = input.value.trim();
+        }
+    });
+    details.querySelectorAll('.additional-subsection').forEach(function(wrapper) {
+        const name = wrapper.dataset.section;
+        const raw = wrapper.querySelector('.schema-subsection-json').value.trim();
+        if (!raw) {
+            delete data[name];
+            return;
+        }
+        let value;
+        try { value = JSON.parse(raw); }
+        catch (_) { throw new Error(friendlyFieldLabel(name) + ': invalid JSON.'); }
+        if (wrapper.dataset.repeats === 'true'
+            ? !Array.isArray(value)
+            : (!value || Array.isArray(value) || typeof value !== 'object')) {
+            throw new Error(friendlyFieldLabel(name) + ': invalid subsection shape.');
+        }
+        data[name] = value;
+    });
+}
+
 function renderProcessingDynamicFields(seedData) {
     const container = document.getElementById('processingDynamicFields');
     container.classList.remove('cleaning-editor', 'annealing-editor');
 
     if (currentSubtype === 'cleaning') {
         renderCleaningFields(seedData || {});
+        renderRecipeAdditionalFields(seedData || {});
         return;
     }
 
     if (currentSubtype === 'annealing') {
         renderAnnealingFields(seedData || {});
+        renderRecipeAdditionalFields(seedData || {});
         return;
     }
 
     if (currentSubtype === 'back_side_coating') {
         renderBackSideCoatingFields(seedData || {});
+        renderRecipeAdditionalFields(seedData || {});
         return;
     }
 
@@ -3687,23 +3872,29 @@ function readCleaningFields(data) {
         const durationSeconds = durationMinutes * 60;
         totalDuration += durationSeconds;
 
-        const step = {
-            name: reagent,
-            duration: durationSeconds,
-            temperature: temperature,
-            cleaning_reagents: {
-                name: reagent
+        const sourceStep = row.__recipeSourceStep || {};
+        const step = Object.assign(
+            {}, JSON.parse(JSON.stringify(sourceStep)), {
+                name: reagent,
+                duration: durationSeconds,
+                temperature: temperature,
+                cleaning_reagents: Object.assign(
+                    {}, sourceStep.cleaning_reagents || {}, {name: reagent}
+                )
             }
-        };
+        );
 
         if (agitation !== '__none__') {
             step.agitation = agitation;
+        } else {
+            delete step.agitation;
         }
 
         const comment =
             row.querySelector('.cleaning-comment').value.trim();
 
         if (comment) step.comment = comment;
+        else delete step.comment;
 
         return step;
     });
@@ -3836,11 +4027,13 @@ function readAnnealingFields(data) {
         const durationSeconds = durationMinutes * 60;
         totalDuration += durationSeconds;
 
-        const step = {
-            name: 'Step ' + number,
-            operation_temperature: temperature,
-            duration: durationSeconds
-        };
+        const step = Object.assign(
+            {}, JSON.parse(JSON.stringify(row.__recipeSourceStep || {})), {
+                name: 'Step ' + number,
+                operation_temperature: temperature,
+                duration: durationSeconds
+            }
+        );
 
         const rampRaw =
             row.querySelector('.annealing-ramp-rate').value.trim();
@@ -3870,6 +4063,8 @@ function readAnnealingFields(data) {
             row.querySelector('.annealing-comment').value.trim();
 
         if (comment) step.comment = comment;
+        else delete step.comment;
+        if (rampRaw === '') delete step.ramp_rate;
 
         return step;
     });
@@ -3916,9 +4111,9 @@ function readBackSideCoatingFields(data) {
 
     // Preserve compatibility with the existing
     // BackSideCoatingPDI reagent subsection.
-    data.coating_reagents = {
-        name: material
-    };
+    data.coating_reagents = Object.assign(
+        {}, data.coating_reagents || {}, {name: material}
+    );
 
     data.name =
         material + ' ' +
@@ -3983,6 +4178,9 @@ function editorArchiveData() {
             readEtchingFields(data);
         } else {
             readDynamicFields(data);
+        }
+        if (currentSubtype !== 'etching') {
+            readRecipeAdditionalFields(data);
         }
     }
 
