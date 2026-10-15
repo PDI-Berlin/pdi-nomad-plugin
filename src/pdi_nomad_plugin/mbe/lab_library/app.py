@@ -33,6 +33,14 @@ LIBRARY_TYPES = {
                     'pdi_nomad_plugin.general.schema.AnnealingPDI',
                 ],
             },
+            'etching': {
+                'label': 'Etching',
+                'schema': 'pdi_nomad_plugin.general.schema.EtchingRecipePDI',
+                'id_prefix': 'ETCH',
+                'usage_schemas': [
+                    'pdi_nomad_plugin.general.schema.EtchingPDI',
+                ],
+            },
             'back_side_coating': {
                 'label': 'Back-side coating',
                 'schema': 'pdi_nomad_plugin.general.schema.BackSideCoatingRecipePDI',
@@ -70,6 +78,61 @@ LIBRARY_TYPES = {
         ],
     },
 }
+
+
+def _recipe_schema_details(schema_path):
+    """Describe fields from the *installed* NOMAD schema, read-only.
+
+    This metadata is only used to render GUI controls. It neither defines
+    schemas nor duplicates NOMAD normalization logic.
+    """
+    module_name, class_name = schema_path.rsplit('.', 1)
+    cls = getattr(importlib.import_module(module_name), class_name)
+    reserved = {
+        'm_def', 'name', 'lab_id', 'datetime', 'samples', 'recipe',
+        'starting_time', 'ending_time', 'end_time', 'location',
+        'tags', 'instruments', 'description',
+    }
+    fields = []
+    for name, quantity in cls.m_def.all_quantities.items():
+        if name in reserved or getattr(quantity, 'shape', None):
+            continue
+        type_text = repr(getattr(quantity, 'type', '')).lower()
+        if any(word in type_text for word in (
+            'reference object', 'datetime', 'sectionproxy',
+        )):
+            continue
+        if 'bool' in type_text:
+            kind = 'boolean'
+        elif any(word in type_text for word in (
+            'int', 'float', 'number', 'm_double',
+        )) and 'm_enum' not in type_text:
+            kind = 'number'
+        else:
+            kind = 'text'
+        unit = getattr(quantity, 'unit', None)
+        fields.append({
+            'name': name,
+            'kind': kind,
+            'unit': str(unit) if unit is not None else None,
+        })
+
+    subsections = []
+    for name, subsection in cls.m_def.all_sub_sections.items():
+        # Runtime sample references and instrument associations are not
+        # reusable recipe parameters; never copy them into new recipes.
+        if name in {'samples', 'instruments'}:
+            continue
+        try:
+            child = subsection.sub_section.section_cls
+        except (AttributeError, ValueError):
+            continue
+        subsections.append({
+            'name': name,
+            'repeats': bool(subsection.repeats),
+            'schema': f'{child.__module__}.{child.__name__}',
+        })
+    return {'field_specs': fields, 'subsection_specs': subsections}
 
 
 def _recipe_scalar_fields(schema_path):
@@ -117,7 +180,10 @@ async def library_types():
     result = deepcopy(LIBRARY_TYPES)
 
     for definition in result['processing_recipe']['schemas'].values():
-        definition['fields'] = _recipe_scalar_fields(definition['schema'])
+        schema_path = definition['schema']
+        details = _recipe_schema_details(schema_path)
+        definition['fields'] = _recipe_scalar_fields(schema_path)
+        definition.update(details)
 
     return result
 

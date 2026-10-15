@@ -1045,6 +1045,30 @@ function backSideCoatingReadonlyView(data) {
 }
 
 
+function etchingReadonlyView(data) {
+    const definition = currentDefinition() || {};
+    const scalarFields = (definition.field_specs || []).map(function(spec) {
+        const value = data[spec.name];
+        return readonlyViewField(
+            friendlyFieldLabel(spec.name) +
+                (spec.unit ? ' (' + spec.unit + ')' : ''),
+            value === undefined ? '—' : value
+        );
+    }).join('');
+    const sections = (definition.subsection_specs || []).map(function(spec) {
+        const value = data[spec.name];
+        if (value === undefined || value === null) return '';
+        return readonlyViewTextarea(
+            friendlyFieldLabel(spec.name),
+            JSON.stringify(value, null, 2)
+        );
+    }).join('');
+    return '<h3>Etching recipe</h3>' +
+        readonlyViewField('Recipe name', data.name || '—') +
+        readonlyViewTextarea('Description', data.description || '') +
+        '<div class="field-grid">' + scalarFields + '</div>' + sections;
+}
+
 function openView(item) {
     const data = item.data || {};
 
@@ -1104,6 +1128,11 @@ function openView(item) {
         currentSubtype === 'back_side_coating'
     ) {
         formHtml = backSideCoatingReadonlyView(data);
+    } else if (
+        currentType === 'processing_recipe' &&
+        currentSubtype === 'etching'
+    ) {
+        formHtml = etchingReadonlyView(data);
     } else {
         let summary = '';
         summary += viewRow('Type', currentLabel());
@@ -1301,6 +1330,19 @@ function generatedId() {
 
     if (currentType === 'processing_recipe') {
         const prefix = currentDefinition().id_prefix || 'RECIPE';
+
+        if (currentSubtype === 'etching') {
+            if (editorMode === 'edit' && editorItem &&
+                (editorItem.data || {}).lab_id) {
+                return editorItem.data.lab_id;
+            }
+            const nameInput = document.getElementById('etchingRecipeName');
+            return nextNamedRecipeId(
+                prefix,
+                nameInput ? nameInput.value : '',
+                allProcessingCatalogs[currentSubtype] || []
+            );
+        }
 
         if (editorMode === 'edit' && editorItem && (editorItem.data || {}).lab_id) {
             return editorItem.data.lab_id;
@@ -3226,6 +3268,121 @@ function renderBackSideCoatingFields(seedData) {
 }
 
 
+function renderSchemaScalarFields(container, seedData) {
+    const definition = currentDefinition() || {};
+    const specs = Array.isArray(definition.field_specs)
+        ? definition.field_specs
+        : (definition.fields || []).map(function(name) {
+            return {name: name, kind: 'text', unit: null};
+        });
+
+    specs.forEach(function(spec) {
+        const field = spec.name;
+        const wrapper = document.createElement('div');
+        wrapper.className = 'dynamic-field';
+        wrapper.dataset.field = field;
+        wrapper.dataset.kind = spec.kind || 'text';
+
+        const label = document.createElement('label');
+        label.textContent = friendlyFieldLabel(field) +
+            (spec.unit ? ' (' + spec.unit + ')' : '');
+        label.title = 'Existing NOMAD recipe quantity: ' + field;
+
+        const initial = (seedData || {})[field];
+        let input;
+        if (spec.kind === 'boolean') {
+            input = document.createElement('select');
+            [['', 'Not set'], ['true', 'True'], ['false', 'False']]
+                .forEach(function(pair) {
+                    const option = document.createElement('option');
+                    option.value = pair[0];
+                    option.textContent = pair[1];
+                    input.appendChild(option);
+                });
+            if (initial === true) input.value = 'true';
+            if (initial === false) input.value = 'false';
+        } else {
+            input = document.createElement('input');
+            input.type = spec.kind === 'number' ? 'number' : 'text';
+            if (spec.kind === 'number') input.step = 'any';
+            input.value = initial === null || initial === undefined
+                ? '' : String(initial);
+            if (spec.kind === 'number') input.placeholder =
+                'Value in schema unit' + (spec.unit ? ': ' + spec.unit : '');
+        }
+        input.className = 'schema-field-value';
+        input.dataset.field = field;
+        wrapper.append(label, input);
+        container.appendChild(wrapper);
+    });
+}
+
+function renderEtchingFields(seedData) {
+    restoreProcessingTemplateBlock();
+    const container = document.getElementById('processingDynamicFields');
+    container.innerHTML = `
+        <div class="cleaning-left-column">
+            <h3>Etching recipe</h3>
+            <div>
+                <label for="etchingRecipeName">Recipe name *</label>
+                <input id="etchingRecipeName" required type="text"
+                    placeholder="e.g. Buffered HF, 30 s"
+                    value="${escapeHtml((seedData || {}).name || '')}">
+            </div>
+            <div>
+                <label for="etchingDescription">Description</label>
+                <textarea id="etchingDescription">${escapeHtml(
+                    (seedData || {}).description || ''
+                )}</textarea>
+            </div>
+        </div>
+        <div class="cleaning-right-column">
+            <h3>Etching parameters</h3>
+            <p class="helper">Fields below come from the existing
+                EtchingRecipePDI schema. Numerical values use the stored
+                NOMAD units shown in the labels.</p>
+            <div id="etchingSchemaFields" class="field-grid"></div>
+            <div id="etchingSubsectionFields"></div>
+        </div>
+    `;
+    const scalarContainer = document.getElementById('etchingSchemaFields');
+    renderSchemaScalarFields(scalarContainer, seedData || {});
+
+    const subsectionContainer = document.getElementById('etchingSubsectionFields');
+    (currentDefinition().subsection_specs || []).forEach(function(spec) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'schema-subsection';
+        wrapper.dataset.section = spec.name;
+        wrapper.dataset.repeats = spec.repeats ? 'true' : 'false';
+        const label = document.createElement('label');
+        label.textContent = friendlyFieldLabel(spec.name) +
+            (spec.repeats ? ' (JSON list)' : ' (JSON object)');
+        label.title = 'Existing NOMAD subsection: ' + spec.schema;
+        const textarea = document.createElement('textarea');
+        textarea.className = 'schema-subsection-json';
+        textarea.rows = 4;
+        textarea.placeholder = spec.repeats ? '[{"name": "..."}]' : '{"name": "..."}';
+        if ((seedData || {})[spec.name] !== undefined) {
+            textarea.value = JSON.stringify(seedData[spec.name], null, 2);
+        }
+        const hint = document.createElement('p');
+        hint.className = 'helper';
+        hint.textContent = 'Optional nested NOMAD section: ' + spec.schema +
+            '. Validated by NOMAD on upload; leave blank if unused.';
+        wrapper.append(label, textarea, hint);
+        subsectionContainer.appendChild(wrapper);
+    });
+
+    const left = container.querySelector('.cleaning-left-column');
+    const template = document.getElementById('processingTemplateBlock');
+    if (left && template) left.insertBefore(template, left.firstChild);
+    const target = document.getElementById('targetUploadFields');
+    if (left && target) left.appendChild(target);
+    document.getElementById('etchingRecipeName')
+        .addEventListener('input', updateGeneratedId);
+    updateGeneratedId();
+}
+
 function renderProcessingDynamicFields(seedData) {
     const container = document.getElementById('processingDynamicFields');
     container.classList.remove('cleaning-editor', 'annealing-editor');
@@ -3245,66 +3402,13 @@ function renderProcessingDynamicFields(seedData) {
         return;
     }
 
-    container.innerHTML = '';
-    const fields = dynamicScalarFields();
-    if (!fields.length) {
-        container.innerHTML = '<div class="helper">No scalar recipe parameters were found in the existing library entries. The new recipe will contain only its generated ID until parameters are added by the schema editor.</div>';
+    if (currentSubtype === 'etching') {
+        renderEtchingFields(seedData || {});
         return;
     }
 
-    fields.forEach(function(field) {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'dynamic-field';
-        wrapper.dataset.field = field;
-
-        const label = document.createElement('label');
-        label.textContent = friendlyFieldLabel(field);
-
-        const select = document.createElement('select');
-        select.className = 'dynamic-select';
-        select.dataset.field = field;
-
-        const blank = document.createElement('option');
-        blank.value = '';
-        blank.textContent = 'Not set';
-        select.appendChild(blank);
-
-        fieldValuesFromCatalog(field).forEach(function(value) {
-            const option = document.createElement('option');
-            option.value = JSON.stringify(value);
-            option.textContent = String(value);
-            select.appendChild(option);
-        });
-
-        const custom = document.createElement('option');
-        custom.value = '__custom__';
-        custom.textContent = 'Custom value…';
-        select.appendChild(custom);
-
-        const customInput = document.createElement('input');
-        customInput.className = 'custom-value hidden';
-        customInput.dataset.field = field;
-        customInput.placeholder = field === 'chemical_formula' ? 'e.g. SrTiO3' : 'Custom value';
-
-        const initial = (seedData || {})[field];
-        if (initial !== undefined && initial !== null) {
-            const encoded = JSON.stringify(initial);
-            if (Array.from(select.options).some(function(option) { return option.value === encoded; })) {
-                select.value = encoded;
-            } else {
-                select.value = '__custom__';
-                customInput.classList.remove('hidden');
-                customInput.value = String(initial);
-            }
-        }
-
-        select.addEventListener('change', function() {
-            customInput.classList.toggle('hidden', select.value !== '__custom__');
-        });
-
-        wrapper.append(label, select, customInput);
-        container.appendChild(wrapper);
-    });
+    container.innerHTML = '';
+    renderSchemaScalarFields(container, seedData || {});
 }
 
 function populateProcessingTemplate(seedData) {
@@ -3444,47 +3548,65 @@ function validateFormula(value) {
 function readDynamicFields(data) {
     document.querySelectorAll('.dynamic-field').forEach(function(wrapper) {
         const field = wrapper.dataset.field;
-        const select = wrapper.querySelector('.dynamic-select');
-        const custom = wrapper.querySelector('.custom-value');
-        if (!select || select.value === '') {
+        const kind = wrapper.dataset.kind || 'text';
+        const input = wrapper.querySelector('.schema-field-value');
+        if (!input || input.value === '') {
             delete data[field];
             return;
         }
-
         let value;
-        if (select.value === '__custom__') {
-            const raw = custom.value.trim();
-            if (!raw) throw new Error(friendlyFieldLabel(field) + ' custom value is empty.');
-
-            const examples = fieldValuesFromCatalog(field);
-            const numeric = examples.some(function(example) { return typeof example === 'number'; });
-            const boolean = examples.some(function(example) { return typeof example === 'boolean'; });
-
-            if (numeric) {
-                value = Number(raw);
-                if (!Number.isFinite(value)) throw new Error(friendlyFieldLabel(field) + ' must be numeric.');
-            } else if (boolean) {
-                if (!['true','false'].includes(raw.toLowerCase())) throw new Error(friendlyFieldLabel(field) + ' must be true or false.');
-                value = raw.toLowerCase() === 'true';
-            } else {
-                value = raw;
+        if (kind === 'number') {
+            value = Number(input.value);
+            if (!Number.isFinite(value)) {
+                throw new Error(friendlyFieldLabel(field) + ' must be numeric.');
             }
+        } else if (kind === 'boolean') {
+            value = input.value === 'true';
         } else {
-            value = JSON.parse(select.value);
+            value = input.value.trim();
         }
-
-        if ((field === 'chemical_formula' || field === 'material') && typeof value === 'string') {
-            if (!validateFormula(value)) {
-                throw new Error(
-                    friendlyFieldLabel(field) +
-                    ' must use the full chemical formula, e.g. SrTiO3, not an abbreviation such as STO.'
-                );
-            }
+        if ((field === 'chemical_formula' || field === 'material') &&
+            typeof value === 'string' && !validateFormula(value)) {
+            throw new Error(friendlyFieldLabel(field) +
+                ' must be a full chemical formula, e.g. SrTiO3.');
         }
         data[field] = value;
     });
 }
 
+function readEtchingFields(data) {
+    const name = document.getElementById('etchingRecipeName').value.trim();
+    if (!name) throw new Error('Etching recipe name is required.');
+    data.name = name;
+    const description = document.getElementById('etchingDescription').value.trim();
+    if (description) data.description = description;
+    else delete data.description;
+    readDynamicFields(data);
+
+    document.querySelectorAll('.schema-subsection').forEach(function(wrapper) {
+        const name = wrapper.dataset.section;
+        const repeats = wrapper.dataset.repeats === 'true';
+        const raw = wrapper.querySelector('.schema-subsection-json').value.trim();
+        if (!raw) {
+            delete data[name];
+            return;
+        }
+        let value;
+        try {
+            value = JSON.parse(raw);
+        } catch (_) {
+            throw new Error(friendlyFieldLabel(name) + ': invalid JSON.');
+        }
+        if (repeats && !Array.isArray(value)) {
+            throw new Error(friendlyFieldLabel(name) + ' requires a JSON list.');
+        }
+        if (!repeats && (value === null || Array.isArray(value) ||
+            typeof value !== 'object')) {
+            throw new Error(friendlyFieldLabel(name) + ' requires a JSON object.');
+        }
+        data[name] = value;
+    });
+}
 
 function readCleaningFields(data) {
     const recipeName =
@@ -3837,6 +3959,11 @@ function editorArchiveData() {
                 data.lab_id = generatedId();
                 data.name = data.lab_id;
             }
+            // Recipes are reusable definitions, not executions. In particular,
+            // EtchingRecipePDI inherits from EtchingPDI and may normalize
+            // referenced samples if samples were copied from an old template.
+            delete data.samples;
+            delete data.recipe;
         }
         if (currentSubtype === 'cleaning') {
             readCleaningFields(data);
@@ -3844,6 +3971,16 @@ function editorArchiveData() {
             readAnnealingFields(data);
         } else if (currentSubtype === 'back_side_coating') {
             readBackSideCoatingFields(data);
+        } else if (currentSubtype === 'etching') {
+            if (editorMode === 'edit' && Array.isArray(data.samples) &&
+                data.samples.length) {
+                throw new Error(
+                    'This historical etching recipe contains sample references. ' +
+                    'Editing could run its inherited process normalizer. ' +
+                    'Duplicate it to create a sample-free recipe instead.'
+                );
+            }
+            readEtchingFields(data);
         } else {
             readDynamicFields(data);
         }
