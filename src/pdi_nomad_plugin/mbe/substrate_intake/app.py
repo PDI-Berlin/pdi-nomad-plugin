@@ -7,6 +7,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from nomad.config import config
+from nomad_material_processing.general import (
+    SquareCuboid,
+    RectangleCuboid,
+    Cylinder,
+    CylinderSector,
+    CrystallineSubstrate,
+)
 from pydantic import BaseModel
 
 app = FastAPI()
@@ -137,41 +144,44 @@ def formatted_indices(indices, brackets):
     return left + ' '.join(str(indices[key]) for key in ('h_index', 'k_index', 'l_index')) + right
 
 
-GEOMETRY_PREFIX = 'nomad_material_processing.general.'
-
-
 def parse_dimensions(width, length, height):
-    """Validate rectangular substrate dimensions in millimeters."""
+    """Validate dimensions in mm and serialize original NOMAD geometry."""
     values = (width, length, height)
     if any(value is None for value in values):
         raise ValueError('Specify width, length and thickness in mm.')
     if not all(math.isfinite(v) and v > 0 for v in values):
         raise ValueError('Width, length and thickness must be positive finite numbers.')
-    shape = 'SquareCuboid' if abs(width - length) <= GEOMETRY_EQUALITY_TOLERANCE else 'RectangleCuboid'
-    return {
-        'm_def': GEOMETRY_PREFIX + shape,
-        'width': width / 1000,
-        'length': length / 1000,
-        'height': height / 1000,
-    }
+
+    cls = (
+        SquareCuboid
+        if abs(width - length) <= GEOMETRY_EQUALITY_TOLERANCE
+        else RectangleCuboid
+    )
+    return cls(
+        width=width / 1000,
+        length=length / 1000,
+        height=height / 1000,
+    ).m_to_dict(with_meta=True)
 
 
 def parse_geometry(data: SubstrateIntakePreview):
     if data.geometry_shape == 'rectangle':
         return parse_dimensions(data.width_mm, data.length_mm, data.thickness_mm)
+
     if data.geometry_shape not in ('circle', 'circular_sector'):
         raise ValueError('Unsupported substrate geometry shape.')
+
     radius = data.radius_mm if data.radius_mm is not None else 25.4
     angle = (
-        360.0
-        if data.geometry_shape == 'circle'
-        else data.sector_angle_deg
-        if data.sector_angle_deg is not None
+        360.0 if data.geometry_shape == 'circle'
+        else data.sector_angle_deg if data.sector_angle_deg is not None
         else 90.0
     )
     thickness = data.thickness_mm
+
     if thickness is None:
         raise ValueError('Specify wafer thickness in mm.')
+
     if not (
         math.isfinite(radius)
         and radius > 0
@@ -181,17 +191,20 @@ def parse_geometry(data: SubstrateIntakePreview):
         and 0 < angle <= MAX_SECTOR_ANGLE_DEG
     ):
         raise ValueError('Radius, thickness and angle must have valid positive values.')
-    geometry = {
-        'm_def': GEOMETRY_PREFIX + (
-            'Cylinder' if data.geometry_shape == 'circle' else 'CylinderSector'
-        ),
-        'radius': radius / 1000,
-        'height': thickness / 1000,
-    }
-    if data.geometry_shape == 'circular_sector':
-        geometry['central_angle'] = angle
-    return geometry
 
+    if data.geometry_shape == 'circle':
+        geometry = Cylinder(
+            radius=radius / 1000,
+            height=thickness / 1000,
+        )
+    else:
+        geometry = CylinderSector(
+            radius=radius / 1000,
+            height=thickness / 1000,
+            central_angle=angle,
+        )
+
+    return geometry.m_to_dict(with_meta=True)
 
 @app.post('/api/preview')
 async def preview_substrate_batch(data: SubstrateIntakePreview):
@@ -215,41 +228,38 @@ async def preview_substrate_batch(data: SubstrateIntakePreview):
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    # Existing SubstrateBatchMbe quantities only. Never change its schema or
-    # its normalizers. Raw supplier/crystal/charge values stay intact.
-    archive_data = {
-        'm_def': 'pdi_nomad_plugin.mbe.materials.SubstrateBatchMbe',
-        'name': lab_id,
-        'lab_id': lab_id,
-        'supplier': data.supplier.strip() or None,
+    # There is no verified upstream batch schema that creates child entries.
+    # Create one ORIGINAL CrystallineSubstrate archive per physical substrate.
+    # The batch grouping exists only in the UI (lab_id prefix), not in metainfo.
+    descriptions = [
+        f'Crystal ID: {data.crystal_id.strip()}',
+        f'Charge ID: {data.charge.strip()}',
+    ]
+    if data.polishing.strip():
+        descriptions.append('Polishing: ' + data.polishing.strip())
+    if data.notes.strip():
+        descriptions.append(data.notes.strip())
+
+    base_data = {
+        'm_def': 'nomad_material_processing.general.CrystallineSubstrate',
+        'supplier': data.supplier.strip(),
         'supplier_id': data.supplier_id.strip(),
-        'material_designation': formula,
-        'crystal_id': data.crystal_id.strip(),
-        'charge_id': data.charge.strip(),
-        'polishing': data.polishing or None,
-        'offcut_angle': data.offcut_angle,
-        'offcut_direction': formatted_indices(offcut, '[]'),
-        'number_of_substrates': data.count,
-        'description': data.notes or None,
-        'trigger_create_substrate': True,
-        'components': [
-            {
-                'm_def': 'nomad.datamodel.metainfo.basesections.PureSubstanceComponent',
-                'mass_fraction': 1,
-                'pure_substance': {'molecular_formula': formula},
-            }
-        ],
+        'description': '\n'.join(descriptions),
+        'components': [{
+            'm_def': 'nomad.datamodel.metainfo.basesections.v1.PureSubstanceComponent',
+            'mass_fraction': 1.0,
+            'pure_substance': {
+                'm_def': 'nomad.datamodel.metainfo.basesections.v1.PureSubstanceSection',
+                'molecular_formula': formula,
+            },
+        }],
         'crystal_properties': {
             'surface_orientation': {'hkl_reciprocal': orientation},
         },
         'geometry': geometry,
     }
-
-    # Structured standard NOMAD section: miscut direction is direct-space
-    # hkl_direct ([uvw] in conventional crystallographic notation). Do not
-    # mistake this for surface_orientation.hkl_reciprocal.
     if offcut is not None and data.offcut_angle is not None:
-        archive_data['crystal_properties']['miscut'] = {
+        base_data['crystal_properties']['miscut'] = {
             'cartesian_miscut': {
                 'reference_orientation': {
                     'hkl_direct': offcut,
@@ -258,7 +268,47 @@ async def preview_substrate_batch(data: SubstrateIntakePreview):
             },
         }
 
-    return {'data': archive_data, 'pending_mapping': {}}
+    # Check the provenance of the real installed implementation. Neither
+    # local PDI m_defs nor custom normalizers may enter this workflow.
+    from pdi_nomad_plugin.mbe.lab_library.original_preflight import assert_upstream_normalizer
+    assert_upstream_normalizer(CrystallineSubstrate)
+
+    archives = []
+    for index in range(1, data.count + 1):
+        child_id = f'{lab_id}_{index}'
+        child_data = {
+            **base_data,
+            'name': child_id,
+            'lab_id': child_id,
+        }
+        # Validate against the actual installed NOMAD m_def. No PDI
+        # normalizer runs, and no custom schema is imported or used.
+        try:
+            CrystallineSubstrate.m_from_dict(child_data)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f'Substrate {child_id}: original-schema validation failed: {exc}',
+            ) from exc
+        archives.append({
+            'filename': child_id + '.archive.json',
+            'data': child_data,
+        })
+
+    # CrystallineSubstrate is an ORIGINAL ArchiveSection but NOT a verified
+    # EntryArchive.data root in the pinned upstream NOMAD runtime. Keep the
+    # complete physical-substrate preview, but never offer these as uploadable
+    # archives until a legitimate upstream EntryData workflow is established.
+    from nomad.datamodel.data import EntryData
+    root_supported = issubclass(CrystallineSubstrate, EntryData)
+    return {
+        'batch_lab_id': lab_id,
+        'archives': archives,
+        'upload_supported': False,
+        'root_is_entrydata': root_supported,
+        'reason': 'Original CrystallineSubstrate is not a verified uploadable EntryArchive.data root. No upload was made.',
+    }
+
 
 
 @app.get('/', response_class=HTMLResponse)
@@ -610,12 +660,12 @@ async def index():
                     </p>
 
                     <div class="summary">
-                        <strong>Batch entry:</strong><br>
-                        <span id="batchPreview">SubstrateBatchMbe</span>
+                        <strong>Substrate group:</strong><br>
+                        <span id="batchPreview">Individual original NOMAD substrates</span>
                     </div>
 
                     <div>
-                        <strong>Child entries</strong>
+                        <strong>Individual CrystallineSubstrate entries</strong>
                     </div>
 
                     <div id="childPreview" class="preview"></div>
@@ -651,11 +701,11 @@ async def index():
                         onclick="saveToNomad()"
                         disabled
                     >
-                        Save to NOMAD
+                        Upload unavailable (original archive root unverified)
                     </button>
 
                     <p id="saveStatus" class="small">
-                        Select a target upload to enable saving.
+                        Preview only: no valid original EntryArchive.data root has been verified.
                     </p>
                 </div>
 
@@ -912,52 +962,69 @@ document.getElementById('polishing').value,
 
                     const preview = await previewResponse.json();
 
-                    const filename = preview.data.lab_id + '.archive.yaml';
+                     if (preview.upload_supported !== true) {
+                         throw new Error(preview.reason ||
+                             'Original substrate entry root is unverified. No upload was made.');
+                     }
 
-                    const params = new URLSearchParams();
-                    params.append('file_name', filename);
-                    params.append('overwrite_if_exists', 'false');
-                    params.append('trigger_processing', 'true');
+                     const archives = preview.archives;
+                     if (!Array.isArray(archives) || archives.length !== payload.count) {
+                         throw new Error('Preview returned an unexpected number of substrate archives.');
+                     }
+                     if (archives.some(function(entry) {
+                         return !entry || !entry.data ||
+                             entry.data.m_def !== 'nomad_material_processing.general.CrystallineSubstrate' ||
+                             !entry.filename || !entry.filename.endsWith('.archive.json');
+                     })) {
+                         throw new Error('Preview contains a non-original substrate schema.');
+                     }
+                     const unique = new Set(archives.map(function(item) { return item.filename; }));
+                     if (unique.size !== archives.length) {
+                         throw new Error('Preview contains duplicate substrate filenames.');
+                     }
 
-                    saveStatus.textContent =
-                        'Uploading ' + filename + '...';
+                     // Each physical substrate is a separate original NOMAD archive.
+                     // There is no custom batch-normalizer and no implicit child creation.
+                     // Do not retry automatically after a partial upload.
+                     let saved = 0;
+                     for (const archive of archives) {
+                         const params = new URLSearchParams();
+                         params.append('file_name', archive.filename);
+                         params.append('overwrite_if_exists', 'false');
+                         params.append('trigger_processing', 'true');
+                         params.append('wait_for_processing', 'true');
 
-                    const response = await fetch(
-                        nomadApiBase() + '/uploads/' +
-                        encodeURIComponent(uploadId) +
-                        '/raw/?' +
-                        params.toString(),
-                        {
-                            method: 'PUT',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify(
-                                {data: preview.data},
-                                null,
-                                2
-                            )
-                        }
-                    );
+                         saveStatus.textContent =
+                             'Uploading substrate ' + (saved + 1) + '/' + archives.length +
+                             ': ' + archive.filename;
 
-                    if (!response.ok) {
-                        let detail = '';
-                        try {
-                            const errorData = await response.json();
-                            detail =
-                                errorData.detail
-                                    ? ': ' + errorData.detail
-                                    : '';
-                        } catch (_) {
-                        }
-
-                        throw new Error(
-                            'Save failed (' +
-                            response.status +
-                            ')' +
-                            detail
-                        );
-                    }
+                         const response = await fetch(
+                             nomadApiBase() + '/uploads/' +
+                             encodeURIComponent(uploadId) + '/raw/?' + params.toString(),
+                             {
+                                 method: 'PUT',
+                                 headers: {'Content-Type': 'application/json'},
+                                 body: JSON.stringify({data: archive.data}, null, 2)
+                             }
+                         );
+                         if (!response.ok) {
+                             let detail = '';
+                             try {
+                                 const errorData = await response.json();
+                                 detail = errorData.detail ? ': ' +
+                                     (typeof errorData.detail === 'string'
+                                         ? errorData.detail
+                                         : JSON.stringify(errorData.detail)) : '';
+                             } catch (_) { }
+                             throw new Error(
+                                 'Saved ' + saved + '/' + archives.length +
+                                 ' substrates. Upload failed for ' + archive.filename +
+                                 ' (' + response.status + ')' + detail +
+                                 '. Check the upload before retrying; do not create duplicates.'
+                             );
+                         }
+                         saved += 1;
+                     }
 
                     // Link to the upload so the user can jump straight to
                     // it, then clear the form for the next batch.
@@ -967,7 +1034,7 @@ document.getElementById('polishing').value,
                         encodeURIComponent(uploadId);
 
                     saveStatus.innerHTML =
-                        'Saved: ' + filename +
+                        'Saved ' + archives.length + ' original substrate archives' +
                         '. NOMAD processing has been triggered. ' +
                         '<a href="' + uploadUrl + '" target="_blank">' +
                         'View this upload &rarr;</a>';
@@ -977,8 +1044,7 @@ document.getElementById('polishing').value,
                     saveStatus.textContent =
                         'Error: ' + error.message;
                 } finally {
-                    saveButton.disabled =
-                        !document.getElementById('targetUpload').value;
+                    saveButton.disabled = true;
                 }
             }
 
@@ -1055,14 +1121,11 @@ document.getElementById('polishing').value,
                 .getElementById('targetUpload')
                 .addEventListener('change', function() {
                     const hasUpload = Boolean(this.value);
-                    document.getElementById('saveButton').disabled =
-                        !hasUpload;
+                    document.getElementById('saveButton').disabled = true;
                     const status = document.getElementById('saveStatus');
                     status.className = hasUpload ? 'small' : 'warning';
                     status.textContent =
-                        hasUpload
-                            ? 'Ready to save to the selected upload.'
-                            : 'Select a target upload to enable saving.';
+                        'Preview only: original substrate EntryArchive.data root unverified.';
                 });
 
             let intakeRefreshPromise = null;
@@ -1082,8 +1145,7 @@ document.getElementById('polishing').value,
                         select.value = oldUpload;
                     }
 
-                    document.getElementById('saveButton').disabled =
-                        !select.value;
+                    document.getElementById('saveButton').disabled = true;
                 }).finally(function() {
                     intakeRefreshPromise = null;
                 });

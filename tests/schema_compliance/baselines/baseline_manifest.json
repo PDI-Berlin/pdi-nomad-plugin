@@ -1,0 +1,30 @@
+{
+  "purpose": "Pinned original NOMAD metainfo contract, excludes locally defined PDI schemas",
+  "source": "Runtime export from user Windows venv, 2026-10-16",
+  "packages": {
+    "nomad-material-processing": "1.0.6",
+    "nomad-lab": "1.4.3",
+    "nomad-measurements": "1.3.8"
+  },
+  "source_modules": [
+    "nomad.datamodel.metainfo.basesections.v1",
+    "nomad_material_processing.general",
+    "nomad_material_processing.vapor_deposition.general"
+  ],
+  "module_sha256": {
+    "nomad_material_processing.general": "ff53b6187ab35ea2ca16924b5718a477ee5ee39fd6717f8ec561995d31e0a3dc",
+    "nomad_material_processing.vapor_deposition.general": "8320537b429c99159e32e582ca418720b99d5c618d3afe54e6f607dc8275d60c",
+    "nomad.datamodel.metainfo.basesections.v1": "0feb263a5813da1ccd4ac5c1d409282f4996899dbd1be2ff5af8d7726643095d"
+  },
+  "schema_count": 92,
+  "snapshots_sha256": "ff6fd907c565d29f1d0f93efac59fe76f02119e11fe5bc0d5ba688a6cdfb767a",
+  "normalizer_verification": "MRO owner identity + upstream module ownership; module SHA256 covers the three exported modules",
+  "not_covered": [
+    "Other NOMAD Core modules",
+    "Other nomad_material_processing modules",
+    "nomad_measurements schema modules (package version pinned, no metainfo exported)",
+    "Reference target definitions (reference object repr was exported without target)",
+    "Byte-identical normalizer implementations inherited from outside three snapshotted modules"
+  ],
+  "approval_note": "An explicit export review is required before changing this pinned contract; do not auto-accept new package versions."
+}

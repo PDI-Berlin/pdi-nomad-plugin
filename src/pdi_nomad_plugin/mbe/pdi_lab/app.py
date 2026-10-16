@@ -1,7 +1,9 @@
 from pathlib import Path
+import json
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse
+from nomad.config import config
 
 BASE_DIR = Path(__file__).resolve().parent
 TEMPLATE_DIR = BASE_DIR / 'templates'
@@ -12,7 +14,11 @@ app = FastAPI()
 
 @app.get('/', response_class=HTMLResponse)
 async def index():
-    return (TEMPLATE_DIR / 'index.html').read_text(encoding='utf-8')
+    html = (TEMPLATE_DIR / 'index.html').read_text(encoding='utf-8')
+    base = config.services.api_base_path.rstrip('/')
+    injected = '<script>window.PDI_LAB_BASE = ' + json.dumps(base) + ';</script>'
+    return html.replace('<script src="static/app.js"></script>',
+                        injected + '<script src="static/app.js"></script>', 1)
 
 
 @app.get('/static/styles.css')

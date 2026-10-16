@@ -10,11 +10,11 @@ function deploymentBase() {
     return '';
 }
 
-const base = deploymentBase();
+const base = typeof window.PDI_LAB_BASE === 'string' ? window.PDI_LAB_BASE : deploymentBase();
 
 const apps = {
     intake: {
-        title: 'Substrate Intake',
+        title: 'Substrate Check-in',
         step: '01',
         accent: '#B78ACF',
         accentSoft: '#F2EAF7',

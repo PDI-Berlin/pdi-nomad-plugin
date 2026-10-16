@@ -1,0 +1,4160 @@
+{
+  "nomad.datamodel.metainfo.basesections.v1.Activity": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.BaseSection"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.Activity",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.Activity",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time when this activity was started.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "location": {
+        "description": "location of the experiment.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "method": {
+        "description": "A short consistent handle for the applied method.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "steps": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.ActivityStep"
+      }
+    }
+  },
+  "nomad.datamodel.metainfo.basesections.v1.ActivityResult": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.ActivityResult",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "name": {
+        "description": "A short and descriptive name for the result.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.ActivityStep": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.ActivityStep",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "comment": {
+        "description": "Any additional information about the step not captured by the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short and descriptive name for this step.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "start_time": {
+        "description": "Optionally, the starting time of the activity step. If omitted, it is assumed to\nfollow directly after the previous step.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.Analysis": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.Activity"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.Analysis",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.Analysis",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time when this activity was started.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "location": {
+        "description": "location of the experiment.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "method": {
+        "description": "A short consistent handle for the applied method.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "inputs": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.SectionReference"
+      },
+      "outputs": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.AnalysisResult"
+      },
+      "steps": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.ActivityStep"
+      }
+    }
+  },
+  "nomad.datamodel.metainfo.basesections.v1.AnalysisResult": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.ActivityResult"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.AnalysisResult",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "name": {
+        "description": "A short and descriptive name for the result.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.BaseSection": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time associated with this section.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.CASExperimentalProperty": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.CASExperimentalProperty",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "name": {
+        "description": "CAS experimental property name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "property": {
+        "description": "CAS experimental property.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "sourceNumber": {
+        "description": "CAS experimental property source.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.CASPropertyCitation": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.CASPropertyCitation",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "docUri": {
+        "description": "CAS property citation document uri.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "source": {
+        "description": "CAS property citation source.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "sourceNumber": {
+        "description": null,
+        "shape": "[]",
+        "type": "m_int32(int)",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.CASPureSubstanceSection": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.PureSubstanceSection"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.CASPureSubstanceSection",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.CASPureSubstanceSection",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "canonical_smile": {
+        "description": "Canonical smile.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "cas_name": {
+        "description": "CAS name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "cas_number": {
+        "description": "CAS number.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "cas_synonyms": {
+        "description": "CAS synonyms.",
+        "shape": "['*']",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "cas_uri": {
+        "description": "CAS uri",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "image": {
+        "description": "CAS image.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "inchi": {
+        "description": "Inchi.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "inchi_key": {
+        "description": "Inchi key.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "iupac_name": {
+        "description": "IUPAC name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "molar_mass": {
+        "description": "The molar mass is the sum of all atomic masses of the constituent atoms in a\ncompound, measured in g/mol. In the absence of explicit isotope labelling,\naveraged natural abundance is assumed. If an atom bears an explicit isotope label,\n100%% isotopic purity is assumed at this location.",
+        "shape": "[]",
+        "type": "m_float64(float64)",
+        "unit": "gram / mole"
+      },
+      "molecular_formula": {
+        "description": "Molecular formula.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "molecular_mass": {
+        "description": "The mass of the most likely isotopic composition for a single molecule,\ncorresponding to the most intense ion/molecule peak in a mass spectrum.",
+        "shape": "[]",
+        "type": "m_float64(float64)",
+        "unit": "dalton"
+      },
+      "monoisotopic_mass": {
+        "description": "The mass of a molecule, calculated using the mass of the most abundant isotope of\neach element.",
+        "shape": "[]",
+        "type": "m_float64(float64)",
+        "unit": "dalton"
+      },
+      "name": {
+        "description": "A short name for the substance.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "smile": {
+        "description": "Smile.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "cas_experimental_properties": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.CASExperimentalProperty"
+      },
+      "cas_property_citations": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.CASPropertyCitation"
+      }
+    }
+  },
+  "nomad.datamodel.metainfo.basesections.v1.Collection": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.Entity"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.Collection",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time associated with this section.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "entities": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.EntityReference"
+      }
+    }
+  },
+  "nomad.datamodel.metainfo.basesections.v1.Component": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.Component",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "mass": {
+        "description": "The mass of the component.",
+        "shape": "[]",
+        "type": "m_float64(float64)",
+        "unit": "kilogram"
+      },
+      "mass_fraction": {
+        "description": "The mass fraction of the component in the composite system.",
+        "shape": "[]",
+        "type": "m_float64(float64)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short name for the component.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.CompositeSystem": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.System"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.CompositeSystem",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.CompositeSystem",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time associated with this section.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "components": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.Component"
+      },
+      "elemental_composition": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.ElementalComposition"
+      }
+    }
+  },
+  "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.EntityReference"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "lab_id": {
+        "description": "The readable identifier for the entity.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short descriptive name for the role of this reference.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "reference": {
+        "description": "A reference to a NOMAD `CompositeSystem` entry.",
+        "shape": "[]",
+        "type": "Reference",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.ElementalComposition": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.ElementalComposition",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.ElementalComposition",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "atomic_fraction": {
+        "description": "The atomic fraction of the element in the system it is contained within.\nPer definition a positive value less than or equal to 1.",
+        "shape": "[]",
+        "type": "m_float64(float64)",
+        "unit": null
+      },
+      "element": {
+        "description": "The symbol of the element, e.g. 'Pb'.",
+        "shape": "[]",
+        "type": "Enum",
+        "unit": null
+      },
+      "mass_fraction": {
+        "description": "The mass fraction of the element in the system it is contained within.\nPer definition a positive value less than or equal to 1.",
+        "shape": "[]",
+        "type": "m_float64(float64)",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.Entity": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.BaseSection"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.Entity",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time associated with this section.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.EntityReference": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.SectionReference"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "lab_id": {
+        "description": "The readable identifier for the entity.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short descriptive name for the role of this reference.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "reference": {
+        "description": "A reference to a NOMAD `Entity` entry.",
+        "shape": "[]",
+        "type": "Reference",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.Experiment": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.Activity"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.Experiment",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.Activity",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time when this activity was started.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "location": {
+        "description": "location of the experiment.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "method": {
+        "description": "A short consistent handle for the applied method.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "steps": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.ExperimentStep"
+      }
+    }
+  },
+  "nomad.datamodel.metainfo.basesections.v1.ExperimentStep": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.ActivityStep"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.ExperimentStep",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.ExperimentStep",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "activity": {
+        "description": "The activity that makes up this step of the experiment.",
+        "shape": "[]",
+        "type": "Reference",
+        "unit": null
+      },
+      "comment": {
+        "description": "Any additional information about the step not captured by the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "The readable identifier for the activity.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short and descriptive name for this step.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "start_time": {
+        "description": "Optionally, the starting time of the activity step. If omitted, it is assumed to\nfollow directly after the previous step.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.HDF5Normalizer": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.HDF5Normalizer",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.HDF5Normalizer",
+      "locally_defined_on_class": true
+    },
+    "quantities": {},
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.Instrument": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.Entity"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.Instrument",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.Instrument",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time associated with this section.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.InstrumentReference": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.EntityReference"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.InstrumentReference",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "lab_id": {
+        "description": "The readable identifier for the entity.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short descriptive name for the role of this reference.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "reference": {
+        "description": "A reference to a NOMAD `Instrument` entry.",
+        "shape": "[]",
+        "type": "Reference",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.Measurement": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.Activity"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.Measurement",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.Measurement",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time when this activity was started.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "location": {
+        "description": "location of the experiment.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "method": {
+        "description": "A short consistent handle for the applied method.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "instruments": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.InstrumentReference"
+      },
+      "results": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.MeasurementResult"
+      },
+      "samples": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference"
+      },
+      "steps": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.ActivityStep"
+      }
+    }
+  },
+  "nomad.datamodel.metainfo.basesections.v1.MeasurementResult": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.ActivityResult"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.MeasurementResult",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "name": {
+        "description": "A short and descriptive name for the result.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.Process": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.Activity"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.Process",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.Process",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time when this activity was started.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "end_time": {
+        "description": "The date and time when this process was finished.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "location": {
+        "description": "location of the experiment.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "method": {
+        "description": "A short consistent handle for the applied method.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "instruments": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.InstrumentReference"
+      },
+      "samples": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference"
+      },
+      "steps": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.ProcessStep"
+      }
+    }
+  },
+  "nomad.datamodel.metainfo.basesections.v1.ProcessStep": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.ActivityStep"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.ProcessStep",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "comment": {
+        "description": "Any additional information about the step not captured by the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "duration": {
+        "description": "The duration time of the process step.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "second"
+      },
+      "name": {
+        "description": "A short and descriptive name for this step.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "start_time": {
+        "description": "Optionally, the starting time of the activity step. If omitted, it is assumed to\nfollow directly after the previous step.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.PubChemPureSubstanceSection": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.PureSubstanceSection"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.PubChemPureSubstanceSection",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.PubChemPureSubstanceSection",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "canonical_smile": {
+        "description": "Canonical smile.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "cas_number": {
+        "description": "CAS number.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "inchi": {
+        "description": "Inchi.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "inchi_key": {
+        "description": "Inchi key.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "iupac_name": {
+        "description": "IUPAC name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "molar_mass": {
+        "description": "The molar mass is the sum of all atomic masses of the constituent atoms in a\ncompound, measured in g/mol. In the absence of explicit isotope labelling,\naveraged natural abundance is assumed. If an atom bears an explicit isotope label,\n100%% isotopic purity is assumed at this location.",
+        "shape": "[]",
+        "type": "m_float64(float64)",
+        "unit": "gram / mole"
+      },
+      "molecular_formula": {
+        "description": "Molecular formula.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "molecular_mass": {
+        "description": "The mass of the most likely isotopic composition for a single molecule,\ncorresponding to the most intense ion/molecule peak in a mass spectrum.",
+        "shape": "[]",
+        "type": "m_float64(float64)",
+        "unit": "dalton"
+      },
+      "monoisotopic_mass": {
+        "description": "The mass of a molecule, calculated using the mass of the most abundant isotope of\neach element.",
+        "shape": "[]",
+        "type": "m_float64(float64)",
+        "unit": "dalton"
+      },
+      "name": {
+        "description": "A short name for the substance.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "pub_chem_cid": {
+        "description": null,
+        "shape": "[]",
+        "type": "m_int32(int)",
+        "unit": null
+      },
+      "pub_chem_link": {
+        "description": null,
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "smile": {
+        "description": "Smile.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.PublicationReference": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.PublicationReference",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.PublicationReference",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "DOI_number": {
+        "description": "The DOI number referring to the published paper or dataset where the data can be found.\nExamples:\n10.1021/jp5126624\n10.1016/j.electacta.2017.06.032",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "journal": {
+        "description": "Name of the journal where the data is published.\nIf the DOI number is given correctly,\nthis will be extracted automatically from www.crossref.org",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "publication_authors": {
+        "description": "The authors of the publication.\nIf several authors, end with et al. If the DOI number is given correctly,\nthis will be extracted automatically from www.crossref.org",
+        "shape": "['*']",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "publication_date": {
+        "description": "Publication date.\nIf the DOI number is given correctly,\nthis will be extracted automatically from www.crossref.org",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "publication_title": {
+        "description": "Title of the publication.\nIf the DOI number is given correctly,\nthis will be extracted automatically from www.crossref.org",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.PureSubstance": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.System"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.PureSubstance",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.PureSubstance",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time associated with this section.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "A field for adding additional information about the substance that is not captured\nby the other quantities and subsections.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "A human readable substance ID that is at least unique for the lab.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "The name of the substance entry.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "elemental_composition": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.ElementalComposition"
+      },
+      "pure_substance": {
+        "repeats": false,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.PureSubstanceSection"
+      }
+    }
+  },
+  "nomad.datamodel.metainfo.basesections.v1.PureSubstanceComponent": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.Component"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.PureSubstanceComponent",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.PureSubstanceComponent",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "mass": {
+        "description": "The mass of the component.",
+        "shape": "[]",
+        "type": "m_float64(float64)",
+        "unit": "kilogram"
+      },
+      "mass_fraction": {
+        "description": "The mass fraction of the component in the composite system.",
+        "shape": "[]",
+        "type": "m_float64(float64)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short name for the component.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "substance_name": {
+        "description": "The name of the substance within the section where this component is contained.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "pure_substance": {
+        "repeats": false,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.PureSubstanceSection"
+      }
+    }
+  },
+  "nomad.datamodel.metainfo.basesections.v1.PureSubstanceSection": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.PureSubstanceSection",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "canonical_smile": {
+        "description": "Canonical smile.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "cas_number": {
+        "description": "CAS number.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "inchi": {
+        "description": "Inchi.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "inchi_key": {
+        "description": "Inchi key.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "iupac_name": {
+        "description": "IUPAC name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "molar_mass": {
+        "description": "The molar mass is the sum of all atomic masses of the constituent atoms in a\ncompound, measured in g/mol. In the absence of explicit isotope labelling,\naveraged natural abundance is assumed. If an atom bears an explicit isotope label,\n100%% isotopic purity is assumed at this location.",
+        "shape": "[]",
+        "type": "m_float64(float64)",
+        "unit": "gram / mole"
+      },
+      "molecular_formula": {
+        "description": "Molecular formula.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "molecular_mass": {
+        "description": "The mass of the most likely isotopic composition for a single molecule,\ncorresponding to the most intense ion/molecule peak in a mass spectrum.",
+        "shape": "[]",
+        "type": "m_float64(float64)",
+        "unit": "dalton"
+      },
+      "monoisotopic_mass": {
+        "description": "The mass of a molecule, calculated using the mass of the most abundant isotope of\neach element.",
+        "shape": "[]",
+        "type": "m_float64(float64)",
+        "unit": "dalton"
+      },
+      "name": {
+        "description": "A short name for the substance.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "smile": {
+        "description": "Smile.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.ReadableIdentifiers",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "datetime": {
+        "description": "A datetime associated with the identified thing. In case of an `Activity`, this\nshould be the starting time and, in case of an `Entity`, the creation time.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "institute": {
+        "description": "Alias/short name of the home institute of the owner, i.e. *HZB*.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "Full readable id. Ideally a human readable id convention, which is simple,\nunderstandable and still have chances of becoming unique.\nIf the `owner`, `short_name`, `ìnstitute`, and `datetime` are provided, this will\nbe formed automatically by joining these components by an underscore (_).\nSpaces in any of the individual components will be replaced with hyphens (-).\nAn example would be hzb_oah_20200602_4001-08.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "owner": {
+        "description": "Alias for the owner of the identified thing. This should be unique within the\ninstitute.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "short_name": {
+        "description": "A short name of the the identified thing (e.g. the identifier scribed on the\nsample, the process number, or machine name), e.g. 4001-8, YAG-2-34.\nThis is to be managed and decided internally by the labs, although we recommend\nto avoid the following characters in it: \"_\", \"/\", \"\\\" and \".\".",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.SectionReference": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.SectionReference",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "name": {
+        "description": "A short descriptive name for the role of this reference.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "reference": {
+        "description": "A reference to a NOMAD archive section.",
+        "shape": "[]",
+        "type": "Reference",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad.datamodel.metainfo.basesections.v1.SynthesisMethod": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.Process"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.SynthesisMethod",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.Process",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time when this activity was started.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "end_time": {
+        "description": "The date and time when this process was finished.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "location": {
+        "description": "location of the experiment.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "method": {
+        "description": "A short consistent handle for the applied method.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "instruments": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.InstrumentReference"
+      },
+      "samples": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference"
+      },
+      "steps": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.ProcessStep"
+      }
+    }
+  },
+  "nomad.datamodel.metainfo.basesections.v1.System": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.Entity"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.System",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.System",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time associated with this section.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "elemental_composition": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.ElementalComposition"
+      }
+    }
+  },
+  "nomad.datamodel.metainfo.basesections.v1.SystemComponent": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.Component"
+    ],
+    "m_def_qualified_name": "nomad.datamodel.metainfo.basesections.v1.SystemComponent",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.SystemComponent",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "mass": {
+        "description": "The mass of the component.",
+        "shape": "[]",
+        "type": "m_float64(float64)",
+        "unit": "kilogram"
+      },
+      "mass_fraction": {
+        "description": "The mass fraction of the component in the composite system.",
+        "shape": "[]",
+        "type": "m_float64(float64)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short name for the component.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "system": {
+        "description": "A reference to the component system.",
+        "shape": "[]",
+        "type": "Reference",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.general.Annealing": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.Process",
+      "nomad.datamodel.data.EntryData"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.Annealing",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.Process",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time when this activity was started.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "duration": {
+        "description": "The elapsed time since the annealing process started.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "second"
+      },
+      "end_time": {
+        "description": "The date and time when this process was finished.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "location": {
+        "description": "location of the experiment.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "method": {
+        "description": "A short consistent handle for the applied method.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "recipe": {
+        "description": "The recipe used for the process. If a recipe is found,\nall the data is copied from the Recipe within the Process.",
+        "shape": "[]",
+        "type": "Reference",
+        "unit": null
+      },
+      "tags": {
+        "description": "Searchable tags for this entry. Use Explore tab for searching.",
+        "shape": "['*']",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "instruments": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.InstrumentReference"
+      },
+      "samples": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference"
+      },
+      "steps": {
+        "repeats": true,
+        "schema": "nomad_material_processing.general.AnnealingStep"
+      }
+    }
+  },
+  "nomad_material_processing.general.AnnealingRecipe": {
+    "bases": [
+      "nomad_material_processing.general.Annealing",
+      "nomad_material_processing.general.Recipe",
+      "nomad.datamodel.data.EntryData"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.AnnealingRecipe",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.Process",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time when this activity was started.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "duration": {
+        "description": "The elapsed time since the annealing process started.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "second"
+      },
+      "end_time": {
+        "description": "The date and time when this process was finished.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "A unique human readable ID for the recipe.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "location": {
+        "description": "location of the experiment.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "method": {
+        "description": "A short consistent handle for the applied method.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "recipe": {
+        "description": "The recipe used for the process. If a recipe is found,\nall the data is copied from the Recipe within the Process.",
+        "shape": "[]",
+        "type": "Reference",
+        "unit": null
+      },
+      "tags": {
+        "description": "Searchable tags for this entry. Use Explore tab for searching.",
+        "shape": "['*']",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "instruments": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.InstrumentReference"
+      },
+      "samples": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference"
+      },
+      "steps": {
+        "repeats": true,
+        "schema": "nomad_material_processing.general.AnnealingStep"
+      }
+    }
+  },
+  "nomad_material_processing.general.AnnealingStep": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.ProcessStep"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.AnnealingStep",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "comment": {
+        "description": "Any additional information about the step not captured by the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "duration": {
+        "description": "The elapsed time since the annealing process started.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "second"
+      },
+      "ending_temperature": {
+        "description": "The starting T in the annealing ramp.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "degree_Celsius"
+      },
+      "name": {
+        "description": "A short and descriptive name for this step.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "start_time": {
+        "description": "Optionally, the starting time of the activity step. If omitted, it is assumed to\nfollow directly after the previous step.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "starting_temperature": {
+        "description": "The starting T in the annealing ramp.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "degree_Celsius"
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.general.BravaisMillerIndices": {
+    "bases": [
+      "nomad_material_processing.general.MillerIndices"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.BravaisMillerIndices",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "h_index": {
+        "description": "The Miller index h.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": null
+      },
+      "i": {
+        "description": "The Miller index i.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": null
+      },
+      "k_index": {
+        "description": "The Miller index k.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": null
+      },
+      "l_index": {
+        "description": "The Miller index l.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.general.CartesianMiscut": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.CartesianMiscut",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {},
+    "subsections": {
+      "perpendicular_orientation": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.ProjectedMiscutOrientation"
+      },
+      "reference_orientation": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.ProjectedMiscutOrientation"
+      }
+    }
+  },
+  "nomad_material_processing.general.Cleaning": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.Process",
+      "nomad.datamodel.data.EntryData"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.Cleaning",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.Process",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time when this activity was started.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "duration": {
+        "description": "The elapsed time since the annealing process started.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "second"
+      },
+      "end_time": {
+        "description": "The date and time when this process was finished.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "location": {
+        "description": "location of the experiment.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "method": {
+        "description": "A short consistent handle for the applied method.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "recipe": {
+        "description": "The recipe used for the process. If a recipe is found,\nall the data is copied from the Recipe within the Process.",
+        "shape": "[]",
+        "type": "Reference",
+        "unit": null
+      },
+      "tags": {
+        "description": "Searchable tags for this entry. Use Explore tab for searching.",
+        "shape": "['*']",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "instruments": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.InstrumentReference"
+      },
+      "samples": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference"
+      },
+      "steps": {
+        "repeats": true,
+        "schema": "nomad_material_processing.general.CleaningStep"
+      }
+    }
+  },
+  "nomad_material_processing.general.CleaningRecipe": {
+    "bases": [
+      "nomad_material_processing.general.Cleaning",
+      "nomad_material_processing.general.Recipe",
+      "nomad.datamodel.data.EntryData"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.CleaningRecipe",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.Process",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time when this activity was started.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "duration": {
+        "description": "The elapsed time since the annealing process started.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "second"
+      },
+      "end_time": {
+        "description": "The date and time when this process was finished.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "A unique human readable ID for the recipe.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "location": {
+        "description": "location of the experiment.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "method": {
+        "description": "A short consistent handle for the applied method.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "recipe": {
+        "description": "The recipe used for the process. If a recipe is found,\nall the data is copied from the Recipe within the Process.",
+        "shape": "[]",
+        "type": "Reference",
+        "unit": null
+      },
+      "tags": {
+        "description": "Searchable tags for this entry. Use Explore tab for searching.",
+        "shape": "['*']",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "instruments": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.InstrumentReference"
+      },
+      "samples": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference"
+      },
+      "steps": {
+        "repeats": true,
+        "schema": "nomad_material_processing.general.CleaningStep"
+      }
+    }
+  },
+  "nomad_material_processing.general.CleaningStep": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.ProcessStep"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.CleaningStep",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "agitation": {
+        "description": "The agitation method used during the cleaning process.",
+        "shape": "[]",
+        "type": "Enum",
+        "unit": null
+      },
+      "comment": {
+        "description": "Any additional information about the step not captured by the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "duration": {
+        "description": "The elapsed time since the cleaning process started.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "second"
+      },
+      "name": {
+        "description": "A short and descriptive name for this step.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "start_time": {
+        "description": "Optionally, the starting time of the activity step. If omitted, it is assumed to\nfollow directly after the previous step.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "temperature": {
+        "description": "The temperature of the cleaning process.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "degree_Celsius"
+      }
+    },
+    "subsections": {
+      "cleaning_reagents": {
+        "repeats": false,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference"
+      }
+    }
+  },
+  "nomad_material_processing.general.CrystalProperties": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.CrystalProperties",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {},
+    "subsections": {}
+  },
+  "nomad_material_processing.general.CrystallineSubstrate": {
+    "bases": [
+      "nomad_material_processing.general.Substrate"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.CrystallineSubstrate",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.CompositeSystem",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time associated with this section.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "image": {
+        "description": "A photograph or image of the substrate.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "information_sheet": {
+        "description": "Pdf files containing certificate and other documentation.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "supplier": {
+        "description": "The supplier of the current substrate specimen.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "supplier_id": {
+        "description": "An ID string that is unique from the supplier.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "components": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.Component"
+      },
+      "crystal_properties": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.SubstrateCrystalProperties"
+      },
+      "dopants": {
+        "repeats": true,
+        "schema": "nomad_material_processing.general.Dopant"
+      },
+      "electronic_properties": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.ElectronicProperties"
+      },
+      "elemental_composition": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.ElementalComposition"
+      },
+      "geometry": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.Geometry"
+      }
+    }
+  },
+  "nomad_material_processing.general.CrystallographicDirection": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.CrystallographicDirection",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {},
+    "subsections": {
+      "hkl_direct": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.MillerIndices"
+      },
+      "hkl_reciprocal": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.MillerIndices"
+      }
+    }
+  },
+  "nomad_material_processing.general.Cylinder": {
+    "bases": [
+      "nomad_material_processing.general.Geometry"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.Cylinder",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "cap_surface_area": {
+        "description": "Area of the cap.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter ** 2"
+      },
+      "height": {
+        "description": "The z dimension of the parallelepiped.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      },
+      "lateral_surface_area": {
+        "description": "Area of the lateral surface.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter ** 2"
+      },
+      "lower_cap_surface_area": {
+        "description": "Area of the lower cap.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter ** 2"
+      },
+      "radius": {
+        "description": "Radius of the cylinder.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      },
+      "volume": {
+        "description": "The measure of the amount of space occupied in 3D space.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter ** 3"
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.general.CylinderSector": {
+    "bases": [
+      "nomad_material_processing.general.Cylinder"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.CylinderSector",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "cap_surface_area": {
+        "description": "Area of the cap.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter ** 2"
+      },
+      "central_angle": {
+        "description": "The angle that defines the portion of the cylinder.\nThis angle is taken at the center of the base circle\nand extends to the arc that defines the cylindrical sector.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "degree"
+      },
+      "height": {
+        "description": "The z dimension of the parallelepiped.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      },
+      "lateral_surface_area": {
+        "description": "Area of the lateral surface.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter ** 2"
+      },
+      "lower_cap_surface_area": {
+        "description": "Area of the lower cap.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter ** 2"
+      },
+      "radius": {
+        "description": "Radius of the cylinder.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      },
+      "volume": {
+        "description": "The measure of the amount of space occupied in 3D space.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter ** 3"
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.general.Dopant": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.ElementalComposition"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.Dopant",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.ElementalComposition",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "atomic_fraction": {
+        "description": "The atomic fraction of the element in the system it is contained within.\nPer definition a positive value less than or equal to 1.",
+        "shape": "[]",
+        "type": "m_float64(float64)",
+        "unit": null
+      },
+      "doping_deviation": {
+        "description": "The ± deviation in the doping level.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "1 / meter ** 3"
+      },
+      "doping_level": {
+        "description": "The chemical doping level.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "1 / meter ** 3"
+      },
+      "element": {
+        "description": "The symbol of the element, e.g. 'Pb'.",
+        "shape": "[]",
+        "type": "Enum",
+        "unit": null
+      },
+      "mass_fraction": {
+        "description": "The mass fraction of the element in the system it is contained within.\nPer definition a positive value less than or equal to 1.",
+        "shape": "[]",
+        "type": "m_float64(float64)",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.general.ElectronicProperties": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.ElectronicProperties",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "carrier_density": {
+        "description": "Concentration of free charge carriers, electrons in the\nconduction band and holes in the valence band.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "1 / centimeter ** 3"
+      },
+      "carrier_density_deviation": {
+        "description": "Deviation in the concentration of free charge carriers,\nelectrons in the conduction band and holes in the valence band.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "1 / meter ** 3"
+      },
+      "conductivity_type": {
+        "description": "The type of semiconductor, N-type being electrons\nthe majority carriers and P-type being holes the majority carriers.",
+        "shape": "[]",
+        "type": "Enum",
+        "unit": null
+      },
+      "electrical_resistivity": {
+        "description": "Resistance of the charges to move\nin the presence of an electric current.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter * ohm"
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.general.Etching": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.Process",
+      "nomad.datamodel.data.EntryData"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.Etching",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.Process",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time when this activity was started.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "end_time": {
+        "description": "The date and time when this process was finished.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "location": {
+        "description": "location of the experiment.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "method": {
+        "description": "A short consistent handle for the applied method.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "recipe": {
+        "description": "The recipe used for the process. If a recipe is found,\nall the data is copied from the Recipe within the Process.",
+        "shape": "[]",
+        "type": "Reference",
+        "unit": null
+      },
+      "tags": {
+        "description": "Searchable tags for this entry. Use Explore tab for searching.",
+        "shape": "['*']",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "instruments": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.InstrumentReference"
+      },
+      "samples": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference"
+      },
+      "steps": {
+        "repeats": true,
+        "schema": "nomad_material_processing.general.EtchingStep"
+      }
+    }
+  },
+  "nomad_material_processing.general.EtchingRecipe": {
+    "bases": [
+      "nomad_material_processing.general.Etching",
+      "nomad_material_processing.general.Recipe",
+      "nomad.datamodel.data.EntryData"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.EtchingRecipe",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.Process",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time when this activity was started.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "end_time": {
+        "description": "The date and time when this process was finished.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "A unique human readable ID for the recipe.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "location": {
+        "description": "location of the experiment.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "method": {
+        "description": "A short consistent handle for the applied method.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "recipe": {
+        "description": "The recipe used for the process. If a recipe is found,\nall the data is copied from the Recipe within the Process.",
+        "shape": "[]",
+        "type": "Reference",
+        "unit": null
+      },
+      "tags": {
+        "description": "Searchable tags for this entry. Use Explore tab for searching.",
+        "shape": "['*']",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "instruments": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.InstrumentReference"
+      },
+      "samples": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference"
+      },
+      "steps": {
+        "repeats": true,
+        "schema": "nomad_material_processing.general.EtchingStep"
+      }
+    }
+  },
+  "nomad_material_processing.general.EtchingStep": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.ProcessStep"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.EtchingStep",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "agitation": {
+        "description": "The agitation method used during the etching process.",
+        "shape": "[]",
+        "type": "Enum",
+        "unit": null
+      },
+      "comment": {
+        "description": "Any additional information about the step not captured by the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "duration": {
+        "description": "The elapsed time since the annealing process started.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "second"
+      },
+      "name": {
+        "description": "A short and descriptive name for this step.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "start_time": {
+        "description": "Optionally, the starting time of the activity step. If omitted, it is assumed to\nfollow directly after the previous step.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "temperature": {
+        "description": "The temperature of the etching process.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "degree_Celsius"
+      }
+    },
+    "subsections": {
+      "etching_reagents": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.CompositeSystem"
+      }
+    }
+  },
+  "nomad_material_processing.general.Geometry": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.Geometry",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "volume": {
+        "description": "The measure of the amount of space occupied in 3D space.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter ** 3"
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.general.IrregularParallelSurfaces": {
+    "bases": [
+      "nomad_material_processing.general.Geometry"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.IrregularParallelSurfaces",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "height": {
+        "description": "The z dimension of the irregular shape.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      },
+      "volume": {
+        "description": "The measure of the amount of space occupied in 3D space.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter ** 3"
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.general.MillerIndices": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.MillerIndices",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "h_index": {
+        "description": "The Miller index h.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": null
+      },
+      "k_index": {
+        "description": "The Miller index k.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": null
+      },
+      "l_index": {
+        "description": "The Miller index l.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.general.Miscut": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.Miscut",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "directions_image": {
+        "description": "A schematic representation of the miscut directions.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "cartesian_miscut": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.CartesianMiscut"
+      },
+      "polar_miscut": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.PolarMiscut"
+      }
+    }
+  },
+  "nomad_material_processing.general.Parallelepiped": {
+    "bases": [
+      "nomad_material_processing.general.Geometry"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.Parallelepiped",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "alpha": {
+        "description": "The angle between y and z sides.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "degree"
+      },
+      "beta": {
+        "description": "The angle between x and z sides.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "degree"
+      },
+      "gamma": {
+        "description": "The angle between x and y sides.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "degree"
+      },
+      "height": {
+        "description": "The z dimension of the parallelepiped.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      },
+      "length": {
+        "description": "The y dimension of the parallelepiped.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      },
+      "surface_area": {
+        "description": "The product of length and width, representing the total exposed area of the\nprimary surface.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter ** 2"
+      },
+      "volume": {
+        "description": "The measure of the amount of space occupied in 3D space.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter ** 3"
+      },
+      "width": {
+        "description": "The x dimension of the parallelepiped.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.general.PolarMiscut": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.PolarMiscut",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "rho": {
+        "description": "Out-of-plane tilt angle, defined in polar coordinates\nas a module in the out-of-plane axis.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "degree"
+      },
+      "theta": {
+        "description": "In-plane angle of the miscut toward the reference orientation.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "degree"
+      }
+    },
+    "subsections": {
+      "reference_orientation": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.CrystallographicDirection"
+      }
+    }
+  },
+  "nomad_material_processing.general.ProjectedMiscutOrientation": {
+    "bases": [
+      "nomad_material_processing.general.CrystallographicDirection"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.ProjectedMiscutOrientation",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "angle": {
+        "description": "The miscut angle (or offcut angle, or angular displacement offset) toward\nthe specified crystallographic direction.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "degree"
+      },
+      "angle_deviation": {
+        "description": "The ± deviation of the angular displacement offset.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "degree"
+      }
+    },
+    "subsections": {
+      "hkl_direct": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.MillerIndices"
+      },
+      "hkl_reciprocal": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.MillerIndices"
+      }
+    }
+  },
+  "nomad_material_processing.general.Recipe": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.Recipe",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {},
+    "subsections": {}
+  },
+  "nomad_material_processing.general.RectangleCuboid": {
+    "bases": [
+      "nomad_material_processing.general.Parallelepiped"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.RectangleCuboid",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "alpha": {
+        "description": "The angle between y and z sides.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "degree"
+      },
+      "beta": {
+        "description": "The angle between x and z sides.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "degree"
+      },
+      "gamma": {
+        "description": "The angle between x and y sides.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "degree"
+      },
+      "height": {
+        "description": "The z dimension of the parallelepiped.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      },
+      "length": {
+        "description": "The y dimension of the parallelepiped.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      },
+      "surface_area": {
+        "description": "The product of length and width, representing the total exposed area of the\nprimary surface.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter ** 2"
+      },
+      "volume": {
+        "description": "The measure of the amount of space occupied in 3D space.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter ** 3"
+      },
+      "width": {
+        "description": "The x dimension of the parallelepiped.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.general.SampleDeposition": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.SynthesisMethod"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.SampleDeposition",
+    "normalizer": {
+      "defined_in": "nomad_material_processing.general.SampleDeposition",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time when this activity was started.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "end_time": {
+        "description": "The date and time when this process was finished.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "location": {
+        "description": "location of the experiment.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "method": {
+        "description": "A short consistent handle for the applied method.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "instruments": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.InstrumentReference"
+      },
+      "samples": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference"
+      },
+      "steps": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.ProcessStep"
+      }
+    }
+  },
+  "nomad_material_processing.general.SquareCuboid": {
+    "bases": [
+      "nomad_material_processing.general.Parallelepiped"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.SquareCuboid",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "alpha": {
+        "description": "The angle between y and z sides.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "degree"
+      },
+      "beta": {
+        "description": "The angle between x and z sides.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "degree"
+      },
+      "gamma": {
+        "description": "The angle between x and y sides.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "degree"
+      },
+      "height": {
+        "description": "The z dimension of the parallelepiped.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      },
+      "length": {
+        "description": "The y dimension of the parallelepiped.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      },
+      "surface_area": {
+        "description": "The product of length and width, representing the total exposed area of the\nprimary surface.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter ** 2"
+      },
+      "volume": {
+        "description": "The measure of the amount of space occupied in 3D space.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter ** 3"
+      },
+      "width": {
+        "description": "The x dimension of the parallelepiped.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.general.Substrate": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.CompositeSystem"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.Substrate",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.CompositeSystem",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time associated with this section.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "image": {
+        "description": "A photograph or image of the substrate.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "information_sheet": {
+        "description": "Pdf files containing certificate and other documentation.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "supplier": {
+        "description": "The supplier of the current substrate specimen.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "supplier_id": {
+        "description": "An ID string that is unique from the supplier.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "components": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.Component"
+      },
+      "elemental_composition": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.ElementalComposition"
+      }
+    }
+  },
+  "nomad_material_processing.general.SubstrateCrystalProperties": {
+    "bases": [
+      "nomad_material_processing.general.CrystalProperties"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.SubstrateCrystalProperties",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "bravais_lattices": {
+        "description": "The crystal system of the substrate.",
+        "shape": "[]",
+        "type": "Enum",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "miscut": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.Miscut"
+      },
+      "surface_orientation": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.CrystallographicDirection"
+      }
+    }
+  },
+  "nomad_material_processing.general.SubstrateReference": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.SubstrateReference",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "lab_id": {
+        "description": "The readable identifier for the entity.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short descriptive name for the role of this reference.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "reference": {
+        "description": "A reference to a NOMAD `CompositeSystem` entry.",
+        "shape": "[]",
+        "type": "Reference",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.general.ThinFilm": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.CompositeSystem"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.ThinFilm",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.CompositeSystem",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time associated with this section.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "components": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.Component"
+      },
+      "elemental_composition": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.ElementalComposition"
+      },
+      "geometry": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.Geometry"
+      }
+    }
+  },
+  "nomad_material_processing.general.ThinFilmReference": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.ThinFilmReference",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "lab_id": {
+        "description": "The readable identifier for the entity.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short descriptive name for the role of this reference.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "reference": {
+        "description": "A reference to a NOMAD `CompositeSystem` entry.",
+        "shape": "[]",
+        "type": "Reference",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.general.ThinFilmStack": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.CompositeSystem"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.ThinFilmStack",
+    "normalizer": {
+      "defined_in": "nomad_material_processing.general.ThinFilmStack",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time associated with this section.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "components": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.Component"
+      },
+      "elemental_composition": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.ElementalComposition"
+      },
+      "layers": {
+        "repeats": true,
+        "schema": "nomad_material_processing.general.ThinFilmReference"
+      },
+      "substrate": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.SubstrateReference"
+      }
+    }
+  },
+  "nomad_material_processing.general.ThinFilmStackReference": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.ThinFilmStackReference",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "lab_id": {
+        "description": "The readable identifier for the entity.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short descriptive name for the role of this reference.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "reference": {
+        "description": "A reference to a NOMAD `CompositeSystem` entry.",
+        "shape": "[]",
+        "type": "Reference",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.general.TimeSeries": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.TimeSeries",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "set_time": {
+        "description": "The process time when each of the set values were set.\nIf this is empty and only one set value is present, it is assumed that the value\nwas set at the start of the process step.\nIf two set values are present, it is assumed that a linear ramp between the two\nvalues was set.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "second"
+      },
+      "set_value": {
+        "description": "The set value(s) (i.e. the intended values) set.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": null
+      },
+      "time": {
+        "description": "The process time when each of the values were recorded.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "second"
+      },
+      "value": {
+        "description": "The observed value as a function of time.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.general.TruncatedCone": {
+    "bases": [
+      "nomad_material_processing.general.Geometry"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.general.TruncatedCone",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "height": {
+        "description": "The z dimension of the parallelepiped.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      },
+      "lateral_surface_area": {
+        "description": "Area of the lateral surface.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter ** 2"
+      },
+      "lower_cap_radius": {
+        "description": "Radius of the lower cap.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      },
+      "lower_cap_surface_area": {
+        "description": "Area of the lower cap.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter ** 2"
+      },
+      "upper_cap_radius": {
+        "description": "Radius of the upper cap.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      },
+      "upper_cap_surface_area": {
+        "description": "Area of the upper cap.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter ** 2"
+      },
+      "volume": {
+        "description": "The measure of the amount of space occupied in 3D space.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter ** 3"
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.vapor_deposition.general.ChamberEnvironment": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.vapor_deposition.general.ChamberEnvironment",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {},
+    "subsections": {
+      "gas_flow": {
+        "repeats": true,
+        "schema": "nomad_material_processing.vapor_deposition.general.GasFlow"
+      },
+      "heater": {
+        "repeats": false,
+        "schema": "nomad_material_processing.vapor_deposition.general.SubstrateHeater"
+      },
+      "pressure": {
+        "repeats": false,
+        "schema": "nomad_material_processing.vapor_deposition.general.Pressure"
+      }
+    }
+  },
+  "nomad_material_processing.vapor_deposition.general.EvaporationSource": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.vapor_deposition.general.EvaporationSource",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {},
+    "subsections": {}
+  },
+  "nomad_material_processing.vapor_deposition.general.FilledSubstrateHolder": {
+    "bases": [
+      "nomad_material_processing.vapor_deposition.general.SubstrateHolder"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.vapor_deposition.general.FilledSubstrateHolder",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time associated with this section.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "image": {
+        "description": "An image of the substrate holder.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "The lab ID of the substrate holder.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short and descriptive name for this position.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "number_of_positions": {
+        "description": "The number of positions on the holder.",
+        "shape": "[]",
+        "type": "m_int32(int)",
+        "unit": null
+      },
+      "outer_diameter": {
+        "description": "The outer diameter of the substrate holder.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      },
+      "substrate_holder": {
+        "description": "A reference to an empty substrate holder.",
+        "shape": "[]",
+        "type": "Reference",
+        "unit": null
+      },
+      "thickness": {
+        "description": "The thickness of the holder to the back of the substrate.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      }
+    },
+    "subsections": {
+      "holder_material": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.PubChemPureSubstanceSection"
+      },
+      "positions": {
+        "repeats": true,
+        "schema": "nomad_material_processing.vapor_deposition.general.FilledSubstrateHolderPosition"
+      }
+    }
+  },
+  "nomad_material_processing.vapor_deposition.general.FilledSubstrateHolderPosition": {
+    "bases": [
+      "nomad_material_processing.vapor_deposition.general.SubstrateHolderPosition"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.vapor_deposition.general.FilledSubstrateHolderPosition",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "name": {
+        "description": "A short name for this position. This name is used as label of the position.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "x_position": {
+        "description": "The x coordinate of the substrate holder position\nrelative to the center of the holder.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      },
+      "y_position": {
+        "description": "The y coordinate of the substrate holder position\nrelative to the center of the holder.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      }
+    },
+    "subsections": {
+      "insert_reduction": {
+        "repeats": false,
+        "schema": "nomad_material_processing.vapor_deposition.general.InsertReductionReference"
+      },
+      "slot_geometry": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.Geometry"
+      },
+      "substrate": {
+        "repeats": false,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference"
+      }
+    }
+  },
+  "nomad_material_processing.vapor_deposition.general.GasFlow": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.vapor_deposition.general.GasFlow",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {},
+    "subsections": {
+      "flow_rate": {
+        "repeats": false,
+        "schema": "nomad_material_processing.vapor_deposition.general.VolumetricFlowRate"
+      },
+      "gas": {
+        "repeats": false,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.PureSubstanceSection"
+      }
+    }
+  },
+  "nomad_material_processing.vapor_deposition.general.GrowthRate": {
+    "bases": [
+      "nomad_material_processing.general.TimeSeries"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.vapor_deposition.general.GrowthRate",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "measurement_type": {
+        "description": null,
+        "shape": "[]",
+        "type": "Enum",
+        "unit": null
+      },
+      "set_time": {
+        "description": "The process time when each of the set values were set.\nIf this is empty and only one set value is present, it is assumed that the value\nwas set at the start of the process step.\nIf two set values are present, it is assumed that a linear ramp between the two\nvalues was set.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "second"
+      },
+      "set_value": {
+        "description": "The set value(s) (i.e. the intended values) set.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "meter / second"
+      },
+      "time": {
+        "description": "The process time when each of the values were recorded.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "second"
+      },
+      "value": {
+        "description": "The observed value as a function of time.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "meter / second"
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.vapor_deposition.general.InsertReduction": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.Entity"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.vapor_deposition.general.InsertReduction",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time associated with this section.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "image": {
+        "description": "A photograph or image of the insert\nto be lodged in the substrate holder.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string for the insert to be put in the substrate holder.\nIt is unique at least for the lab that produced this data.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short and descriptive name for this insert reduction.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "inner_geometry": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.Geometry"
+      },
+      "material": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.PubChemPureSubstanceSection"
+      },
+      "outer_geometry": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.Geometry"
+      }
+    }
+  },
+  "nomad_material_processing.vapor_deposition.general.InsertReductionReference": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.EntityReference"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.vapor_deposition.general.InsertReductionReference",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.EntityReference",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "lab_id": {
+        "description": "The readable identifier for the entity.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short descriptive name for the role of this reference.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "reference": {
+        "description": "Optional description of insert if used.",
+        "shape": "[]",
+        "type": "Reference",
+        "unit": null
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.vapor_deposition.general.MolarFlowRate": {
+    "bases": [
+      "nomad_material_processing.general.TimeSeries"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.vapor_deposition.general.MolarFlowRate",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "measurement_type": {
+        "description": null,
+        "shape": "[]",
+        "type": "Enum",
+        "unit": null
+      },
+      "set_time": {
+        "description": "The process time when each of the set values were set.\nIf this is empty and only one set value is present, it is assumed that the value\nwas set at the start of the process step.\nIf two set values are present, it is assumed that a linear ramp between the two\nvalues was set.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "second"
+      },
+      "set_value": {
+        "description": "The set value(s) (i.e. the intended values) set.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "mole / second"
+      },
+      "time": {
+        "description": "The process time when each of the values were recorded.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "second"
+      },
+      "value": {
+        "description": "The observed value as a function of time.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "mole / second"
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.vapor_deposition.general.Pressure": {
+    "bases": [
+      "nomad_material_processing.general.TimeSeries"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.vapor_deposition.general.Pressure",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "set_time": {
+        "description": "The process time when each of the set values were set.\nIf this is empty and only one set value is present, it is assumed that the value\nwas set at the start of the process step.\nIf two set values are present, it is assumed that a linear ramp between the two\nvalues was set.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "second"
+      },
+      "set_value": {
+        "description": "The set value(s) (i.e. the intended values) set.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "pascal"
+      },
+      "time": {
+        "description": "The process time when each of the values were recorded.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "second"
+      },
+      "value": {
+        "description": "The observed value as a function of time.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "pascal"
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.vapor_deposition.general.SampleParameters": {
+    "bases": [
+      "nomad.datamodel.metainfo.plot.PlotSection",
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.vapor_deposition.general.SampleParameters",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.plot.PlotSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {},
+    "subsections": {
+      "figures": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.plot.PlotlyFigure"
+      },
+      "growth_rate": {
+        "repeats": false,
+        "schema": "nomad_material_processing.vapor_deposition.general.GrowthRate"
+      },
+      "layer": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.ThinFilmReference"
+      },
+      "substrate": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.ThinFilmStackReference"
+      },
+      "substrate_temperature": {
+        "repeats": false,
+        "schema": "nomad_material_processing.vapor_deposition.general.Temperature"
+      }
+    }
+  },
+  "nomad_material_processing.vapor_deposition.general.SubstrateHeater": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.vapor_deposition.general.SubstrateHeater",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {},
+    "subsections": {}
+  },
+  "nomad_material_processing.vapor_deposition.general.SubstrateHolder": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.Entity"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.vapor_deposition.general.SubstrateHolder",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.metainfo.basesections.v1.BaseSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time associated with this section.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "image": {
+        "description": "An image of the substrate holder.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "The lab ID of the substrate holder.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short and descriptive name for this position.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "number_of_positions": {
+        "description": "The number of positions on the holder.",
+        "shape": "[]",
+        "type": "m_int32(int)",
+        "unit": null
+      },
+      "outer_diameter": {
+        "description": "The outer diameter of the substrate holder.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      },
+      "thickness": {
+        "description": "The thickness of the holder to the back of the substrate.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      }
+    },
+    "subsections": {
+      "holder_material": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.PubChemPureSubstanceSection"
+      },
+      "positions": {
+        "repeats": true,
+        "schema": "nomad_material_processing.vapor_deposition.general.SubstrateHolderPosition"
+      }
+    }
+  },
+  "nomad_material_processing.vapor_deposition.general.SubstrateHolderPosition": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.vapor_deposition.general.SubstrateHolderPosition",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "name": {
+        "description": "A short name for this position. This name is used as label of the position.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "x_position": {
+        "description": "The x coordinate of the substrate holder position\nrelative to the center of the holder.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      },
+      "y_position": {
+        "description": "The y coordinate of the substrate holder position\nrelative to the center of the holder.",
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "meter"
+      }
+    },
+    "subsections": {
+      "slot_geometry": {
+        "repeats": false,
+        "schema": "nomad_material_processing.general.Geometry"
+      }
+    }
+  },
+  "nomad_material_processing.vapor_deposition.general.Temperature": {
+    "bases": [
+      "nomad_material_processing.general.TimeSeries"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.vapor_deposition.general.Temperature",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "measurement_type": {
+        "description": null,
+        "shape": "[]",
+        "type": "Enum",
+        "unit": null
+      },
+      "set_time": {
+        "description": "The process time when each of the set values were set.\nIf this is empty and only one set value is present, it is assumed that the value\nwas set at the start of the process step.\nIf two set values are present, it is assumed that a linear ramp between the two\nvalues was set.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "second"
+      },
+      "set_value": {
+        "description": "The set value(s) (i.e. the intended values) set.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "kelvin"
+      },
+      "time": {
+        "description": "The process time when each of the values were recorded.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "second"
+      },
+      "value": {
+        "description": "The observed value as a function of time.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "kelvin"
+      }
+    },
+    "subsections": {}
+  },
+  "nomad_material_processing.vapor_deposition.general.VaporDeposition": {
+    "bases": [
+      "nomad_material_processing.general.SampleDeposition"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.vapor_deposition.general.VaporDeposition",
+    "normalizer": {
+      "defined_in": "nomad_material_processing.vapor_deposition.general.VaporDeposition",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "datetime": {
+        "description": "The date and time when this activity was started.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "description": {
+        "description": "Any information that cannot be captured in the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "end_time": {
+        "description": "The date and time when this process was finished.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      },
+      "lab_id": {
+        "description": "An ID string that is unique at least for the lab that produced this\ndata.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "location": {
+        "description": "location of the experiment.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "method": {
+        "description": "A short consistent handle for the applied method.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "name": {
+        "description": "A short human readable and descriptive name.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "instruments": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.InstrumentReference"
+      },
+      "samples": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference"
+      },
+      "steps": {
+        "repeats": true,
+        "schema": "nomad_material_processing.vapor_deposition.general.VaporDepositionStep"
+      }
+    }
+  },
+  "nomad_material_processing.vapor_deposition.general.VaporDepositionSource": {
+    "bases": [
+      "nomad.datamodel.data.ArchiveSection"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.vapor_deposition.general.VaporDepositionSource",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "name": {
+        "description": "A short and descriptive name for this source.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "material": {
+        "repeats": true,
+        "schema": "nomad.datamodel.metainfo.basesections.v1.Component"
+      },
+      "vapor_molar_flow_rate": {
+        "repeats": false,
+        "schema": "nomad_material_processing.vapor_deposition.general.MolarFlowRate"
+      },
+      "vapor_source": {
+        "repeats": false,
+        "schema": "nomad_material_processing.vapor_deposition.general.EvaporationSource"
+      }
+    }
+  },
+  "nomad_material_processing.vapor_deposition.general.VaporDepositionStep": {
+    "bases": [
+      "nomad.datamodel.metainfo.basesections.v1.ActivityStep"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.vapor_deposition.general.VaporDepositionStep",
+    "normalizer": {
+      "defined_in": "nomad_material_processing.vapor_deposition.general.VaporDepositionStep",
+      "locally_defined_on_class": true
+    },
+    "quantities": {
+      "comment": {
+        "description": "Any additional information about the step not captured by the other fields.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "creates_new_thin_film": {
+        "description": "Whether or not this step creates a new thin film.",
+        "shape": "[]",
+        "type": "m_bool(bool)",
+        "unit": null
+      },
+      "duration": {
+        "description": null,
+        "shape": "[]",
+        "type": "m_float64(float)",
+        "unit": "second"
+      },
+      "name": {
+        "description": "A short and descriptive name for this step.",
+        "shape": "[]",
+        "type": "m_str(str)",
+        "unit": null
+      },
+      "start_time": {
+        "description": "Optionally, the starting time of the activity step. If omitted, it is assumed to\nfollow directly after the previous step.",
+        "shape": "[]",
+        "type": "Datetime",
+        "unit": null
+      }
+    },
+    "subsections": {
+      "environment": {
+        "repeats": false,
+        "schema": "nomad_material_processing.vapor_deposition.general.ChamberEnvironment"
+      },
+      "sample_parameters": {
+        "repeats": true,
+        "schema": "nomad_material_processing.vapor_deposition.general.SampleParameters"
+      },
+      "sources": {
+        "repeats": true,
+        "schema": "nomad_material_processing.vapor_deposition.general.VaporDepositionSource"
+      }
+    }
+  },
+  "nomad_material_processing.vapor_deposition.general.VolumetricFlowRate": {
+    "bases": [
+      "nomad_material_processing.general.TimeSeries"
+    ],
+    "m_def_qualified_name": "nomad_material_processing.vapor_deposition.general.VolumetricFlowRate",
+    "normalizer": {
+      "defined_in": "nomad.datamodel.data.ArchiveSection",
+      "locally_defined_on_class": false
+    },
+    "quantities": {
+      "measurement_type": {
+        "description": null,
+        "shape": "[]",
+        "type": "Enum",
+        "unit": null
+      },
+      "set_time": {
+        "description": "The process time when each of the set values were set.\nIf this is empty and only one set value is present, it is assumed that the value\nwas set at the start of the process step.\nIf two set values are present, it is assumed that a linear ramp between the two\nvalues was set.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "second"
+      },
+      "set_value": {
+        "description": "The set value(s) (i.e. the intended values) set.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "meter ** 3 / second"
+      },
+      "time": {
+        "description": "The process time when each of the values were recorded.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "second"
+      },
+      "value": {
+        "description": "The observed value as a function of time.",
+        "shape": "['*']",
+        "type": "m_float64(float)",
+        "unit": "meter ** 3 / second"
+      }
+    },
+    "subsections": {}
+  }
+}
