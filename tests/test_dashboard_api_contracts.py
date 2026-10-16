@@ -105,8 +105,6 @@ class DashboardApiContractTests(unittest.TestCase):
 
         functions = [
             js_function(mbe, 'queryEntriesBySchema'),
-            js_function(mbe, 'queryExperimentHolderReferences'),
-            js_function(mbe, 'loadTreatmentRecipes'),
             js_function(processing, 'queryEntries'),
         ]
 
@@ -116,6 +114,11 @@ class DashboardApiContractTests(unittest.TestCase):
                     function,
                     r"owner\s*:\s*['\"]visible['\"]",
                 )
+        # Delegating functions must use the verified helper rather than
+        # introducing independent, unverifiable queries.
+        self.assertIn('queryEntriesBySchema', js_function(mbe, 'loadTreatmentRecipes'))
+        self.assertIn('queryEntriesBySchema', js_function(mbe, 'loadTreatmentHistoryEntries'))
+        self.assertNotIn('queryExperimentHolderReferences', mbe)
 
     def test_substrates_and_history_use_shared_helper(self):
         mbe = text(NEW_MBE_JS)
@@ -143,9 +146,9 @@ class DashboardApiContractTests(unittest.TestCase):
         fixture_dir = ROOT / 'tests/fixtures/dashboard'
 
         expected = {
-            'test_cleaning_recipe.archive.yaml': 'CleaningRecipePDI',
-            'test_etching_recipe.archive.yaml': 'EtchingRecipePDI',
-            'test_holder.archive.yaml': 'SubstrateHolderPDI',
+            'test_cleaning_recipe.archive.yaml': 'nomad_material_processing.general.CleaningRecipe',
+            'test_etching_recipe.archive.yaml': 'nomad_material_processing.general.EtchingRecipe',
+            'test_holder.archive.yaml': 'nomad_material_processing.vapor_deposition.general.SubstrateHolder',
         }
 
         for filename, schema in expected.items():
@@ -156,28 +159,20 @@ class DashboardApiContractTests(unittest.TestCase):
                     path.exists(),
                     f'Missing fixture: {path}',
                 )
-                self.assertIn(
-                    schema,
-                    text(path),
-                )
+                import yaml
+                fixture = yaml.safe_load(text(path))
+                self.assertEqual(fixture['data']['m_def'], schema)
+                self.assertNotIn('pdi_nomad_plugin.', text(path))
 
-    def test_growth_preserves_processed_state(self):
-        processes = text(ROOT / 'src/pdi_nomad_plugin/mbe/processes.py')
-
-        self.assertIn(
-            'processed=sample_holder_position.substrate.reference.processed',
-            processes,
-        )
-
-        self.assertNotIn(
-            'processed=sample_holder_position.substrate.reference.grown',
-            processes,
-        )
-
-        self.assertIn(
-            'grown=True',
-            processes,
-        )
+    def test_no_modified_growth_normalizer_in_local_schema(self):
+        # Original normalizer behavior must be taken directly from upstream/main.
+        import subprocess
+        rel = 'src/pdi_nomad_plugin/mbe/processes.py'
+        original = subprocess.check_output(
+            ['git', 'show', f'upstream/main:{rel}'], cwd=ROOT,
+        ).decode('utf-8-sig').replace('\r\n', '\n')
+        current = text(ROOT / rel).replace('\r\n', '\n')
+        self.assertEqual(current, original)
 
     def test_new_mbe_contains_no_substrate_cut_ui_or_logic(self):
         mbe_js = text(NEW_MBE_JS)
@@ -192,7 +187,6 @@ class DashboardApiContractTests(unittest.TestCase):
             'splitChildSelectionState',
             'id="splitSubstrateButton"',
             'id="splitChildPicker"',
-            'SampleCutPDI',
         ]
 
         for value in forbidden:
@@ -214,18 +208,12 @@ class DashboardApiContractTests(unittest.TestCase):
         css = (base / 'static/styles.css').read_text(encoding='utf-8-sig')
         html = (base / 'templates/index.html').read_text(encoding='utf-8-sig')
 
-        self.assertIn("'data.geometry'", app)
-        self.assertIn("'data.inner_geometry'", app)
-        self.assertIn("'data.outer_geometry'", app)
-
-        self.assertIn(
-            'function geometryMatches(',
-            app,
-        )
-        self.assertIn(
-            'function insertFitsPosition(',
-            app,
-        )
+        # The removed PDI insert fields must not come back under guessed
+        # canonical names or fake derived geometry.
+        self.assertNotIn("'data.inner_geometry'", app)
+        self.assertNotIn("'data.outer_geometry'", app)
+        self.assertNotIn('function insertFitsPosition(', app)
+        self.assertNotIn('function geometryMatches(', app)
         self.assertIn(
             'function substrateFitsPosition(',
             app,
@@ -235,15 +223,10 @@ class DashboardApiContractTests(unittest.TestCase):
             app,
         )
 
-        self.assertIn(
+        self.assertNotIn(
             'holder-insert-window',
             app,
         )
-        self.assertIn(
-            '.holder-insert-window',
-            css,
-        )
-
         self.assertIn(
             'id="positionControlsPanel"',
             html,
@@ -266,43 +249,13 @@ class DashboardApiContractTests(unittest.TestCase):
             css,
         )
 
-    def test_cut_parent_substrate_is_not_selectable(self):
-        repo_root = Path(__file__).resolve().parents[1]
-
-        app = (
-            repo_root
-            / 'src'
-            / 'pdi_nomad_plugin'
-            / 'mbe'
-            / 'new_mbe_experiment'
-            / 'static'
-            / 'app.js'
-        ).read_text(encoding='utf-8-sig')
-
-        self.assertIn(
-            "'data.parent_sample'",
-            app,
-        )
-
-        self.assertIn(
-            'function cutParentEntryIds()',
-            app,
-        )
-
-        self.assertIn(
-            'function substrateHasBeenCut(',
-            app,
-        )
-
-        self.assertIn(
-            'cutParents.has(',
-            app,
-        )
-
-        self.assertIn(
-            'has been cut into child samples and is no longer physically available.',
-            app,
-        )
+    def test_removed_cut_tracking_is_not_faked_in_new_mbe(self):
+        app = text(NEW_MBE_JS)
+        self.assertNotIn('function cutParentEntryIds(', app)
+        self.assertNotIn('function substrateHasBeenCut(', app)
+        self.assertNotIn('cutParents.has(', app)
+        # The original MBE dashboard must not infer an unavailable relation.
+        self.assertNotIn("'data.parent_sample'", app)
 
 
 if __name__ == '__main__':

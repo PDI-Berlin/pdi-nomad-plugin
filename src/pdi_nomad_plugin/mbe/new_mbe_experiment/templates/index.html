@@ -10,8 +10,8 @@
 <div class="page">
     <h1>New MBE Experiment</h1>
     <p class="subtitle">
-        Load a physical holder, assign substrates, save the loadout independently,
-        and create the MBE experiment when a Growth Run ID is available.
+        Load original NOMAD holders and substrates, assign positions, and prepare an MBE growth run.
+        NOMAD writes are disabled until a compatible original EntryData root is verified.
     </p>
 
     <div class="layout">
@@ -30,17 +30,17 @@
             </select>
             <p id="uploadStatus" class="small">Loading writable NOMAD uploads...</p>
 
-            <div class="workflow-step-title">3.) Save filled holder / empty filled holder</div>
+            <div class="workflow-step-title">3.) Holder assignments (local draft)</div>
             <div class="button-stack">
                 <button id="saveFilledHolderButton" class="primary" type="button" onclick="saveFilledHolderToNomad()">
-                    Save filled holder
+                    Save filled holder to NOMAD (unavailable)
                 </button>
                 <button id="emptyHolderButton" class="secondary danger-outline" type="button" onclick="emptyCurrentHolder()">
-                    Empty filled holder
+                    Clear local assignments
                 </button>
             </div>
             <p id="filledHolderSaveStatus" class="small">
-                A holder loadout can be saved without a Growth Run ID.
+                Holder assignments are local only; existing NOMAD entries remain unchanged.
             </p>
 
             <hr>
@@ -66,12 +66,15 @@
 
             <div id="layerStackPreview" class="layer-stack-preview"></div>
 
-            <div class="workflow-step-title">6.) Save experiment</div>
+            <div class="workflow-step-title">6.) Export experiment draft / NOMAD save</div>
             <button id="saveExperimentButton" class="primary full-width" type="button" onclick="saveExperimentToNomad()">
-                Save experiment
+                Save experiment to NOMAD (unavailable)
+            </button>
+            <button id="exportMbeDraftButton" class="secondary full-width" type="button" onclick="downloadLocalMbeDraft()">
+                Export local MBE draft (JSON; not a NOMAD entry)
             </button>
             <p id="experimentSaveStatus" class="small">
-                Save the experiment when the holder is ready and the Growth Run ID is known.
+                The original MolecularBeamEpitaxy section has no verified EntryData root; NOMAD saving is unavailable.
             </p>
 
             <button id="startNewExperimentButton" class="secondary full-width" type="button" style="display:none;" onclick="startNewExperiment()">
@@ -173,6 +176,7 @@
         </div>
     </div>
 </div>
+<script src="./static/mbe_drafts.js"></script>
 <script src="./static/app.js"></script>
 </body>
 </html>

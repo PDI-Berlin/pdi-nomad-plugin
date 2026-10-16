@@ -2,7 +2,7 @@ import importlib
 from copy import deepcopy
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from nomad.config import config
 
@@ -19,62 +19,53 @@ LIBRARY_TYPES = {
         'schemas': {
             'cleaning': {
                 'label': 'Chemical treatment',
-                'schema': 'pdi_nomad_plugin.general.schema.CleaningRecipePDI',
+                'schema': 'nomad_material_processing.general.CleaningRecipe',
                 'id_prefix': 'CLEAN',
+                'write_supported': True,
                 'usage_schemas': [
-                    'pdi_nomad_plugin.general.schema.CleaningPDI',
+                    'nomad_material_processing.general.Cleaning',
                 ],
             },
             'annealing': {
                 'label': 'Annealing',
-                'schema': 'pdi_nomad_plugin.general.schema.AnnealingRecipePDI',
+                'schema': 'nomad_material_processing.general.AnnealingRecipe',
                 'id_prefix': 'ANNEAL',
+                'write_supported': True,
                 'usage_schemas': [
-                    'pdi_nomad_plugin.general.schema.AnnealingPDI',
+                    'nomad_material_processing.general.Annealing',
                 ],
             },
             'etching': {
                 'label': 'Etching',
-                'schema': 'pdi_nomad_plugin.general.schema.EtchingRecipePDI',
+                'schema': 'nomad_material_processing.general.EtchingRecipe',
                 'id_prefix': 'ETCH',
+                'write_supported': True,
                 'usage_schemas': [
-                    'pdi_nomad_plugin.general.schema.EtchingPDI',
-                ],
-            },
-            'back_side_coating': {
-                'label': 'Back-side coating',
-                'schema': 'pdi_nomad_plugin.general.schema.BackSideCoatingRecipePDI',
-                'id_prefix': 'BACKCOAT',
-                'usage_schemas': [
-                    'pdi_nomad_plugin.general.schema.BackSideCoatingPDI',
+                    'nomad_material_processing.general.Etching',
                 ],
             },
         },
     },
-    'sample_cut_recipe': {
-        'label': 'Sample Cut Recipes',
-        'schema': 'pdi_nomad_plugin.general.schema.SampleCutRecipePDI',
-        'kind': 'sample_cut_recipe',
-        'usage_schemas': [],
-        'usage_note': (
-            'Sample Cut execution copies recipe parameters into SampleCutPDI; '
-            'the recipe is not referenced by the historical cut entry.'
-        ),
-    },
     'holder': {
         'label': 'Holders',
-        'schema': 'pdi_nomad_plugin.mbe.instrument.SubstrateHolderPDI',
+        'schema': 'nomad_material_processing.vapor_deposition.general.SubstrateHolder',
         'kind': 'holder',
+        'write_supported': False,
+        'write_block_reason': ('Original SubstrateHolder has no verified '
+                               'EntryArchive.data root; no upload was made.'),
         'usage_schemas': [
-            'pdi_nomad_plugin.mbe.instrument.FilledSubstrateHolderPDI',
+            'nomad_material_processing.vapor_deposition.general.FilledSubstrateHolder',
         ],
     },
     'insert': {
         'label': 'Inserts',
-        'schema': 'pdi_nomad_plugin.mbe.instrument.InsertReductionPDI',
+        'schema': 'nomad_material_processing.vapor_deposition.general.InsertReduction',
         'kind': 'insert',
+        'write_supported': False,
+        'write_block_reason': ('Original InsertReduction has no verified '
+                               'EntryArchive.data root; no upload was made.'),
         'usage_schemas': [
-            'pdi_nomad_plugin.mbe.instrument.FilledSubstrateHolderPDI',
+            'nomad_material_processing.vapor_deposition.general.FilledSubstrateHolder',
         ],
     },
 }
@@ -173,6 +164,25 @@ def _recipe_scalar_fields(schema_path):
         fields.append(name)
 
     return sorted(fields)
+
+
+@app.post('/validate-recipe')
+async def validate_recipe(payload: dict):
+    """Read-only original NOMAD metainfo preflight before any upload."""
+    from .original_preflight import (
+        OriginalSchemaValidationError,
+        validate_original_recipe,
+    )
+
+    allowed = {
+        definition['schema']
+        for definition in LIBRARY_TYPES['processing_recipe']['schemas'].values()
+        if definition['write_supported'] is True
+    }
+    try:
+        return validate_original_recipe(payload.get('data'), allowed)
+    except OriginalSchemaValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.get('/library-types')

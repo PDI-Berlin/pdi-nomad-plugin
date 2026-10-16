@@ -22,7 +22,6 @@ class LabLibraryContractTests(unittest.TestCase):
     def test_processing_and_physical_library_types_exist(self):
         for label in (
             'Processing Recipes',
-            'Sample Cut Recipes',
             'Holders',
             'Inserts',
         ):
@@ -30,10 +29,9 @@ class LabLibraryContractTests(unittest.TestCase):
 
     def test_usage_schemas_are_declared_for_referenced_items(self):
         for schema in (
-            'CleaningPDI',
-            'AnnealingPDI',
-            'BackSideCoatingPDI',
-            'FilledSubstrateHolderPDI',
+            'nomad_material_processing.general.Cleaning',
+            'nomad_material_processing.general.Annealing',
+            'nomad_material_processing.vapor_deposition.general.FilledSubstrateHolder',
         ):
             self.assertIn(schema, self.app_py)
 
@@ -84,12 +82,11 @@ class LabLibraryContractTests(unittest.TestCase):
         self.assertIn('<option value="H">Haynes</option>', self.index_html)
         self.assertIn('<option value="M">Molybdenum</option>', self.index_html)
         compact_js = ''.join(self.app_js.split())
-        self.assertIn(
-            'slot_geometry:{width:size/1000,length:size/1000}',
-            compact_js,
-        )
-        self.assertIn('rho:rho/1000', compact_js)
-        self.assertIn('theta:theta', compact_js)
+        self.assertNotIn('slot_geometry:{width:size/1000,length:size/1000}', compact_js)
+        self.assertIn('x_position:(rho/1000)*Math.cos(', compact_js)
+        self.assertIn('y_position:-(rho/1000)*Math.sin(', compact_js)
+        self.assertNotIn('sample_cut_recipe', self.app_js)
+        self.assertNotIn('back_side_coating', self.app_js)
 
     def test_writes_wait_for_processing(self):
         self.assertIn(

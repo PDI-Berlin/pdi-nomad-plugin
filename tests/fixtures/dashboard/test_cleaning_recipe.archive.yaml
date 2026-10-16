@@ -1,5 +1,5 @@
-# Cleaning recipe for testing the "Substrate Processing" dashboard.
+# Original Material Processing CleaningRecipe; only original fields.
 data:
-  m_def: pdi_nomad_plugin.general.schema.CleaningRecipePDI
+  m_def: nomad_material_processing.general.CleaningRecipe
   name: Test solvent clean
   lab_id: TEST-RECIPE-CLEAN-01

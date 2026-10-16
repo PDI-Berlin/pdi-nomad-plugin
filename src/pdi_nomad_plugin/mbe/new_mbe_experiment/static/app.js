@@ -28,929 +28,56 @@ function nomadApiBase() {
 }
 
 
-/*
- * Temporary development holder data.
- *
- * These will be replaced by holder entries loaded
- * dynamically from NOMAD.
- */
-const xpsInsertCatalog = [
-    {
-        id: 'XPS_Insert_1',
-        entryId: null
-    },
-    {
-        id: 'XPS_Insert_2',
-        entryId: null
-    },
-    {
-        id: 'XPS_Insert_3',
-        entryId: null
-    }
-];
-
-
 const experimentState = {
     growthRunId: '',
     holder: null,
-    positions: {},
-    layers: [
-        {
-            chemicalFormula: '',
-            dopantElement: '',
-            nominalThicknessNm: ''
-        }
-    ]
+    positions: {}
 };
 
 
-const layerCatalogState = {
-    elements: [],
-    dopants: [],
-    compositions: []
-};
-
-
-const blockedFormulaAbbreviations = new Set([
-    'STO',
-    'DSO',
-    'GSO',
-    'BSO',
-    'LAO',
-    'KTO',
-    'LSAT',
-    'LIO',
-    'YSZ'
-]);
-
-
-function emptyNominalLayer() {
-    return {
-        chemicalFormula: '',
-        dopantElement: '',
-        nominalThicknessNm: ''
-    };
-}
-
-
-function layerDisplayName(layer) {
-    const formula =
-        String(layer.chemicalFormula || '').trim();
-
-    const dopant =
-        String(layer.dopantElement || '').trim();
-
-    if (!formula) return 'Not specified';
-
-    return dopant
-        ? dopant + ':' + formula
-        : formula;
-}
-
-
-function validateChemicalFormula(value) {
-    const formula =
-        String(value || '').trim();
-
-    if (!formula) return false;
-
-    if (
-        blockedFormulaAbbreviations.has(
-            formula.toUpperCase()
-        )
-    ) {
-        return false;
-    }
-
-    const elements =
-        new Set(layerCatalogState.elements);
-
-    const tokenPattern =
-        /([A-Z][a-z]?)([1-9][0-9]*)?/g;
-
-    let position = 0;
-    let match;
-    let found = false;
-
-    while (
-        (match = tokenPattern.exec(formula)) !== null
-    ) {
-        found = true;
-
-        if (match.index !== position) {
-            return false;
-        }
-
-        if (!elements.has(match[1])) {
-            return false;
-        }
-
-        position = tokenPattern.lastIndex;
-    }
-
-    return (
-        found &&
-        position === formula.length
-    );
-}
-
-
-function rememberLayerCompositions() {
-    const values =
-        new Set(layerCatalogState.compositions);
-
-    experimentState.layers.forEach(
-        function(layer) {
-            const formula =
-                String(
-                    layer.chemicalFormula || ''
-                ).trim();
-
-            if (
-                formula &&
-                validateChemicalFormula(formula)
-            ) {
-                values.add(formula);
-            }
-        }
-    );
-
-    layerCatalogState.compositions =
-        Array.from(values).sort(
-            function(a, b) {
-                return a.localeCompare(b);
-            }
-        );
-}
-
-
-async function loadLayerCatalog() {
-    const response =
-        await fetch('./api/layer-options');
-
-    if (!response.ok) {
-        throw new Error(
-            'Could not load layer options: ' +
-            response.status
-        );
-    }
-
-    const options =
-        await response.json();
-
-    layerCatalogState.elements =
-        Array.isArray(options.elements)
-            ? options.elements
-            : [];
-
-    layerCatalogState.dopants =
-        Array.isArray(options.dopants)
-            ? options.dopants
-            : [];
-
-    const formulas =
-        new Set(
-            Array.isArray(options.compositions)
-                ? options.compositions
-                : []
-        );
-
-    try {
-        const experiments =
-            await queryEntriesBySchema(
-                'pdi_nomad_plugin.mbe.processes.ExperimentMbePDI',
-                1000,
-                ['data.nominal_layers']
-            );
-
-        experiments.forEach(function(entry) {
-            const layers =
-                (entry.data || {}).nominal_layers || [];
-
-            layers.forEach(function(layer) {
-                const formula =
-                    String(
-                        (layer || {}).chemical_formula || ''
-                    ).trim();
-
-                if (formula) formulas.add(formula);
-            });
-        });
-    } catch (error) {
-        console.warn(
-            'Could not load historical experiment layer compositions:',
-            error
-        );
-    }
-
-    try {
-        const films =
-            await queryEntriesBySchema(
-                'pdi_nomad_plugin.mbe.materials.ThinFilmMbe',
-                1000,
-                ['data.chemical_formula']
-            );
-
-        films.forEach(function(entry) {
-            const formula =
-                String(
-                    (entry.data || {}).chemical_formula || ''
-                ).trim();
-
-            if (formula) formulas.add(formula);
-        });
-    } catch (error) {
-        console.warn(
-            'Could not load historical thin-film compositions:',
-            error
-        );
-    }
-
-    layerCatalogState.compositions =
-        Array.from(formulas).sort(
-            function(a, b) {
-                return a.localeCompare(b);
-            }
-        );
-}
-
-
-function updateLayerStackPreview() {
-    const preview =
-        document.getElementById(
-            'layerStackPreview'
-        );
-
-    if (!preview) return;
-
-    preview.innerHTML = '';
-
-    experimentState.layers.forEach(
-        function(layer, index) {
-            const row =
-                document.createElement('div');
-
-            row.className =
-                'layer-preview-row';
-
-            const thickness =
-                String(
-                    layer.nominalThicknessNm || ''
-                ).trim();
-
-            row.textContent =
-                'Layer ' +
-                String(index + 1) +
-                ': ' +
-                layerDisplayName(layer) +
-                (
-                    thickness
-                        ? ' · ' + thickness + ' nm'
-                        : ''
-                );
-
-            preview.appendChild(row);
-        }
-    );
-}
-
-
-function renderLayerStack() {
-    const container =
-        document.getElementById(
-            'layerStackList'
-        );
-
-    if (!container) return;
-
-    container.innerHTML = '';
-
-    experimentState.layers.forEach(
-        function(layer, index) {
-            const card =
-                document.createElement('div');
-
-            card.className = 'layer-card';
-
-            const header =
-                document.createElement('div');
-
-            header.className =
-                'layer-card-header';
-
-            const title =
-                document.createElement('strong');
-
-            title.textContent =
-                'Layer ' + String(index + 1);
-
-            header.appendChild(title);
-
-            if (index > 0) {
-                const remove =
-                    document.createElement('button');
-
-                remove.type = 'button';
-                remove.className =
-                    'secondary layer-remove-button';
-                remove.textContent = 'Remove';
-
-                remove.addEventListener(
-                    'click',
-                    function() {
-                        experimentState.layers.splice(
-                            index,
-                            1
-                        );
-
-                        renderLayerStack();
-                        updateStatePreview();
-                    }
-                );
-
-                header.appendChild(remove);
-            }
-
-            card.appendChild(header);
-
-            const compositionLabel =
-                document.createElement('label');
-
-            compositionLabel.textContent =
-                'Composition';
-
-            card.appendChild(compositionLabel);
-
-            const compositionSelect =
-                document.createElement('select');
-
-            const emptyOption =
-                document.createElement('option');
-
-            emptyOption.value = '';
-            emptyOption.textContent =
-                'Select composition...';
-
-            compositionSelect.appendChild(
-                emptyOption
-            );
-
-            layerCatalogState.compositions.forEach(
-                function(formula) {
-                    const option =
-                        document.createElement('option');
-
-                    option.value = formula;
-                    option.textContent = formula;
-
-                    compositionSelect.appendChild(
-                        option
-                    );
-                }
-            );
-
-            const otherOption =
-                document.createElement('option');
-
-            otherOption.value = '__other__';
-            otherOption.textContent = 'Other...';
-
-            compositionSelect.appendChild(
-                otherOption
-            );
-
-            const known =
-                layerCatalogState.compositions.includes(
-                    layer.chemicalFormula
-                );
-
-            if (known) {
-                compositionSelect.value =
-                    layer.chemicalFormula;
-            } else if (layer.chemicalFormula) {
-                compositionSelect.value =
-                    '__other__';
-            } else {
-                compositionSelect.value = '';
-            }
-
-            card.appendChild(
-                compositionSelect
-            );
-
-            const customInput =
-                document.createElement('input');
-
-            customInput.type = 'text';
-            customInput.className =
-                'layer-custom-composition';
-            customInput.placeholder =
-                'e.g. GdScO3';
-            customInput.value =
-                known
-                    ? ''
-                    : layer.chemicalFormula;
-
-            customInput.style.display =
-                compositionSelect.value === '__other__'
-                    ? 'block'
-                    : 'none';
-
-            compositionSelect.addEventListener(
-                'change',
-                function() {
-                    if (
-                        compositionSelect.value ===
-                        '__other__'
-                    ) {
-                        layer.chemicalFormula = '';
-                        customInput.value = '';
-                        customInput.style.display =
-                            'block';
-                        customInput.focus();
-                    } else {
-                        layer.chemicalFormula =
-                            compositionSelect.value;
-                        customInput.value = '';
-                        customInput.style.display =
-                            'none';
-                    }
-
-                    updateLayerStackPreview();
-                    updateStatePreview();
-                }
-            );
-
-            customInput.addEventListener(
-                'input',
-                function() {
-                    layer.chemicalFormula =
-                        customInput.value.trim();
-
-                    updateLayerStackPreview();
-                    updateStatePreview();
-                }
-            );
-
-            card.appendChild(customInput);
-
-            const formulaHelp =
-                document.createElement('div');
-
-            formulaHelp.className =
-                'small layer-help';
-
-            formulaHelp.textContent =
-                'Use a full chemical formula with valid element symbols.';
-
-            card.appendChild(formulaHelp);
-
-            const dopantLabel =
-                document.createElement('label');
-
-            dopantLabel.textContent =
-                'Dopant';
-
-            card.appendChild(dopantLabel);
-
-            const dopantSelect =
-                document.createElement('select');
-
-            const noDopant =
-                document.createElement('option');
-
-            noDopant.value = '';
-            noDopant.textContent = 'None';
-
-            dopantSelect.appendChild(
-                noDopant
-            );
-
-            layerCatalogState.dopants.forEach(
-                function(element) {
-                    const option =
-                        document.createElement('option');
-
-                    option.value = element;
-                    option.textContent = element;
-
-                    dopantSelect.appendChild(option);
-                }
-            );
-
-            dopantSelect.value =
-                layer.dopantElement || '';
-
-            dopantSelect.addEventListener(
-                'change',
-                function() {
-                    layer.dopantElement =
-                        dopantSelect.value;
-
-                    updateLayerStackPreview();
-                    updateStatePreview();
-                }
-            );
-
-            card.appendChild(dopantSelect);
-
-            const thicknessLabel =
-                document.createElement('label');
-
-            thicknessLabel.textContent =
-                'Nominal thickness (nm)';
-
-            card.appendChild(thicknessLabel);
-
-            const thicknessInput =
-                document.createElement('input');
-
-            thicknessInput.type = 'number';
-            thicknessInput.min = '0';
-            thicknessInput.step = '0.01';
-            thicknessInput.placeholder = 'e.g. 20';
-            thicknessInput.value =
-                layer.nominalThicknessNm;
-
-            thicknessInput.addEventListener(
-                'input',
-                function() {
-                    layer.nominalThicknessNm =
-                        thicknessInput.value;
-
-                    updateLayerStackPreview();
-                    updateStatePreview();
-                }
-            );
-
-            card.appendChild(
-                thicknessInput
-            );
-
-            const display =
-                document.createElement('div');
-
-            display.className =
-                'layer-display-name';
-
-            display.textContent =
-                'Display: ' +
-                layerDisplayName(layer);
-
-            card.appendChild(display);
-
-            container.appendChild(card);
-        }
-    );
-
-    updateLayerStackPreview();
-}
-
-
-function addNominalLayer() {
-    experimentState.layers.push(
-        emptyNominalLayer()
-    );
-
-    renderLayerStack();
-    updateStatePreview();
-}
-
-
-function resetLayerStack() {
-    experimentState.layers = [
-        emptyNominalLayer()
-    ];
-
-    renderLayerStack();
-    updateStatePreview();
-}
-
-
-function nominalLayerArchiveData() {
-    if (
-        !Array.isArray(experimentState.layers) ||
-        !experimentState.layers.length
-    ) {
-        throw new Error(
-            'At least one nominal layer is required.'
-        );
-    }
-
-    return experimentState.layers.map(
-        function(layer, index) {
-            const layerNumber =
-                index + 1;
-
-            const formula =
-                String(
-                    layer.chemicalFormula || ''
-                ).trim();
-
-            if (!formula) {
-                throw new Error(
-                    'Layer ' +
-                    layerNumber +
-                    ': composition is required.'
-                );
-            }
-
-            if (!validateChemicalFormula(formula)) {
-                throw new Error(
-                    'Layer ' +
-                    layerNumber +
-                    ': invalid chemical formula. ' +
-                    'Use a full formula such as BaSnO3 with valid element symbols.'
-                );
-            }
-
-            const dopant =
-                String(
-                    layer.dopantElement || ''
-                ).trim();
-
-            if (
-                dopant &&
-                !layerCatalogState.dopants.includes(
-                    dopant
-                )
-            ) {
-                throw new Error(
-                    'Layer ' +
-                    layerNumber +
-                    ': dopant must be a valid chemical element.'
-                );
-            }
-
-            const thickness =
-                Number(
-                    layer.nominalThicknessNm
-                );
-
-            if (
-                !Number.isFinite(thickness) ||
-                thickness <= 0
-            ) {
-                throw new Error(
-                    'Layer ' +
-                    layerNumber +
-                    ': nominal thickness must be greater than zero.'
-                );
-            }
-
-            const data = {
-                chemical_formula: formula,
-                nominal_thickness:
-                    thickness * 1e-9
-            };
-
-            if (dopant) {
-                data.dopant_element = dopant;
-            }
-
-            return data;
-        }
-    );
-}
-
-
-async function initialiseLayerStack() {
-    await loadLayerCatalog();
-
-    if (
-        !Array.isArray(experimentState.layers) ||
-        !experimentState.layers.length
-    ) {
-        experimentState.layers = [
-            emptyNominalLayer()
-        ];
-    }
-
-    renderLayerStack();
-}
-
+// Nominal composition/dopant/thickness inputs are disabled until original NOMAD
+// definitions can represent them. No substitute m_def is introduced.
 
 async function loadTreatmentHistoryEntries() {
-
-    const treatmentSchemas = [
-        {
-            type: 'cleaning',
-            label: 'Cleaning',
-            processSchema:
-                'pdi_nomad_plugin.general.schema.CleaningPDI',
-            recipeSchema:
-                'pdi_nomad_plugin.general.schema.CleaningRecipePDI'
-        },
-        {
-            type: 'annealing',
-            label: 'Annealing',
-            processSchema:
-                'pdi_nomad_plugin.general.schema.AnnealingPDI',
-            recipeSchema:
-                'pdi_nomad_plugin.general.schema.AnnealingRecipePDI'
-        },
-        {
-            type: 'back_side_coating',
-            label: 'Back-side coating',
-            processSchema:
-                'pdi_nomad_plugin.general.schema.BackSideCoatingPDI',
-            recipeSchema:
-                'pdi_nomad_plugin.general.schema.BackSideCoatingRecipePDI'
-        }
+    const definitions = [
+        {type:'cleaning', label:'Cleaning', processSchema:'nomad_material_processing.general.Cleaning', recipeSchema:'nomad_material_processing.general.CleaningRecipe'},
+        {type:'annealing', label:'Annealing', processSchema:'nomad_material_processing.general.Annealing', recipeSchema:'nomad_material_processing.general.AnnealingRecipe'},
+        {type:'etching', label:'Etching', processSchema:'nomad_material_processing.general.Etching', recipeSchema:'nomad_material_processing.general.EtchingRecipe'}
     ];
-
     const treatments = [];
-
-    for (const treatmentSchema of treatmentSchemas) {
-
-        /*
-         * Load the recipes of this process type first.
-         * The history should show the RECIPE name, not the
-         * generic process-entry name such as
-         * "Annealing - 4 substrates".
-         */
-        const recipeEntries =
-            await queryEntriesBySchema(
-                treatmentSchema.recipeSchema,
-                500,
-                [
-                    'entry_id',
-                    'upload_id',
-                    'entry_name',
-                    'data.name',
-                    'data.lab_id'
-                ]
-            );
-
-        const recipeNames =
-            new Map();
-
-        recipeEntries.forEach(
-            function(recipe) {
-                const data =
-                    recipe.data || {};
-
-                recipeNames.set(
-                    recipe.entry_id,
-                    data.name ||
-                    data.lab_id ||
-                    recipe.entry_name ||
-                    recipe.entry_id
-                );
-            }
-        );
-
-        const entries =
-            await queryEntriesBySchema(
-                treatmentSchema.processSchema,
-                500,
-                [
-                    'entry_id',
-                    'upload_id',
-                    'entry_name',
-                    'data'
-                ]
-            );
-
-        entries.forEach(
-            function(entry) {
-                const data =
-                    entry.data || {};
-
-                const recipeReference =
-                    referenceValue(
-                        data.recipe
-                    );
-
-                const recipeEntryId =
-                    entryIdFromReference(
-                        recipeReference
-                    );
-
-                let recipeName =
-                    recipeEntryId
-                        ? recipeNames.get(
-                            recipeEntryId
-                        )
-                        : '';
-
-                /*
-                 * Some NOMAD references may already contain
-                 * resolved display information.
-                 */
-                if (
-                    !recipeName &&
-                    data.recipe &&
-                    typeof data.recipe === 'object'
-                ) {
-                    recipeName =
-                        data.recipe.name ||
-                        data.recipe.lab_id ||
-                        '';
-                }
-
-                treatments.push({
-                    entryId:
-                        entry.entry_id,
-
-                    uploadId:
-                        entry.upload_id,
-
-                    entryName:
-                        entry.entry_name ||
-                        entry.entry_id,
-
-                    type:
-                        treatmentSchema.type,
-
-                    label:
-                        treatmentSchema.label,
-
-                    recipeName:
-                        recipeName,
-
-                    data:
-                        data
-                });
-            }
-        );
+    for (const definition of definitions) {
+        const recipes = await queryEntriesBySchema(definition.recipeSchema, 500, ['entry_id','entry_name','data']);
+        const recipeNames = new Map(recipes.map(function(recipe) {
+            const d = recipe.data || {};
+            return [recipe.entry_id, d.name || d.lab_id || recipe.entry_name || recipe.entry_id];
+        }));
+        const entries = await queryEntriesBySchema(definition.processSchema, 500, ['entry_id','upload_id','entry_name','data']);
+        for (const entry of entries) {
+            const data = entry.data || {};
+            const recipeRef = referenceValue(data.recipe);
+            const recipeId = entryIdFromReference(recipeRef);
+            treatments.push({
+                entryId:entry.entry_id, uploadId:entry.upload_id,
+                entryName:entry.entry_name || entry.entry_id,
+                type:definition.type, label:definition.label,
+                recipeName:recipeNames.get(recipeId) || '', data:data
+            });
+        }
     }
-
-    console.log(
-        'Treatment history entries:',
-        treatments
-    );
-
     return treatments;
 }
 
-function treatmentReferencesSubstrate(
-    treatment,
-    substrateEntryId
-) {
-
-    if (
-        !treatment ||
-        !treatment.data ||
-        !substrateEntryId
-    ) {
+function treatmentReferencesSubstrate(treatment, substrateEntryId) {
+    if (!treatment || !treatment.data || !substrateEntryId) {
         return false;
     }
 
-
-    const samples =
-        treatment.data.samples || [];
-
-
-    return samples.some(
-        function(sample) {
-
-            if (!sample) {
-                return false;
-            }
-
-
-            const reference =
-                sample.reference;
-
-
-            if (!reference) {
-                return false;
-            }
-
-
-            if (
-                typeof reference ===
-                'string'
-            ) {
-                return reference.includes(
-                    substrateEntryId
-                );
-            }
-
-
-            if (
-                typeof reference ===
-                'object'
-            ) {
-
-                const serialized =
-                    JSON.stringify(
-                        reference
-                    );
-
-                return serialized.includes(
-                    substrateEntryId
-                );
-            }
-
-
-            return false;
-        }
-    );
+    // Only the original Process.samples[].reference relationship is verified.
+    const samples = treatment.data.samples || [];
+    return samples.some(function(sample) {
+        return referenceEntryId(sample && sample.reference) === substrateEntryId;
+    });
 }
-
-
 
 function nomadArchiveReference(
     uploadId,
@@ -992,99 +119,23 @@ function treatmentDate(
 
 
 async function loadTreatmentRecipes() {
-
-    const recipeSchemas = [
-        {
-            type: 'cleaning',
-            schema:
-                'pdi_nomad_plugin.general.schema.CleaningRecipePDI'
-        },
-        {
-            type: 'annealing',
-            schema:
-                'pdi_nomad_plugin.general.schema.AnnealingRecipePDI'
-        },
-        {
-            type: 'etching',
-            schema:
-                'pdi_nomad_plugin.general.schema.EtchingRecipePDI'
-        },
-        {
-            type: 'back_side_coating',
-            schema:
-                'pdi_nomad_plugin.general.schema.BackSideCoatingRecipePDI'
-        }
+    // Existing NOMAD recipes; unsupported local coating/cutting schemas are not queried.
+    const types = [
+        {type:'cleaning', schema:'nomad_material_processing.general.CleaningRecipe'},
+        {type:'annealing', schema:'nomad_material_processing.general.AnnealingRecipe'},
+        {type:'etching', schema:'nomad_material_processing.general.EtchingRecipe'}
     ];
-
     const recipes = [];
-
-    for (const recipeSchema of recipeSchemas) {
-
-        const response = await fetch(
-            nomadApiBase() + '/entries/query',
-            {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    // FIX: without an explicit owner NOMAD defaults to owner="public",
-                    // which only returns PUBLISHED entries. Lab data lives in unpublished
-                    // uploads, so every query came back empty. "visible" = public + everything
-                    // the logged-in user can see (login is sent automatically via cookie).
-                    owner: 'visible',
-                    query: {
-                        'section_defs.definition_qualified_name':
-                            recipeSchema.schema
-                    },
-                    pagination: {
-                        page_size: 100
-                    },
-                    required: {
-                        include: [
-                            'entry_id',
-                            'entry_name'
-                        ]
-                    }
-                })
-            }
-        );
-
-        if (!response.ok) {
-            throw new Error(
-                'Treatment recipe query failed for ' +
-                recipeSchema.type +
-                ': ' +
-                response.status
-            );
-        }
-
-        const result =
-            await response.json();
-
-        (result.data || []).forEach(
-            function(recipe) {
-
-                recipes.push({
-                    entryId:
-                        recipe.entry_id,
-                    name:
-                        recipe.entry_name ||
-                        recipe.entry_id,
-                    type:
-                        recipeSchema.type,
-                    schema:
-                        recipeSchema.schema
-                });
-            }
-        );
+    for (const type of types) {
+        const entries = await queryEntriesBySchema(type.schema, 500, ['entry_id','entry_name','data']);
+        entries.forEach(function(entry) {
+            const data = entry.data || {};
+            recipes.push({
+                entryId: entry.entry_id, name:data.name || entry.entry_name || entry.entry_id,
+                type:type.type, schema:type.schema
+            });
+        });
     }
-
-    console.log(
-        'Treatment recipes:',
-        recipes
-    );
-
     return recipes;
 }
 
@@ -1095,93 +146,16 @@ async function loadTreatmentRecipes() {
 // the already-fixed queryEntriesBySchema(), which talks to
 // /entries/archive/query instead and returns the same entry shape.
 async function loadSubstrates() {
-    const entries = await queryEntriesBySchema(
-        'pdi_nomad_plugin.mbe.materials.SubstrateMbe',
-        500,
-        [
-            'entry_id',
-            'upload_id',
-            'entry_name',
-            'data.m_def',
-            'data.lab_id',
-            'data.parent_sample',
-            'data.material_designation',
-            'data.chemical_formula',
-            'data.supplier_id',
-            'data.crystal_id',
-            'data.charge_id',
-            'data.polishing',
-            'data.surface_orientation_label',
-            'data.offcut_label',
-            'data.offcut_direction',
-            'data.as_delivered',
-            'data.processed',
-            'data.grown',
-            'data.geometry'
-        ]
-    );
-
-    const substrates = entries.filter(
-        function(entry) {
-            return (
-                (entry.data || {}).m_def ===
-                'pdi_nomad_plugin.mbe.materials.SubstrateMbe'
-            );
-        }
-    );
-
-    console.log(
-        'SubstrateMbe query result:',
-        substrates
-    );
-
-    return substrates;
+    const schema = 'nomad_material_processing.general.CrystallineSubstrate';
+    const entries = await queryEntriesBySchema(schema, 1000, ['entry_id','upload_id','entry_name','data']);
+    return entries.filter(function(entry) { return entry.data && entry.data.m_def === schema; });
 }
 
 
 async function loadHolders() {
-
-    const response = await fetch(
-        nomadApiBase() + '/entries/query',
-        {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                query: {
-                    'section_defs.definition_qualified_name':
-                        'pdi_nomad_plugin.mbe.instrument.SubstrateHolderPDI'
-                },
-                pagination: {
-                    page_size: 100
-                },
-                required: {
-                    include: [
-                        'entry_id',
-                        'entry_name',
-                        'upload_id'
-                    ]
-                }
-            })
-        }
-    );
-
-    if (!response.ok) {
-        throw new Error(
-            'Holder query failed: ' +
-            response.status
-        );
-    }
-
-    const result = await response.json();
-
-    console.log(
-        'SubstrateHolderPDI query result:',
-        result
-    );
-
-    return result.data || [];
+    return await queryEntriesBySchema(
+        'nomad_material_processing.vapor_deposition.general.SubstrateHolder',
+        500, ['entry_id','upload_id','entry_name','data']);
 }
 
 
@@ -1319,46 +293,7 @@ function updateSubstrateFilters() {
 }
 
 
-function cutParentEntryIds() {
-    const parentIds = new Set();
-
-    substrateCatalogState.forEach(
-        function(substrate) {
-            const parentEntryId =
-                referenceEntryId(
-                    substrate.parentSample
-                );
-
-            if (parentEntryId) {
-                parentIds.add(
-                    parentEntryId
-                );
-            }
-        }
-    );
-
-    return parentIds;
-}
-
-
-function substrateHasBeenCut(substrate) {
-    if (
-        !substrate ||
-        !substrate.entryId
-    ) {
-        return false;
-    }
-
-    return cutParentEntryIds().has(
-        substrate.entryId
-    );
-}
-
-
 function filteredSubstrates() {
-
-    const cutParents =
-        cutParentEntryIds();
 
     const search =
         document.getElementById(
@@ -1400,18 +335,6 @@ function filteredSubstrates() {
 
     return substrateCatalogState.filter(
         function(substrate) {
-
-            /*
-             * Once child samples reference this substrate as their
-             * parent, the original physical piece no longer exists.
-             */
-            if (
-                cutParents.has(
-                    substrate.entryId
-                )
-            ) {
-                return false;
-            }
 
             const searchable = [
                 substrate.labId,
@@ -1749,106 +672,60 @@ function renderSubstrateResults() {
 }
 
 
+
+// Original CrystallineSubstrate payloads from Substrate Intake, without local quantities.
+function originalMbeSubstrateFields(data) {
+    const components = Array.isArray(data.components) ? data.components : [];
+    const first = components[0] || {};
+    const formula = String(((first.pure_substance || {}).molecular_formula) || '').trim();
+    const crystal = data.crystal_properties || {};
+    const direction = ((crystal.surface_orientation || {}).hkl_reciprocal) || {};
+    const indices = ['h_index','k_index','l_index'];
+    const orientation = indices.every(function(k) {return direction[k] !== undefined && direction[k] !== null;})
+        ? indices.map(function(k) {return direction[k];}).join(' ') : '';
+    const miscut = (crystal.miscut || {}).cartesian_miscut || {};
+    const ref = (miscut.reference_orientation || {});
+    const tilt = Number(ref.angle);
+    const direct = ref.hkl_direct || {};
+    const offcut = ref.angle !== undefined && Number.isFinite(tilt) ? String(tilt) + '°' : '';
+    const offcutDirection = indices.every(function(k) {return direct[k] !== undefined && direct[k] !== null;})
+        ? indices.map(function(k) {return direct[k];}).join(' ') : '';
+    const description = String(data.description || '');
+    const crystalMatch = description.match(/^Crystal ID:\s*(.*)$/m);
+    const chargeMatch = description.match(/^Charge ID:\s*(.*)$/m);
+    return {
+        formula:formula, material:formula, orientation:orientation, offcut:offcut,
+        offcutDirection:offcutDirection,
+        crystalId:crystalMatch ? crystalMatch[1].trim() : '',
+        chargeId:chargeMatch ? chargeMatch[1].trim() : ''
+    };
+}
+
 async function initialiseSubstrates() {
-
-    const container =
-        document.getElementById(
-            'substrateResults'
-        );
-
-    container.innerHTML =
-        '<p class="small" style="padding:10px;">' +
-        'Loading substrates...' +
-        '</p>';
-
-
+    const container = document.getElementById('substrateResults');
+    container.innerHTML = '<p class="small" style="padding:10px;">Loading substrates...</p>';
     try {
-
-        const entries =
-            await loadSubstrates();
-
-
-        substrateCatalogState =
-            entries.map(
-                function(entry) {
-
-                    const data =
-                        entry.data || {};
-
-                    return {
-                        entryId:
-                            entry.entry_id,
-                        uploadId:
-                            entry.upload_id,
-                        entryName:
-                            entry.entry_name ||
-                            entry.entry_id,
-                        labId:
-                            data.lab_id ||
-                            entry.entry_name ||
-                            entry.entry_id,
-
-                        parentSample:
-
-                            data.parent_sample || null,
-                        material:
-                            data.material_designation ||
-                            data.chemical_formula ||
-                            '',
-                        formula:
-                            data.chemical_formula ||
-                            '',
-                        supplierId:
-                            data.supplier_id ||
-                            '',
-                        crystalId:
-                            data.crystal_id ||
-                            '',
-                        chargeId:
-                            data.charge_id ||
-                            '',
-                        polishing:
-                            data.polishing ||
-                            '',
-                        orientation:
-                            data.surface_orientation_label ||
-                            '',
-                        offcut:
-                            data.offcut_label ||
-                            '',
-                        offcutDirection:
-                            data.offcut_direction ||
-                            '',
-                        asDelivered:
-                            Boolean(
-                                data.as_delivered
-                            ),
-                        processed:
-                            Boolean(
-                                data.processed
-                            ),
-                        grown:
-                            Boolean(
-                                data.grown
-                            ),
-                        geometry:
-                            data.geometry || null
-                    };
-                }
-            );
-
-
+        const entries = await loadSubstrates();
+        substrateCatalogState = entries.map(function(entry) {
+            const data = entry.data || {};
+            const fields = originalMbeSubstrateFields(data);
+            return {
+                entryId:entry.entry_id, uploadId:entry.upload_id,
+                entryName:entry.entry_name || entry.entry_id,
+                labId:data.lab_id || data.name || entry.entry_name || entry.entry_id,
+                parentSample:null, material:fields.material, formula:fields.formula,
+                supplierId:data.supplier_id || '', crystalId:fields.crystalId, chargeId:fields.chargeId,
+                polishing:'', orientation:fields.orientation, offcut:fields.offcut,
+                offcutDirection:fields.offcutDirection, asDelivered:false,
+                processed:false, grown:false, geometry:data.geometry || null
+            };
+        });
         updateSubstrateFilters();
         renderSubstrateResults();
-
     } catch (error) {
-
         console.error(error);
-
-        container.innerHTML =
-            '<p class="small" style="padding:10px;">' +
-            'Could not load substrates.' +
-            '</p>';
+        container.innerHTML = '<p class="small" style="padding:10px;">Could not load original NOMAD substrates.</p>';
+        throw error;
     }
 }
 
@@ -1888,13 +765,12 @@ function treatmentProcessSchema(type) {
 
     const schemas = {
         cleaning:
-            'pdi_nomad_plugin.general.schema.CleaningPDI',
+            'nomad_material_processing.general.Cleaning',
         annealing:
-            'pdi_nomad_plugin.general.schema.AnnealingPDI',
+            'nomad_material_processing.general.Annealing',
         etching:
-            'pdi_nomad_plugin.general.schema.EtchingPDI',
-        back_side_coating:
-            'pdi_nomad_plugin.general.schema.BackSideCoatingPDI'
+            'nomad_material_processing.general.Etching',
+        // Back-side coating is disabled: no verified original schema exists.
     };
 
     return schemas[type] || null;
@@ -2049,83 +925,11 @@ function treatmentFilename(
 }
 
 
-async function uploadTreatmentArchive(
-    uploadId,
-    filename,
-    data
-) {
-
-    const params =
-        new URLSearchParams();
-
-    params.append(
-        'file_name',
-        filename
+async function uploadTreatmentArchive() {
+    throw new Error(
+        'Treatment uploads from New MBE Experiment are disabled. ' +
+        'Use the dedicated Substrate Processing app and original NOMAD process schemas.'
     );
-
-    params.append(
-        'overwrite_if_exists',
-        'false'
-    );
-
-    params.append(
-        'trigger_processing',
-        'true'
-    );
-
-
-    const response =
-        await fetch(
-            nomadApiBase() +
-            '/uploads/' +
-            encodeURIComponent(
-                uploadId
-            ) +
-            '/raw/?' +
-            params.toString(),
-            {
-                method: 'PUT',
-                headers: {
-                    'Content-Type':
-                        'application/json'
-                },
-                body: JSON.stringify(
-                    {
-                        data: data
-                    },
-                    null,
-                    2
-                )
-            }
-        );
-
-
-    if (!response.ok) {
-
-        let detail = '';
-
-        try {
-
-            const errorData =
-                await response.json();
-
-            if (errorData.detail) {
-                detail =
-                    ': ' +
-                    errorData.detail;
-            }
-
-        } catch (_) {
-        }
-
-
-        throw new Error(
-            'Treatment upload failed (' +
-            response.status +
-            ')' +
-            detail
-        );
-    }
 }
 
 
@@ -2422,9 +1226,7 @@ async function initialiseTreatmentRecipes() {
         const groups = {
             cleaning: 'Cleaning',
             annealing: 'Annealing',
-            etching: 'Etching',
-            back_side_coating:
-                'Back-side coating'
+            etching: 'Etching'
         };
 
 
@@ -2579,23 +1381,9 @@ function restoreTargetUploadSelection() {
 }
 
 
-function updateEmptyHolderButton(workflowStatus) {
-    const button =
-        document.getElementById(
-            'emptyHolderButton'
-        );
-
-    if (!button) {
-        return;
-    }
-
-    if (workflowStatus === 'grown') {
-        button.textContent =
-            'Take off samples';
-    } else {
-        button.textContent =
-            'Empty filled holder';
-    }
+function updateEmptyHolderButton() {
+    const button = document.getElementById('emptyHolderButton');
+    if (button) button.textContent = 'Clear local assignments';
 }
 
 
@@ -3378,114 +2166,16 @@ async function archiveEntryId(
 }
 
 
-async function uploadArchiveData(
-    uploadId,
-    filename,
-    data
-) {
-
-    const params =
-        new URLSearchParams();
-
-    params.append(
-        'file_name',
-        filename
+async function uploadArchiveData() {
+    throw new Error(
+        'New MBE Experiment saving is disabled: the original MolecularBeamEpitaxy ' +
+        'section is not an EntryData root. No NOMAD archive has been uploaded.'
     );
-
-    params.append(
-        'overwrite_if_exists',
-        'false'
-    );
-
-    params.append(
-        'trigger_processing',
-        'true'
-    );
-
-
-    const response =
-        await fetch(
-            nomadApiBase() +
-            '/uploads/' +
-            encodeURIComponent(
-                uploadId
-            ) +
-            '/raw/?' +
-            params.toString(),
-            {
-                method: 'PUT',
-                headers: {
-                    'Content-Type':
-                        'application/json'
-                },
-                body: JSON.stringify(
-                    {
-                        data: data
-                    },
-                    null,
-                    2
-                )
-            }
-        );
-
-
-    if (!response.ok) {
-
-        let detail = '';
-
-        try {
-
-            const errorData =
-                await response.json();
-
-            if (errorData.detail) {
-                detail =
-                    ': ' +
-                    errorData.detail;
-            }
-
-        } catch (_) {
-        }
-
-        throw new Error(
-            'Archive upload failed (' +
-            response.status +
-            ')' +
-            detail
-        );
-    }
 }
 
 
-
-
-
-function experimentArchiveData(
-    filledHolderReference
-) {
-
-    const growthRunId =
-        experimentState.growthRunId;
-
-    return {
-        m_def:
-            'pdi_nomad_plugin.mbe.processes.' +
-            'ExperimentMbePDI',
-
-        name:
-            growthRunId,
-
-        lab_id:
-            growthRunId,
-
-        nominal_layers:
-            nominalLayerArchiveData(),
-
-        substrate_holder: {
-            reference:
-                filledHolderReference
-        }
-    };
+function experimentArchiveData(filledHolderReference) {
+    throw new Error('Cannot serialize an MBE growth experiment until its original NOMAD fields and references have been verified.');
 }
 
 
@@ -3510,9 +2200,9 @@ function updateStatePreview() {
  * MBE holder workflow v2
  *
  * Source of truth:
- * - physical holder geometry: SubstrateHolderPDI archive
- * - current loadout: unreferenced FilledSubstrateHolderPDI
- * - historical loadout: FilledSubstrateHolderPDI referenced by ExperimentMbePDI
+ * - physical holder geometry: SubstrateHolder archive
+ * - current loadout: unreferenced FilledSubstrateHolder
+ * - historical loadout: FilledSubstrateHolder referenced by MolecularBeamEpitaxy
  *
  * No holder layout names are hard-coded here. Geometry is rendered from the
  * positions stored in the physical holder archive.
@@ -3608,53 +2298,6 @@ async function queryEntriesBySchema(schema, pageSize, include) {
 }
 
 
-async function queryExperimentHolderReferences() {
-    const response = await fetch(
-        nomadApiBase() + '/entries/archive/query',
-        {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                // FIX: without an explicit owner NOMAD defaults to owner="public",
-                // which only returns PUBLISHED entries. Lab data lives in unpublished
-                // uploads, so every query came back empty. "visible" = public + everything
-                // the logged-in user can see (login is sent automatically via cookie).
-                owner: 'visible',
-                query: {
-                    'section_defs.definition_qualified_name':
-                        'pdi_nomad_plugin.mbe.processes.ExperimentMbePDI'
-                },
-                pagination: {page_size: 1000},
-                required: {
-                    data: {
-                        substrate_holder: {
-                            reference: '*'
-                        }
-                    }
-                }
-            })
-        }
-    );
-
-    if (!response.ok) {
-        throw new Error(
-            'Experiment holder-reference query failed: ' +
-            response.status
-        );
-    }
-
-    const result = await response.json();
-    return (result.data || []).map(function(entry) {
-        const archive = entry.archive || {};
-        return {
-            entry_id: entry.entry_id,
-            upload_id: entry.upload_id,
-            data: archive.data || {}
-        };
-    });
-}
-
-
 function entryIdFromReference(reference) {
     if (!reference) return null;
     if (typeof reference === 'object') {
@@ -3677,41 +2320,9 @@ function filledPhysicalReference(data) {
 }
 
 
-function isDiscardedLoadout(data) {
-    const tags = data && Array.isArray(data.tags) ? data.tags : [];
-    return tags.includes('discarded_loadout');
-}
-
-
-const HOLDER_WORKFLOW_STATES = [
-    'empty',
-    'ungrown',
-    'grown'
-];
-
-
-function holderWorkflowStatus(data) {
-    const tags =
-        data && Array.isArray(data.tags)
-            ? data.tags
-            : [];
-
-    if (tags.includes('grown')) {
-        return 'grown';
-    }
-
-    if (tags.includes('ungrown')) {
-        return 'ungrown';
-    }
-
-    if (tags.includes('empty')) {
-        return 'empty';
-    }
-
-    // Legacy physical holders without a workflow tag
-    // are treated as available until they enter the
-    // new workflow for the first time.
-    return 'empty';
+function holderWorkflowStatus() {
+    // Original SubstrateHolder has no lifecycle/status quantity.
+    return 'not recorded';
 }
 
 
@@ -3771,12 +2382,7 @@ function canonicalPhysicalHolders(
                     ? data.positions
                     : [];
 
-            const workflowStatus =
-                holderWorkflowStatus(
-                    data
-                );
-
-            const hasCurrentSnapshot =
+            const hasRecordedSnapshot =
                 currentByPhysical.has(
                     candidate.entry_id
                 );
@@ -3784,28 +2390,10 @@ function canonicalPhysicalHolders(
             let value =
                 positions.length;
 
-            /*
-             * A holder referenced by the current,
-             * non-discarded loadout is authoritative.
-             */
-            if (hasCurrentSnapshot) {
-                value += 100000;
-            }
-
-            /*
-             * A non-empty workflow status without a
-             * matching current snapshot is inconsistent.
-             * Prefer a clean empty physical definition.
-             */
-            if (
-                workflowStatus === 'empty'
-            ) {
-                value += 1000;
-            } else if (
-                !hasCurrentSnapshot
-            ) {
-                value -= 10000;
-            }
+            // Prefer the physical holder that a recorded original
+            // FilledSubstrateHolder explicitly references. No lifecycle
+            // status can be inferred from this relationship.
+            if (hasRecordedSnapshot) value += 100000;
 
             return value;
         }
@@ -3835,7 +2423,7 @@ async function loadHolderCatalogV2() {
     const [holdersRaw, filledRaw] =
         await Promise.all([
             queryEntriesBySchema(
-                'pdi_nomad_plugin.mbe.instrument.SubstrateHolderPDI',
+                'nomad_material_processing.vapor_deposition.general.SubstrateHolder',
                 500,
                 [
                     'entry_id',
@@ -3847,7 +2435,7 @@ async function loadHolderCatalogV2() {
                 ]
             ),
             queryEntriesBySchema(
-                'pdi_nomad_plugin.mbe.instrument.FilledSubstrateHolderPDI',
+                'nomad_material_processing.vapor_deposition.general.FilledSubstrateHolder',
                 500,
                 [
                     'entry_id',
@@ -3872,14 +2460,12 @@ async function loadHolderCatalogV2() {
                     );
 
                 /*
-                 * FilledSubstrateHolderPDI inherits from
-                 * SubstrateHolderPDI, therefore guard both
+                 * FilledSubstrateHolder inherits from
+                 * SubstrateHolder, therefore guard both
                  * by m_def and by substrate_holder reference.
                  */
                 return (
-                    !mDef.includes(
-                        'FilledSubstrateHolderPDI'
-                    ) &&
+                    mDef !== 'nomad_material_processing.vapor_deposition.general.FilledSubstrateHolder' &&
                     !data.substrate_holder
                 );
             }
@@ -3896,29 +2482,23 @@ async function loadHolderCatalogV2() {
 
                 return (
                     !mDef ||
-                    mDef.includes(
-                        'FilledSubstrateHolderPDI'
-                    )
+                    mDef === 'nomad_material_processing.vapor_deposition.general.FilledSubstrateHolder'
                 );
             }
         );
 
     /*
-     * Map only CURRENT, non-discarded loadouts
-     * back to their exact physical holder entry.
+     * Associate recorded loadouts with their exact physical holder reference.
+     * Never infer the physical holder's current occupancy from these entries.
      */
+    // Most recent recorded snapshot per physical holder. This is NOT proof
+    // that the holder is currently occupied; NOMAD has no original status field.
     const currentByPhysical =
         new Map();
 
     filled.forEach(function(entry) {
         const data =
             entry.data || {};
-
-        if (
-            isDiscardedLoadout(data)
-        ) {
-            return;
-        }
 
         const physicalId =
             entryIdFromReference(
@@ -3969,8 +2549,8 @@ async function loadHolderCatalogV2() {
         );
 
     /*
-     * Only current snapshots belonging to the selected
-     * canonical physical holders remain relevant.
+     * Keep the most recent recorded snapshot for each canonical holder.
+     * A snapshot may be historical, not a live holder status.
      */
     const canonicalCurrentByPhysical =
         new Map();
@@ -3998,7 +2578,7 @@ async function loadHolderCatalogV2() {
     holderCatalogState = {
         holders: holders,
 
-        // retained for compatibility
+        // Retained for read-only catalog compatibility.
         empty: holders,
 
         filled: filled,
@@ -4011,61 +2591,17 @@ async function loadHolderCatalogV2() {
     return holderCatalogState;
 }
 
+// Insert selection intentionally unavailable: the original geometry contract
+// has not been validated. No synthetic dimensions or substitute m_def.
 async function loadInsertCatalogV2() {
-    try {
-        const entries = await queryEntriesBySchema(
-            'pdi_nomad_plugin.mbe.instrument.InsertReductionPDI',
-            200,
-            [
-                'entry_id',
-                'upload_id',
-                'entry_name',
-                'data.lab_id',
-                'data.name',
-                'data.inner_geometry',
-                'data.outer_geometry'
-            ]
-        );
-
-        insertCatalogState = entries.map(function(entry) {
-            const data = entry.data || {};
-
-            return {
-                entryId: entry.entry_id,
-                uploadId: entry.upload_id,
-                name:
-                    data.lab_id ||
-                    data.name ||
-                    entry.entry_name ||
-                    entry.entry_id,
-                innerGeometry:
-                    data.inner_geometry || null,
-                outerGeometry:
-                    data.outer_geometry || null
-            };
-        });
-
-    } catch (error) {
-        console.warn(
-            'InsertReductionPDI catalog could not be loaded.',
-            error
-        );
-
-        insertCatalogState = [];
-    }
+    insertCatalogState = [];
 }
 
 
 function holderDisplayStatus(workflowStatus, hasFilledHolder) {
-    if (workflowStatus === 'empty') {
-        return 'empty';
-    }
-
-    if (hasFilledHolder) {
-        return 'filled · ' + workflowStatus;
-    }
-
-    return workflowStatus;
+    return hasFilledHolder
+        ? 'recorded loadout (current occupancy unverified)'
+        : 'no recorded loadout (occupancy unverified)';
 }
 
 
@@ -4097,11 +2633,7 @@ async function initialiseHolderSelect() {
         select.innerHTML =
             '<option value="">Select holder...</option>';
 
-        const counts = {
-            empty: 0,
-            ungrown: 0,
-            grown: 0
-        };
+        let recordedLoadoutCount = 0;
 
         catalog.holders
             .slice()
@@ -4140,12 +2672,12 @@ async function initialiseHolderSelect() {
                         data
                     );
 
-                counts[workflowStatus] += 1;
-
                 const currentFilled =
                     catalog.currentByPhysical.get(
                         entry.entry_id
                     );
+
+                if (currentFilled) recordedLoadoutCount += 1;
 
                 const holderName =
                     data.lab_id ||
@@ -4161,7 +2693,7 @@ async function initialiseHolderSelect() {
                 /*
                  * IMPORTANT:
                  * The option always points to the
-                 * PHYSICAL SubstrateHolderPDI.
+                 * PHYSICAL SubstrateHolder.
                  */
                 option.value =
                     entry.entry_id;
@@ -4175,13 +2707,8 @@ async function initialiseHolderSelect() {
                 option.dataset.uploadId =
                     entry.upload_id || '';
 
-                option.dataset.filledEntryId =
-                    (
-                        workflowStatus !== 'empty' &&
-                        currentFilled
-                    )
-                        ? currentFilled.entry_id
-                        : '';
+                option.dataset.filledEntryId = currentFilled
+                    ? currentFilled.entry_id : '';
 
                 option.textContent =
                     holderName +
@@ -4200,12 +2727,9 @@ async function initialiseHolderSelect() {
             status.textContent =
                 catalog.holders.length +
                 ' physical holder(s): ' +
-                counts.empty +
-                ' empty, ' +
-                counts.ungrown +
-                ' ungrown, ' +
-                counts.grown +
-                ' grown.';
+                recordedLoadoutCount +
+                ' with recorded loadout. Current occupancy cannot be inferred ' +
+                'from original NOMAD holder fields.';
         }
 
     } catch (error) {
@@ -4232,7 +2756,6 @@ function makePositionState(position) {
         theta: position.theta,
         x_position: position.x_position,
         y_position: position.y_position,
-        slot_geometry: position.slot_geometry || null
     };
 }
 
@@ -4279,7 +2802,8 @@ function applyFilledOverlay(filledData) {
     filledPositions.forEach(function(item) {
         if (!item.name || !experimentState.positions[item.name]) return;
         const target = experimentState.positions[item.name];
-        target.position_usage = item.position_usage || (item.substrate ? 'substrate' : null);
+        // An insert alone is not evidence of a substrate or dummy.
+        target.position_usage = item.substrate ? 'substrate' : null;
         target.substrate = resolveSubstrateFromFilled(item);
         target.insertReduction = resolveInsertFromFilled(item);
     });
@@ -4325,7 +2849,7 @@ async function selectHolder() {
     try {
         /*
          * Holder selection now ALWAYS starts
-         * from the physical SubstrateHolderPDI.
+         * from the physical SubstrateHolder.
          */
         const physicalArchive =
             await loadHolderArchive(
@@ -4362,17 +2886,14 @@ async function selectHolder() {
          * For occupied holders the physical holder
          * remains the selectable object.
          *
-         * The FilledSubstrateHolderPDI is loaded only
+         * The FilledSubstrateHolder is loaded only
          * as the current occupancy snapshot.
          */
         const filledEntryId =
             option.dataset.filledEntryId ||
             '';
 
-        if (
-            workflowStatus !== 'empty' &&
-            filledEntryId
-        ) {
+        if (filledEntryId) {
             const filledArchive =
                 await loadHolderArchive(
                     filledEntryId
@@ -4412,16 +2933,6 @@ async function selectHolder() {
             };
         }
 
-        if (
-            workflowStatus !== 'empty' &&
-            !filledHolder
-        ) {
-            throw new Error(
-                'Holder is marked "' +
-                workflowStatus +
-                '" but no current filled-holder snapshot could be resolved.'
-            );
-        }
 
         experimentState.holder = {
             id:
@@ -4471,9 +2982,12 @@ async function selectHolder() {
         );
 
         if (filledHolder) {
-            applyFilledOverlay(
-                filledHolder.data
-            );
+            applyFilledOverlay(filledHolder.data);
+            const info = document.getElementById('filledHolderSaveStatus');
+            if (info) info.textContent =
+                'Showing the most recent recorded NOMAD loadout as a historical ' +
+                'reference. Current physical occupancy is NOT verified. ' +
+                'Any changes are local only.';
         }
 
         experimentState.activePositionName =
@@ -4672,24 +3186,36 @@ function geometryNumber(value) {
 
 function substrateFootprint(geometry) {
     if (!geometry || typeof geometry !== 'object') return null;
-    const num = geometryNumber;
-    const kind = geometry.shape || '';
-    if (kind === 'circle' || kind === 'circular_sector' ||
-        (!kind && num(geometry.radius) > 0)) {
-        const radius = num(geometry.radius);
-        const angle = kind === 'circle' ? 360 :
-            (num(geometry.central_angle) || 360);
-        return radius > 0 && angle > 0 && angle <= 360
-            ? {shape: angle === 360 ? 'circle' : 'circular_sector',
-               radius: radius, central_angle: angle} : null;
-    }
-    const width = num(geometry.width);
-    const length = num(geometry.length) ??
-        ((geometry.m_def || '').endsWith('SquareCuboid') ? width : null);
-    return width > 0 && length > 0
-        ? {shape: 'rectangle', width: width, length: length} : null;
-}
 
+    const num = geometryNumber;
+    const type = String(geometry.m_def || '').split('.').pop();
+
+    if (type === 'Cylinder' || type === 'CylinderSector') {
+        const radius = num(geometry.radius);
+        const angle = type === 'Cylinder'
+            ? 360 : num(geometry.central_angle);
+
+        return radius > 0 && angle > 0 && angle <= 360
+            ? {
+                shape: type === 'Cylinder' ? 'circle' : 'circular_sector',
+                radius: radius,
+                central_angle: angle
+            }
+            : null;
+    }
+
+    if (type === 'SquareCuboid' || type === 'RectangleCuboid') {
+        const width = num(geometry.width);
+        const length = num(geometry.length) ??
+            (type === 'SquareCuboid' ? width : null);
+
+        return width > 0 && length > 0
+            ? {shape: 'rectangle', width: width, length: length}
+            : null;
+    }
+
+    return null;
+}
 function geometryFits(candidate, opening) {
     const a = substrateFootprint(candidate);
     const b = substrateFootprint(opening);
@@ -4747,28 +3273,6 @@ function geometryXY(geometry) {
 }
 
 
-function geometryMatches(first, second) {
-    const a = geometryXY(first);
-    const b = geometryXY(second);
-
-    if (!a || !b) {
-        return false;
-    }
-
-    const tolerance = 0.00005;
-
-    const direct =
-        Math.abs(a.width - b.width) <= tolerance &&
-        Math.abs(a.length - b.length) <= tolerance;
-
-    const rotated =
-        Math.abs(a.width - b.length) <= tolerance &&
-        Math.abs(a.length - b.width) <= tolerance;
-
-    return direct || rotated;
-}
-
-
 function fallbackHolderSlotGeometry() {
     const holder =
         experimentState.holder || {};
@@ -4806,15 +3310,6 @@ function fallbackHolderSlotGeometry() {
 
 
 function positionSlotGeometry(position) {
-    const explicitGeometry =
-        position
-            ? position.slot_geometry
-            : null;
-
-    if (substrateFootprint(explicitGeometry)) {
-        return explicitGeometry;
-    }
-
     return fallbackHolderSlotGeometry();
 }
 
@@ -4829,35 +3324,6 @@ function effectivePositionGeometry(position) {
     }
 
     return positionSlotGeometry(position);
-}
-
-
-function insertFitsPosition(insert, position) {
-    if (!insert || !position) {
-        return false;
-    }
-
-    const slotGeometry =
-        positionSlotGeometry(position);
-
-    /*
-     * Never offer an insert when the physical slot
-     * geometry is unknown. Otherwise an oversized
-     * insert could be offered for an incompatible
-     * holder position.
-     */
-    if (!substrateFootprint(slotGeometry)) {
-        return false;
-    }
-
-    if (!substrateFootprint(insert.outerGeometry)) {
-        return false;
-    }
-
-    return geometryFits(
-        insert.outerGeometry,
-        slotGeometry
-    );
 }
 
 
@@ -4881,54 +3347,6 @@ function substrateFitsPosition(substrate, position) {
         substrate.geometry,
         target
     );
-}
-
-
-function insertWindowPercent(position) {
-    if (
-        !position ||
-        !position.insertReduction
-    ) {
-        return null;
-    }
-
-    const inner =
-        geometryXY(
-            position.insertReduction.innerGeometry
-        );
-
-    const outer =
-        geometryXY(
-            position.insertReduction.outerGeometry
-        );
-
-    if (!inner || !outer) {
-        return null;
-    }
-
-    if (
-        outer.width <= 0 ||
-        outer.length <= 0
-    ) {
-        return null;
-    }
-
-    return {
-        width: Math.max(
-            10,
-            Math.min(
-                100,
-                100 * inner.width / outer.width
-            )
-        ),
-        height: Math.max(
-            10,
-            Math.min(
-                100,
-                100 * inner.length / outer.length
-            )
-        )
-    };
 }
 
 
@@ -5003,16 +3421,6 @@ function renderHolder() {
             '<span class="holder-slot-name">' + escapeHtml(item.name) + '</span>' +
             '<span class="holder-slot-state">' + escapeHtml(positionDisplayState(position)) + '</span>';
 
-        const insertSize = insertWindowPercent(position);
-
-        if (insertSize) {
-            const insertWindow = document.createElement('span');
-            insertWindow.className = 'holder-insert-window';
-            insertWindow.style.width = insertSize.width + '%';
-            insertWindow.style.height = insertSize.height + '%';
-            slot.appendChild(insertWindow);
-        }
-
         slot.addEventListener('click', function() {
             selectHolderPosition(item.name);
         });
@@ -5052,60 +3460,7 @@ function renderHolder() {
     });
     controls.appendChild(row);
 
-    if (insertCatalogState.length) {
-        const insertLabel = document.createElement('label');
-        insertLabel.textContent = 'Insert reduction (optional)';
-        controls.appendChild(insertLabel);
-        const insertSelect = document.createElement('select');
-        insertSelect.innerHTML = '<option value="">No insert</option>';
-        insertCatalogState
-            .filter(function(insert) {
-                return insertFitsPosition(
-                    insert,
-                    position
-                );
-            })
-            .forEach(function(insert) {
-            const option = document.createElement('option');
-            option.value = insert.entryId;
-            option.textContent = insert.name;
-            option.selected = position.insertReduction && position.insertReduction.entryId === insert.entryId;
-            insertSelect.appendChild(option);
-        });
-        insertSelect.addEventListener('change', function() {
-            position.insertReduction = insertCatalogState.find(function(insert) {
-                return insert.entryId === insertSelect.value;
-            }) || null;
 
-            if (
-                position.substrate &&
-                geometryXY(position.substrate.geometry) &&
-                !substrateFitsPosition(
-                    position.substrate,
-                    position
-                )
-            ) {
-                position.substrate = null;
-                position.pendingTreatments = [];
-            }
-
-            experimentState.currentFilledDirty = true;
-
-            renderHolder();
-
-            if (
-                position.position_usage ===
-                'substrate'
-            ) {
-                renderSubstrateResults();
-                renderTreatmentHistory();
-            }
-
-            updateProcessingButtonV2();
-            updateStatePreview();
-        });
-        controls.appendChild(insertSelect);
-    }
 
     if (positionControlsPanel) {
         positionControlsPanel.appendChild(controls);
@@ -5264,40 +3619,6 @@ window.addEventListener('message', function(event) {
 });
 
 
-function refreshExistingLayerSelectors() {
-    document.querySelectorAll('#layerStackList .layer-card').forEach(function(card) {
-        const controls = card.querySelectorAll('select');
-        if (controls.length < 2) return;
-
-        [
-            [controls[0], layerCatalogState.compositions, 'Select composition...', true],
-            [controls[1], layerCatalogState.dopants, 'None', false]
-        ].forEach(function(spec) {
-            const [select, values, emptyLabel, includeOther] = spec;
-            const previous = select.value;
-
-            select.replaceChildren(new Option(emptyLabel, ''));
-
-            values.forEach(function(value) {
-                select.add(new Option(value, value));
-            });
-
-            if (previous && previous !== '__other__' &&
-                !values.includes(previous)) {
-                const stale = new Option(previous + ' (not in catalog)', previous);
-                stale.disabled = true;
-                select.add(stale);
-            }
-
-            if (includeOther) {
-                select.add(new Option('Other...', '__other__'));
-            }
-
-            select.value = previous;
-        });
-    });
-}
-
 let experimentCatalogRefreshPromise = null;
 
 function refreshExperimentCatalogs() {
@@ -5318,12 +3639,10 @@ function refreshExperimentCatalogs() {
 
         await Promise.all([
             initialiseHolderSelect(),
-            loadLayerCatalog(),
             loadUploads(),
             recipe ? initialiseTreatmentRecipes() : Promise.resolve()
         ]);
 
-        refreshExistingLayerSelectors();
 
         function restore(select, value) {
             if (value && Array.from(select.options).some(function(opt) {
@@ -5369,21 +3688,8 @@ async function refreshSubstrateData() {
                 }
             );
 
-        if (
-            refreshed &&
-            substrateHasBeenCut(
-                refreshed
-            )
-        ) {
-            position.substrate = null;
-            position.pendingTreatments = [];
-            experimentState.currentFilledDirty = true;
-        } else if (refreshed) {
-            position.substrate =
-                Object.assign(
-                    {},
-                    refreshed
-                );
+        if (refreshed) {
+            position.substrate = Object.assign({}, refreshed);
         }
     }
     renderSubstrateResults();
@@ -5401,63 +3707,11 @@ function renderTreatmentQueue() {
 
 
 /*
- * Use only existing NOMAD Geometry sections in a Filled Holder.
- * Physical holder slots currently use the existing two-dimensional
- * RectangularGeometryPDI, which is NOT derived from Geometry.
- * Keep the footprint and leave height unset rather than inventing it.
+ * Do not serialize RectangleCuboid/SquareCuboid as FilledHolder slot_geometry:
+ * these original classes are not Geometry subclasses in NOMAD 1.4.3.
+ * The local draft exporter omits unsupported geometries explicitly.
  */
-function geometryForFilledHolderSlot(slot, positionName) {
-    if (!slot) return null;
-    const def = String(slot.m_def || '');
-    const isLegacyRectangle = (
-        def === 'pdi_nomad_plugin.mbe.instrument.RectangularGeometryPDI' ||
-        (!def && slot.width != null && slot.length != null &&
-            slot.radius == null)
-    );
 
-    if (isLegacyRectangle) {
-        const width = Number(slot.width);
-        const length = Number(slot.length);
-        if (!(Number.isFinite(width) && width > 0 &&
-              Number.isFinite(length) && length > 0)) {
-            throw new Error(
-                'Invalid rectangular slot dimensions for position ' +
-                positionName + '.'
-            );
-        }
-        const isSquare = Math.abs(width - length) <= 1e-12;
-        return {
-            m_def: 'nomad_material_processing.general.' +
-                (isSquare ? 'SquareCuboid' : 'RectangleCuboid'),
-            width: width,
-            length: length
-        };
-    }
-
-    const allowed = new Set([
-        'nomad_material_processing.general.SquareCuboid',
-        'nomad_material_processing.general.RectangleCuboid',
-        'nomad_material_processing.general.Cylinder',
-        'nomad_material_processing.general.CylinderSector'
-    ]);
-    if (!allowed.has(def)) {
-        throw new Error(
-            'Unsupported slot geometry for position ' + positionName +
-            ': ' + (def || '(no m_def)')
-        );
-    }
-    const copy = JSON.parse(JSON.stringify(slot));
-    delete copy.m_parent_sub_section;
-    return copy;
-}
-
-/*
- * Polar rho/theta in the physical holder describe a radial distance
- * (meters) and an in-plane angle (degrees). The Filled Holder defines
- * its rho/theta differently and without units. Thus store only the
- * well-defined x/y coordinates (meters); keep the physical holder as
- * the authoritative source for the original polar data.
- */
 function xyForFilledHolderPosition(position, positionName) {
     const present = function(value) {
         return value !== null && value !== undefined && value !== '';
@@ -5494,102 +3748,7 @@ function xyForFilledHolderPosition(position, positionName) {
 }
 
 function filledHolderArchiveData() {
-    if (!experimentState.holder) throw new Error('Select a holder first.');
-    if (!experimentState.holder.uploadId || !experimentState.holder.entryId) {
-        throw new Error('Selected physical holder has no complete NOMAD reference.');
-    }
-
-    const positions = [];
-    Object.entries(experimentState.positions).forEach(function(entry) {
-        const positionName = entry[0];
-        const position = entry[1];
-        if (!position.position_usage) return;
-        const item = {
-            name: positionName,
-            position_usage: position.position_usage,
-            ...xyForFilledHolderPosition(position, positionName)
-        };
-        const slot = geometryForFilledHolderSlot(
-            position.slot_geometry, positionName
-        );
-        if (slot) item.slot_geometry = slot;
-        if (position.position_usage === 'substrate') {
-            if (!position.substrate) {
-                throw new Error('Position ' + positionName + ' is marked as substrate but no substrate is selected.');
-            }
-
-            if (
-                substrateHasBeenCut(
-                    position.substrate
-                )
-            ) {
-                throw new Error(
-                    'Substrate ' +
-                    (
-                        position.substrate.labId ||
-                        position.substrate.entryName ||
-                        position.substrate.entryId
-                    ) +
-                    ' has been cut into child samples and is no longer physically available.'
-                );
-            }
-
-            let ref = position.substrate.reference || '';
-            if (!ref) {
-                if (!position.substrate.uploadId || !position.substrate.entryId) {
-                    throw new Error('Substrate in position ' + positionName + ' has no complete NOMAD reference.');
-                }
-                ref = nomadArchiveReference(position.substrate.uploadId, position.substrate.entryId);
-            }
-            item.substrate = {
-                name: position.substrate.labId || position.substrate.entryName || position.substrate.entryId,
-                reference: ref
-            };
-        }
-        if (position.insertReduction) {
-            let insertRef = position.insertReduction.reference || '';
-            if (!insertRef && position.insertReduction.uploadId && position.insertReduction.entryId) {
-                insertRef = nomadArchiveReference(position.insertReduction.uploadId, position.insertReduction.entryId);
-            }
-            if (insertRef) {
-                item.insert_reduction = {
-                    name: position.insertReduction.name || position.insertReduction.entryId,
-                    reference: insertRef
-                };
-            }
-        }
-        positions.push(item);
-    });
-
-    if (!positions.length) throw new Error('No holder positions are configured.');
-
-    const existing = experimentState.holder.filledHolder;
-    const now = new Date();
-    const dateLabel = now.toISOString().slice(0, 10);
-    const name = existing && existing.data && existing.data.name ?
-        existing.data.name : experimentState.holder.id + ' fill ' + dateLabel;
-    const existingTags = existing && existing.data && Array.isArray(existing.data.tags) ? existing.data.tags : [];
-
-    const archive = {
-        m_def: 'pdi_nomad_plugin.mbe.instrument.FilledSubstrateHolderPDI',
-        name: name,
-        lab_id: experimentState.holder.id,
-        datetime: existing && existing.data ? existing.data.datetime : now.toISOString(),
-        tags: existingTags.filter(function(tag) { return tag !== 'discarded_loadout'; }),
-        substrate_holder: nomadArchiveReference(experimentState.holder.uploadId, experimentState.holder.entryId),
-        positions: positions
-    };
-
-    // The original normalizer does not import holder metadata when
-    // positions are already present. Preserve this existing field here.
-    const physicalData = experimentState.holder.archiveData || {};
-    if (Array.isArray(physicalData.holder_material) &&
-        physicalData.holder_material.length) {
-        archive.holder_material = JSON.parse(
-            JSON.stringify(physicalData.holder_material)
-        );
-    }
-    return archive;
+    throw new Error('Cannot save a filled holder until position usage, dummy inserts and lifecycle have been mapped to original FilledSubstrateHolder quantities.');
 }
 
 
@@ -5600,75 +3759,11 @@ function filledHolderArchiveData() {
  *
  * Use NOMAD's existing processing result; do not run or replace normalizers.
  */
-async function uploadArchiveDataV2(uploadId, filename, data, overwrite) {
-    const params = new URLSearchParams();
-    params.append('file_name', filename);
-    params.append('overwrite_if_exists', overwrite ? 'true' : 'false');
-    params.append('trigger_processing', 'true');
-    params.append('wait_for_processing', 'true');
-    params.append('include_archive', 'true');
-
-    const response = await fetch(
-        nomadApiBase() + '/uploads/' + encodeURIComponent(uploadId) + '/raw/?' + params.toString(),
-        {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify({data: data}, null, 2)
-        }
+async function uploadArchiveDataV2() {
+    throw new Error(
+        'New MBE Experiment saving is disabled: no verified original EntryData root ' +
+        'is available for the MBE and filled-holder sections.'
     );
-    if (!response.ok) {
-        let detail = '';
-        try {
-            const errorData = await response.json();
-            detail = errorData.detail ? ': ' + JSON.stringify(errorData.detail) : '';
-        } catch (_) {}
-        throw new Error('Archive upload failed (' + response.status + ')' + detail);
-    }
-
-    let result;
-    try {
-        result = await response.json();
-    } catch (_) {
-        throw new Error(
-            'NOMAD accepted ' + filename +
-            ' but did not return a JSON processing result. ' +
-            'Inspect the entry before retrying the upload.'
-        );
-    }
-
-    const processing = result && result.processing;
-    const entry = processing && processing.entry;
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-        throw new Error(
-            'NOMAD did not confirm entry processing for ' + filename +
-            '. Inspect the upload and holder status before retrying.'
-        );
-    }
-
-    const errors = Array.isArray(entry.errors) ? entry.errors : [];
-    const warnings = Array.isArray(entry.warnings) ? entry.warnings : [];
-    const processStatus = String(entry.process_status || '').toUpperCase();
-
-    if (errors.length || ['FAILURE', 'FAILED', 'ERROR'].includes(processStatus)) {
-        throw new Error(
-            'NOMAD processing failed for ' + filename + ': ' +
-            (errors.length ? errors.map(String).join('; ') : processStatus)
-        );
-    }
-    if (entry.process_running === true || processStatus !== 'SUCCESS') {
-        throw new Error(
-            'NOMAD has not confirmed successful processing of ' + filename +
-            ' (status: ' + (processStatus || 'missing') + '). ' +
-            'Inspect the entry before changing the holder status.'
-        );
-    }
-    if (warnings.length) {
-        console.warn('NOMAD processing warnings for ' + filename + ':', warnings);
-    }
-    return result;
 }
 
 
@@ -5678,578 +3773,55 @@ function loadoutTimestamp() {
 
 
 
-function holderTagsWithWorkflowStatus(tags, nextStatus) {
-    const reserved =
-        new Set([
-            'empty',
-            'ungrown',
-            'grown'
-        ]);
-
-    const result =
-        (Array.isArray(tags) ? tags : [])
-            .filter(function(tag) {
-                return !reserved.has(tag);
-            });
-
-    if (nextStatus) {
-        result.push(nextStatus);
-    }
-
-    return result;
-}
+// Original SubstrateHolder has no tags or grown/ungrown status.
+// Never construct synthetic holder lifecycle quantities.
 
 
 async function setPhysicalHolderWorkflowStatus(nextStatus) {
-    const holder =
-        experimentState.holder;
-
-    if (!holder) {
-        throw new Error(
-            'No physical holder is selected.'
-        );
-    }
-
-    if (
-        !['empty', 'ungrown', 'grown']
-            .includes(nextStatus)
-    ) {
-        throw new Error(
-            'Invalid holder workflow status: ' +
-            nextStatus
-        );
-    }
-
-    const metadata =
-        holder.metadata || {};
-
-    const uploadId =
-        holder.uploadId ||
-        metadata.upload_id ||
-        '';
-
-    const mainfile =
-        metadata.mainfile ||
-        '';
-
-    if (
-        metadata.published === true
-    ) {
-        throw new Error(
-            'Published physical holders are read-only.'
-        );
-    }
-
-    if (
-        !uploadId ||
-        !mainfile
-    ) {
-        throw new Error(
-            'Physical holder lacks upload or mainfile and cannot be updated safely.'
-        );
-    }
-
-    /*
-     * Work on a complete copy of the existing physical
-     * holder archive so no geometry or metadata is lost.
-     */
-    const data =
-        JSON.parse(
-            JSON.stringify(
-                holder.archiveData || {}
-            )
-        );
-
-    data.tags =
-        holderTagsWithWorkflowStatus(
-            data.tags,
-            nextStatus
-        );
-
-    await uploadArchiveDataV2(
-        uploadId,
-        mainfile,
-        data,
-        true
-    );
-
-    /*
-     * Keep the in-memory holder synchronized with NOMAD.
-     */
-    holder.archiveData =
-        data;
-
-    holder.workflowStatus =
-        nextStatus;
-
-    const label =
-        document.getElementById(
-            'holderLabel'
-        );
-
-    if (label) {
-        label.textContent =
-            holder.id +
-            ' · ' +
-            nextStatus;
-    }
+    throw new Error('Original SubstrateHolder has no tags/status quantities; cannot persist ' + nextStatus + ' as invented metainfo.');
 }
 
 
-async function saveFilledHolderToNomad(options) {
-    options = options || {};
-    const button = document.getElementById('saveFilledHolderButton');
-    const status = document.getElementById('filledHolderSaveStatus');
-    const targetUpload = document.getElementById('targetUpload').value;
-    if (!experimentState.holder) {
-        if (status) status.textContent = 'Select a holder first.';
-        throw new Error('Select a holder first.');
-    }
-
-    const existing = experimentState.holder.filledHolder;
-    let uploadId;
-    let filename;
-    let entryId;
-    let overwrite = false;
-
-    if (existing) {
-        if (existing.published) {
-            if (status) status.textContent = 'Published filled holders are read-only.';
-            throw new Error('Published filled holders are read-only.');
-        }
-        uploadId = existing.uploadId;
-        filename = existing.mainfile;
-        entryId = existing.entryId;
-        overwrite = true;
-        if (!uploadId || !filename || !entryId) {
-            throw new Error('Existing filled holder lacks upload, mainfile, or entry ID and cannot be updated safely.');
-        }
-    } else {
-        if (!targetUpload) {
-            if (status) status.textContent = 'Select a target upload first.';
-            throw new Error('Select a target upload first.');
-        }
-        uploadId = targetUpload;
-        const holderId = experimentSafePart(experimentState.holder.id);
-        filename = holderId + '_fill_' + loadoutTimestamp() + '.FilledSubstrateHolder.archive.yaml';
-        entryId = await archiveEntryId(uploadId, filename);
-    }
-
-    if (button) button.disabled = true;
-    let filledArchiveSaved = false;
-    let holderMarkedUngrown = false;
-    try {
-        if (status && !options.silent) status.textContent = existing ? 'Updating filled holder...' : 'Saving filled holder...';
-        const data = filledHolderArchiveData();
-        await uploadArchiveDataV2(uploadId, filename, data, overwrite);
-        filledArchiveSaved = true;
-
-        /*
-         * Remember the persisted loadout before changing the physical
-         * holder status, so a failed status update does not prompt us
-         * to create a duplicate FilledSubstrateHolder.
-         */
-        experimentState.holder.filledHolder = {
-            entryId: entryId,
-            uploadId: uploadId,
-            name: data.name,
-            mainfile: filename,
-            published: false,
-            data: data,
-            metadata: {upload_id: uploadId, mainfile: filename, published: false}
-        };
-        experimentState.currentFilledDirty = false;
-
-        /*
-         * The FilledSubstrateHolderPDI is an occupancy snapshot.
-         * The SubstrateHolderPDI carries the current workflow status.
-         */
-        await setPhysicalHolderWorkflowStatus('ungrown');
-        holderMarkedUngrown = true;
-        if (status && !options.silent) status.textContent = 'Filled holder saved. You can close the app and continue later.';
-        updateStatePreview();
-
-        await refreshSubstrateData();
-        await initialiseHolderSelect();
-
-        const holderSelect =
-            document.getElementById('holderSelect');
-
-        const physicalHolderEntryId =
-            experimentState.holder
-                ? experimentState.holder.entryId
-                : '';
-
-        if (
-            holderSelect &&
-            physicalHolderEntryId &&
-            Array.from(holderSelect.options).some(
-                function(option) {
-                    return (
-                        option.value ===
-                        physicalHolderEntryId
-                    );
-                }
-            )
-        ) {
-            holderSelect.value =
-                physicalHolderEntryId;
-        }
-
-        return nomadArchiveReference(uploadId, entryId);
-    } catch (error) {
-        let message = error.message;
-        if (filledArchiveSaved && !holderMarkedUngrown) {
-            message = 'Filled holder archive saved, but the physical holder status ' +
-                'could not be confirmed: ' + message +
-                '. Inspect the entries before retrying.';
-        } else if (holderMarkedUngrown) {
-            message = 'Filled holder saved and marked ungrown, but refreshing ' +
-                'the UI failed: ' + message;
-        }
-        if (status && !options.silent) status.textContent = 'Error: ' + message;
-        throw new Error(message);
-    } finally {
-        if (button) button.disabled = false;
-    }
+async function saveFilledHolderToNomad() {
+    throw new Error(
+        'A FilledSubstrateHolder is an original NOMAD section, not a verified ' +
+        'EntryArchive.data root. Export a local draft instead; nothing was saved to NOMAD.'
+    );
 }
 
 
 async function saveExperimentToNomad() {
-    const button =
-        document.getElementById(
-            'saveExperimentButton'
-        );
-
-    const status =
-        document.getElementById(
-            'experimentSaveStatus'
-        );
-
-    const uploadId =
-        document.getElementById(
-            'targetUpload'
-        ).value;
-
-    if (!uploadId) {
-        status.textContent =
-            'Select a target upload first.';
-        return;
-    }
-
-    if (!experimentState.growthRunId) {
-        status.textContent =
-            'Enter a Growth Run ID first.';
-        return;
-    }
-
-    if (!experimentState.holder) {
-        status.textContent =
-            'Select a holder first.';
-        return;
-    }
-
-    try {
-        nominalLayerArchiveData();
-    } catch (error) {
-        status.textContent =
-            'Error: ' + error.message;
-        return;
-    }
-
-    const physicalHolderEntryId =
-        experimentState.holder.entryId;
-
-    button.disabled = true;
-
-    let filledSavedThisAttempt = false;
-    let experimentArchiveSaved = false;
-    let holderMarkedGrown = false;
-
-    try {
-        let filledReference;
-
-        if (
-            !experimentState.holder.filledHolder ||
-            experimentState.currentFilledDirty
-        ) {
-            status.textContent =
-                'Saving filled holder...';
-
-            filledReference =
-                await saveFilledHolderToNomad({
-                    silent: true
-                });
-
-            filledSavedThisAttempt =
-                true;
-
-        } else {
-            const filled =
-                experimentState.holder.filledHolder;
-
-            filledReference =
-                nomadArchiveReference(
-                    filled.uploadId,
-                    filled.entryId
-                );
-        }
-
-        const growthRunId =
-            experimentSafePart(
-                experimentState.growthRunId
-            );
-
-        if (!growthRunId) {
-            throw new Error(
-                'Growth Run ID is invalid.'
-            );
-        }
-
-        const experimentFilename =
-            growthRunId +
-            '.ExperimentMbe.archive.yaml';
-
-        const experimentData =
-            experimentArchiveData(
-                filledReference
-            );
-
-        status.textContent =
-            'Saving experiment...';
-
-        await uploadArchiveDataV2(
-            uploadId,
-            experimentFilename,
-            experimentData,
-            false
-        );
-        experimentArchiveSaved = true;
-
-        /*
-         * Experiment exists successfully:
-         * the physical holder now contains grown samples.
-         */
-        await setPhysicalHolderWorkflowStatus(
-            'grown'
-        );
-        holderMarkedGrown = true;
-
-        rememberLayerCompositions();
-        experimentState.experimentSaved =
-            true;
-
-        /*
-         * A Growth Run ID belongs to exactly one
-         * experiment. Clear it immediately after save.
-         */
-        experimentState.growthRunId =
-            '';
-
-        const growthInput =
-            document.getElementById(
-                'growthRunId'
-            );
-
-        growthInput.value =
-            '';
-
-        updateCombinedId();
-
-        status.textContent =
-            'Experiment saved. Holder is now filled · grown. ' +
-            'Linked substrates are marked grown by the ExperimentMbePDI normalizer.';
-
-        document.getElementById(
-            'startNewExperimentButton'
-        ).style.display =
-            'block';
-
-        /*
-         * Refresh catalogs, but keep the page and target upload.
-         */
-        await refreshSubstrateData();
-        await initialiseHolderSelect();
-
-        const holderSelect =
-            document.getElementById(
-                'holderSelect'
-            );
-
-        if (
-            physicalHolderEntryId &&
-            Array.from(holderSelect.options).some(
-                function(option) {
-                    return (
-                        option.value ===
-                        physicalHolderEntryId
-                    );
-                }
-            )
-        ) {
-            holderSelect.value =
-                physicalHolderEntryId;
-
-            await selectHolder();
-        }
-
-        updateStatePreview();
-
-    } catch (error) {
-        if (holderMarkedGrown) {
-            status.textContent =
-                'Experiment saved and holder marked grown, but refreshing the page failed: ' +
-                error.message;
-        } else if (experimentArchiveSaved) {
-            status.textContent =
-                'Experiment archive saved and processed, but marking the physical holder ' +
-                'grown failed: ' + error.message +
-                '. Do not create a second experiment; check the existing entry and holder.';
-        } else if (filledSavedThisAttempt) {
-            status.textContent =
-                'Filled holder was saved, but the experiment was not confirmed: ' +
-                error.message;
-        } else {
-            status.textContent = 'Error: ' + error.message;
-        }
-
-    } finally {
-        button.disabled =
-            false;
-    }
+    throw new Error(
+        'MolecularBeamEpitaxy is not an EntryData root in the installed original schema. ' +
+        'Export a local draft instead; nothing was saved to NOMAD.'
+    );
 }
+
 
 async function emptyCurrentHolder() {
-    const status =
-        document.getElementById(
-            'filledHolderSaveStatus'
-        );
-
+    // Clear only local assignments. The original holder schema has no persisted
+    // empty/grown lifecycle status, and historical loadouts must not be edited.
+    const status = document.getElementById('filledHolderSaveStatus');
     if (!experimentState.holder) {
-        status.textContent =
-            'Select a holder first.';
+        if (status) status.textContent = 'Select a holder first.';
         return;
     }
-
-    const holder =
-        experimentState.holder;
-
-    const workflowStatus =
-        holder.workflowStatus ||
-        holderWorkflowStatus(
-            holder.archiveData || {}
-        );
-
-    const filled =
-        holder.filledHolder;
-
-    try {
-        /*
-         * No saved FilledSubstrateHolder exists:
-         * just release the physical holder.
-         */
-        if (!filled) {
-            await setPhysicalHolderWorkflowStatus(
-                'empty'
-            );
-
-            resetHolderSelection(true);
-
-            await initialiseHolderSelect();
-
-            status.textContent =
-                'Holder is empty and available.';
-
-            return;
-        }
-
-        if (filled.published) {
-            status.textContent =
-                'Published filled holders are read-only.';
-            return;
-        }
-
-        /*
-         * A grown loadout is historical experiment data.
-         * Never mark it as discarded.
-         *
-         * Taking samples off only changes the CURRENT
-         * physical holder state.
-         */
-        if (workflowStatus === 'grown') {
-            await setPhysicalHolderWorkflowStatus(
-                'empty'
-            );
-
-            resetHolderSelection(true);
-
-            await initialiseHolderSelect();
-
-            status.textContent =
-                'Samples removed. Historical grown loadout retained; holder is now empty.';
-
-            return;
-        }
-
-        /*
-         * Ungrown holder:
-         * this is a prepared loadout that was abandoned
-         * before a growth experiment was completed.
-         */
-        if (
-            !filled.uploadId ||
-            !filled.mainfile
-        ) {
-            status.textContent =
-                'Filled holder cannot be updated safely because its raw file is unknown.';
-            return;
-        }
-
-        const data =
-            filledHolderArchiveData();
-
-        const tags =
-            Array.isArray(data.tags)
-                ? data.tags.slice()
-                : [];
-
-        if (
-            !tags.includes(
-                'discarded_loadout'
-            )
-        ) {
-            tags.push(
-                'discarded_loadout'
-            );
-        }
-
-        data.tags =
-            tags;
-
-        await uploadArchiveDataV2(
-            filled.uploadId,
-            filled.mainfile,
-            data,
-            true
-        );
-
-        await setPhysicalHolderWorkflowStatus(
-            'empty'
-        );
-
-        resetHolderSelection(true);
-
-        await initialiseHolderSelect();
-
-        status.textContent =
-            'Unused loadout retained in NOMAD as discarded; holder is now empty.';
-
-    } catch (error) {
-        status.textContent =
-            'Error: ' +
-            error.message;
+    const physicalPositions = Array.isArray(experimentState.holder.archiveData.positions)
+        ? experimentState.holder.archiveData.positions : [];
+    experimentState.positions = {};
+    physicalPositions.forEach(function(position) {
+        if (position.name) experimentState.positions[position.name] = makePositionState(position);
+    });
+    experimentState.activePositionName = null;
+    experimentState.currentFilledDirty = true;
+    renderHolder();
+    renderTreatmentHistory();
+    updateStatePreview();
+    if (status) {
+        status.textContent = 'Local assignments cleared. No NOMAD holder or historical loadout was changed.';
     }
 }
+
 
 function resetHolderSelection(clearSelect) {
     experimentState.holder = null;
@@ -6275,9 +3847,9 @@ async function startNewExperiment() {
     experimentState.experimentSaved = false;
     document.getElementById('growthRunId').value = '';
     document.getElementById('experimentSaveStatus').textContent = 'Configure the next experiment.';
-    document.getElementById('filledHolderSaveStatus').textContent = 'A holder loadout can be saved without a Growth Run ID.';
+    document.getElementById('filledHolderSaveStatus').textContent =
+        'Local holder assignments only; NOMAD writes remain disabled.';
     document.getElementById('startNewExperimentButton').style.display = 'none';
-    resetLayerStack();
     resetHolderSelection(true);
     await Promise.all([initialiseHolderSelect(), refreshSubstrateData()]);
     if (targetUpload) document.getElementById('targetUpload').value = targetUpload;
@@ -6294,7 +3866,71 @@ function updateCombinedId() {
 }
 
 
+function downloadLocalMbeDraft() {
+    const status = document.getElementById('experimentSaveStatus');
+    try {
+        const draft = window.NomadMbeDrafts.build(
+            experimentState, [], nomadArchiveReference,
+            xyForFilledHolderPosition
+        );
+        const filename = experimentSafePart(experimentState.growthRunId || 'MBE') +
+            '_LOCAL_DRAFT_NOT_NOMAD_ENTRY.json';
+        const blob = new Blob([JSON.stringify(draft, null, 2)],
+            {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        if (status) status.textContent =
+            'Local draft exported. This is NOT a NOMAD archive and nothing was uploaded.';
+    } catch (error) {
+        if (status) status.textContent = 'Draft export failed: ' + error.message;
+    }
+}
+
+function hideUnmappedNominalLayerControls() {
+    // The nominal-layer UI was backed exclusively by the removed custom schema.
+    const list = document.getElementById('layerStackList');
+    if (list) {
+        const panel = list.closest('section, .card, .panel');
+        const sharedPanel = panel && (
+            panel.querySelector('#holderGrid') ||
+            panel.querySelector('#growthRunId')
+        );
+        if (panel && !sharedPanel) panel.hidden = true;
+        else list.hidden = true;
+    }
+    ['layerStackPreview', 'addLayerButton', 'resetLayerButton'].forEach(function(id) {
+        const element = document.getElementById(id);
+        if (element) element.hidden = true;
+    });
+}
+
+function configureOriginalSchemaWriteSafety() {
+    const disabled = [
+        ['saveFilledHolderButton', 'filledHolderSaveStatus'],
+        ['saveExperimentButton', 'experimentSaveStatus']
+    ];
+    disabled.forEach(function(ids) {
+        const button = document.getElementById(ids[0]);
+        const status = document.getElementById(ids[1]);
+        if (button) {
+            button.disabled = true;
+            button.title = 'Original NOMAD section has no verified EntryData root';
+        }
+        if (status) status.textContent =
+            'NOMAD write disabled: the original section is not an EntryData root. ' +
+            'Use Export local draft; this does not create a NOMAD entry.';
+    });
+}
+
 async function initialiseWorkflowV2() {
+    configureOriginalSchemaWriteSafety();
+    hideUnmappedNominalLayerControls();
     installTargetUploadPersistence();
 
     await loadUploads();
@@ -6321,7 +3957,6 @@ async function initialiseWorkflowV2() {
         initialiseSubstrates(),
         initialiseTreatmentHistory(),
         initialiseHolderSelect(),
-        initialiseLayerStack()
     ]);
 
     updateCombinedId();

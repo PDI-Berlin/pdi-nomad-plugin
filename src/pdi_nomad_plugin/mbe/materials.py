@@ -1,4 +1,3 @@
-import numpy as np
 from nomad.datamodel.data import EntryData
 from nomad.datamodel.metainfo.annotations import (
     ELNAnnotation,
@@ -39,138 +38,6 @@ from pdi_nomad_plugin.utils import (
 
 m_package = SchemaPackage()
 
-ELEMENT_SYMBOLS = (
-    'H',
-    'He',
-    'Li',
-    'Be',
-    'B',
-    'C',
-    'N',
-    'O',
-    'F',
-    'Ne',
-    'Na',
-    'Mg',
-    'Al',
-    'Si',
-    'P',
-    'S',
-    'Cl',
-    'Ar',
-    'K',
-    'Ca',
-    'Sc',
-    'Ti',
-    'V',
-    'Cr',
-    'Mn',
-    'Fe',
-    'Co',
-    'Ni',
-    'Cu',
-    'Zn',
-    'Ga',
-    'Ge',
-    'As',
-    'Se',
-    'Br',
-    'Kr',
-    'Rb',
-    'Sr',
-    'Y',
-    'Zr',
-    'Nb',
-    'Mo',
-    'Tc',
-    'Ru',
-    'Rh',
-    'Pd',
-    'Ag',
-    'Cd',
-    'In',
-    'Sn',
-    'Sb',
-    'Te',
-    'I',
-    'Xe',
-    'Cs',
-    'Ba',
-    'La',
-    'Ce',
-    'Pr',
-    'Nd',
-    'Pm',
-    'Sm',
-    'Eu',
-    'Gd',
-    'Tb',
-    'Dy',
-    'Ho',
-    'Er',
-    'Tm',
-    'Yb',
-    'Lu',
-    'Hf',
-    'Ta',
-    'W',
-    'Re',
-    'Os',
-    'Ir',
-    'Pt',
-    'Au',
-    'Hg',
-    'Tl',
-    'Pb',
-    'Bi',
-    'Po',
-    'At',
-    'Rn',
-    'Fr',
-    'Ra',
-    'Ac',
-    'Th',
-    'Pa',
-    'U',
-    'Np',
-    'Pu',
-    'Am',
-    'Cm',
-    'Bk',
-    'Cf',
-    'Es',
-    'Fm',
-    'Md',
-    'No',
-    'Lr',
-    'Rf',
-    'Db',
-    'Sg',
-    'Bh',
-    'Hs',
-    'Mt',
-    'Ds',
-    'Rg',
-    'Cn',
-    'Nh',
-    'Fl',
-    'Mc',
-    'Lv',
-    'Ts',
-    'Og',
-)
-
-MBE_DOPANT_ELEMENTS = (
-    'Ba',
-    'Ge',
-    'Sn',
-    'Si',
-    'La',
-    'In',
-    'Sb',
-    'Al',
-)
-
 
 class SubstrateMbe(SystemPDI, CrystallineSubstrate, EntryData):
     """
@@ -194,12 +61,9 @@ class SubstrateMbe(SystemPDI, CrystallineSubstrate, EntryData):
                     'datetime',
                     'supplier',
                     'supplier_id',
-                    'material_designation',
                     'crystal_id',
                     'charge_id',
                     'polishing',
-                    'offcut_angle',
-                    'offcut_direction',
                     'lab_id',
                     'epi_ready',
                     'substrate_image',
@@ -224,18 +88,6 @@ class SubstrateMbe(SystemPDI, CrystallineSubstrate, EntryData):
             component=ELNComponentEnum.DateEditQuantity,
         ),
     )
-    material_designation = Quantity(
-        type=str,
-        description=(
-            'Human-readable substrate material designation, '
-            'e.g. SrTiO3, GdScO3, YSZ, or BaSnO3.'
-        ),
-        a_eln=ELNAnnotation(
-            component='StringEditQuantity',
-            label='Material / Crystal designation',
-        ),
-    )
-
     crystal_id = Quantity(
         type=str,
         description=(
@@ -269,34 +121,6 @@ class SubstrateMbe(SystemPDI, CrystallineSubstrate, EntryData):
             component=ELNComponentEnum.EnumEditQuantity,
         ),
     )
-    surface_orientation_label = Quantity(
-        type=str,
-        description=(
-            'Compact surface orientation used for substrate catalogue '
-            'display and search.'
-        ),
-    )
-    offcut_angle = Quantity(
-        type=float,
-        unit='degree',
-        description='Nominal substrate offcut angle.',
-        a_eln=ELNAnnotation(
-            component='NumberEditQuantity',
-            label='Offcut angle',
-        ),
-    )
-    offcut_direction = Quantity(
-        type=str,
-        description='Crystallographic direction towards which the substrate is offcut.',
-        a_eln=ELNAnnotation(
-            component='StringEditQuantity',
-            label='Offcut direction',
-        ),
-    )
-    offcut_label = Quantity(
-        type=str,
-        description='Compact offcut description used for catalogue display and search.',
-    )
     description = Quantity(
         type=str,
         description='description',
@@ -326,36 +150,6 @@ class SubstrateMbe(SystemPDI, CrystallineSubstrate, EntryData):
             self.processed = False
         if self.grown is None:
             self.grown = False
-
-        # Build compact orientation and offcut labels for catalogue search/display.
-        if self.crystal_properties:
-            surface_orientation = getattr(
-                self.crystal_properties, 'surface_orientation', None
-            )
-            hkl = getattr(surface_orientation, 'hkl_reciprocal', None)
-            if hkl:
-                indices = [
-                    getattr(hkl, 'h_index', None),
-                    getattr(hkl, 'k_index', None),
-                    getattr(hkl, 'l_index', None),
-                ]
-                if all(index is not None for index in indices):
-                    formatted_indices = []
-                    for index in indices:
-                        value = float(index)
-                        if value.is_integer():
-                            formatted_indices.append(str(int(value)))
-                        else:
-                            formatted_indices.append(f'{value:g}')
-                    self.surface_orientation_label = f'({"".join(formatted_indices)})'
-
-        if self.offcut_angle is not None:
-            angle = self.offcut_angle
-            if hasattr(angle, 'magnitude'):
-                angle = angle.magnitude
-            self.offcut_label = f'{float(angle):g}Â°'
-        else:
-            self.offcut_label = None
 
         # -------------------------------------------------
         # Construct substrate ID if not explicitly given
@@ -470,7 +264,7 @@ class SubstrateMbe(SystemPDI, CrystallineSubstrate, EntryData):
                 if clean_raw.lower() in lattice_map:
                     material.symmetry.bravais_lattice = lattice_map[clean_raw.lower()]
                     logger.info(
-                        f'âœ“ Mapped lattice: {clean_raw} -> '
+                        f'✓ Mapped lattice: {clean_raw} -> '
                         f'{lattice_map[clean_raw.lower()]}'
                     )
 
@@ -479,7 +273,7 @@ class SubstrateMbe(SystemPDI, CrystallineSubstrate, EntryData):
                     in material.symmetry.m_def.quantities['bravais_lattice'].type
                 ):
                     material.symmetry.bravais_lattice = clean_raw
-                    logger.info(f'âœ“ Set lattice directly: {clean_raw}')
+                    logger.info(f'✓ Set lattice directly: {clean_raw}')
                 else:
                     logger.warning(f'Ignoring invalid bravais_lattice: {clean_raw}')
             else:
@@ -498,7 +292,7 @@ class SubstrateMbe(SystemPDI, CrystallineSubstrate, EntryData):
                 if lattice == 'hR':
                     material.symmetry.crystal_system = 'trigonal'
                     logger.info(
-                        "âœ“ Inferred crystal_system 'trigonal' from lattice 'hR'"
+                        "✓ Inferred crystal_system 'trigonal' from lattice 'hR'"
                     )
                 else:
                     # Standard lookup
@@ -513,7 +307,7 @@ class SubstrateMbe(SystemPDI, CrystallineSubstrate, EntryData):
                     if pearson_first in system_lookup:
                         material.symmetry.crystal_system = system_lookup[pearson_first]
                         logger.info(
-                            f'âœ“ Inferred crystal_system '
+                            f'✓ Inferred crystal_system '
                             f"'{system_lookup[pearson_first]}' "
                             f"from lattice '{lattice}'"
                         )
@@ -546,12 +340,9 @@ class SubstrateBatchMbe(SubstrateMbe, EntryData):
                     'datetime',
                     'supplier',
                     'supplier_id',
-                    'material_designation',
                     'crystal_id',
                     'charge_id',
                     'polishing',
-                    'offcut_angle',
-                    'offcut_direction',
                     'lab_id',
                     'number_of_substrates',
                     'epi_ready',
@@ -647,14 +438,14 @@ class SubstrateBatchMbe(SubstrateMbe, EntryData):
                         m_context=archive.m_context,
                         metadata=EntryMetadata(upload_id=archive.m_context.upload_id),
                     )
-                    if not archive.m_context.raw_path_exists(substrate_filename):
-                        create_archive(
-                            substrate_archive.m_to_dict(),
-                            archive.m_context,
-                            substrate_filename,
-                            filetype,
-                            logger,
-                        )
+                    create_archive(
+                        substrate_archive.m_to_dict(),
+                        archive.m_context,
+                        substrate_filename,
+                        filetype,
+                        logger,
+                        overwrite=True,
+                    )
                     self.substrates.append(
                         CompositeSystemReference(
                             name=substrate_object.name,
@@ -691,32 +482,6 @@ class ThinFilmMbe(SystemPDI, ThinFilm, EntryData):
         description='Searchable tags for this entry. Use Explore tab for searching.',
         a_eln=ELNAnnotation(
             component='StringEditQuantity',
-        ),
-    )
-    chemical_formula = Quantity(
-        type=str,
-        description='Nominal chemical formula of this thin-film layer.',
-        a_eln=ELNAnnotation(
-            component=ELNComponentEnum.StringEditQuantity,
-            label='Composition',
-        ),
-    )
-    dopant_element = Quantity(
-        type=MEnum(*MBE_DOPANT_ELEMENTS),
-        description='Chemical element used as dopant in this layer.',
-        a_eln=ELNAnnotation(
-            component=ELNComponentEnum.EnumEditQuantity,
-            label='Dopant element',
-        ),
-    )
-    nominal_thickness = Quantity(
-        type=np.float64,
-        unit='meter',
-        description='Nominal thickness of this thin-film layer.',
-        a_eln=ELNAnnotation(
-            component=ELNComponentEnum.NumberEditQuantity,
-            label='Nominal thickness',
-            defaultDisplayUnit='nanometer',
         ),
     )
     test_quantities = Quantity(

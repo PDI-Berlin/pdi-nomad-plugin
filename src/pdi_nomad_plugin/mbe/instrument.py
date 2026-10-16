@@ -664,7 +664,7 @@ class RfGeneratorHeater(PVDEvaporationSource):
 class VolumetricFlowRatePDI(VolumetricFlowRate):
     """
     The volumetric flow rate of a gas at standard conditions, i.e. the equivalent rate
-    at a temperature of 0 Â°C (273.15 K) and a pressure of 1 atm (101325 Pa).
+    at a temperature of 0 °C (273.15 K) and a pressure of 1 atm (101325 Pa).
     """
 
     m_def = Section(a_h5web=H5WebAnnotation(axes='time', signal='value'))
@@ -764,46 +764,10 @@ class PlasmaSourcePDI(SourcePDI, PVDSource):
     )
 
 
-class RectangularGeometryPDI(ArchiveSection):
-    """Two-dimensional rectangular geometry for holder slots and inserts."""
-
-    m_def = Section(label='Rectangular Geometry')
-
-    width = Quantity(
-        type=float,
-        unit='meter',
-        description='Width of the rectangular geometry.',
-        a_eln=ELNAnnotation(
-            component=ELNComponentEnum.NumberEditQuantity,
-            defaultDisplayUnit='millimeter',
-            label='Width',
-        ),
-    )
-
-    length = Quantity(
-        type=float,
-        unit='meter',
-        description='Length of the rectangular geometry.',
-        a_eln=ELNAnnotation(
-            component=ELNComponentEnum.NumberEditQuantity,
-            defaultDisplayUnit='millimeter',
-            label='Length',
-        ),
-    )
-
-
 class InsertReductionPDI(InsertReduction, EntryData):
     m_def = Section(
         label='InsertReduction',
         categories=[PDIMBECategory],
-    )
-
-    inner_geometry = SubSection(
-        section_def=RectangularGeometryPDI,
-    )
-
-    outer_geometry = SubSection(
-        section_def=RectangularGeometryPDI,
     )
     tags = Quantity(
         type=str,
@@ -816,10 +780,6 @@ class InsertReductionPDI(InsertReduction, EntryData):
 
 
 class SubstrateHolderPositionPDI(SubstrateHolderPosition):
-    slot_geometry = SubSection(
-        section_def=RectangularGeometryPDI,
-    )
-
     rho = Quantity(
         type=float,
         unit='meter',
@@ -868,23 +828,6 @@ class FilledSubstrateHolderPositionPDI(FilledSubstrateHolderPosition):
         description="""
         A short name for this position. This name is used as label of the position.
         """,
-    )
-
-    position_usage = Quantity(
-        type=MEnum(
-            'substrate',
-            'si_dummy',
-            'sapphire_dummy',
-        ),
-        description="""
-        Physical occupancy of this holder position.
-        Use 'substrate' for a scientific substrate referenced in NOMAD,
-        'si_dummy' for a protective silicon dummy, and 'sapphire_dummy'
-        for a sapphire / Al2O3 dummy without scientific data.
-        """,
-        a_eln=ELNAnnotation(
-            component='EnumEditQuantity',
-        ),
     )
     x_position = Quantity(
         type=float,

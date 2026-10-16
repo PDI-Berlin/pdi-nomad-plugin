@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from nomad.config import config
 
@@ -14,33 +14,44 @@ app = FastAPI()
 PROCESS_TYPES = {
     'cleaning': {
         'label': 'Cleaning',
-        'schema': 'pdi_nomad_plugin.general.schema.CleaningRecipePDI',
-        'processSchema': 'pdi_nomad_plugin.general.schema.CleaningPDI',
+        'schema': 'nomad_material_processing.general.CleaningRecipe',
+        'processSchema': 'nomad_material_processing.general.Cleaning',
     },
     'annealing': {
         'label': 'Annealing',
-        'schema': 'pdi_nomad_plugin.general.schema.AnnealingRecipePDI',
-        'processSchema': 'pdi_nomad_plugin.general.schema.AnnealingPDI',
+        'schema': 'nomad_material_processing.general.AnnealingRecipe',
+        'processSchema': 'nomad_material_processing.general.Annealing',
     },
     'etching': {
         'label': 'Etching',
-        'schema': 'pdi_nomad_plugin.general.schema.EtchingRecipePDI',
-        'processSchema': 'pdi_nomad_plugin.general.schema.EtchingPDI',
-    },
-    'back_side_coating': {
-        'label': 'Back-side coating',
-        'schema': 'pdi_nomad_plugin.general.schema.BackSideCoatingRecipePDI',
-        'processSchema': 'pdi_nomad_plugin.general.schema.BackSideCoatingPDI',
-    },
-    'sample_cut': {
-        'label': 'Sample Cut',
-        # Read existing Lab Library recipe entries; execution remains SampleCutPDI.
-        # No schema/normalizer changes. Older SampleCutPDI actions stay queryable.
-        'schema': 'pdi_nomad_plugin.general.schema.SampleCutRecipePDI',
-        'processSchema': 'pdi_nomad_plugin.general.schema.SampleCutPDI',
-        'kind': 'sample_cut',
+        'schema': 'nomad_material_processing.general.EtchingRecipe',
+        'processSchema': 'nomad_material_processing.general.Etching',
     },
 }
+
+# No verified upstream SampleCut or BackSideCoating process in the
+# canonical modules. Do not register those actions until upstream m_def
+# classes are found and runtime-validated. No PDI fallback is permitted.
+
+
+
+@app.post('/validate-process')
+async def validate_process(payload: dict):
+    """Validate the *exact* proposed process against installed upstream metainfo.
+
+    This endpoint is read-only. The browser must require success before any
+    upload; neither this endpoint nor its helper executes a normalizer.
+    """
+    from .original_process_preflight import (
+        OriginalProcessValidationError,
+        validate_original_process,
+    )
+
+    allowed = {definition['processSchema'] for definition in PROCESS_TYPES.values()}
+    try:
+        return validate_original_process(payload.get('data'), allowed)
+    except OriginalProcessValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.get('/process-types')

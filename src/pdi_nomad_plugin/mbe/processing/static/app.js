@@ -20,6 +20,24 @@ function nomadApiBase() {
 
 let recipeSchemas = {};
 
+// These are the actual original m_defs for the supported processing actions.
+// The server returns this list; never trust a substituted process m_def from
+// configuration, browser state, or an older custom PDI schema registration.
+const ORIGINAL_PROCESS_TYPES = Object.freeze({
+    cleaning: Object.freeze({
+        schema: 'nomad_material_processing.general.CleaningRecipe',
+        processSchema: 'nomad_material_processing.general.Cleaning'
+    }),
+    annealing: Object.freeze({
+        schema: 'nomad_material_processing.general.AnnealingRecipe',
+        processSchema: 'nomad_material_processing.general.Annealing'
+    }),
+    etching: Object.freeze({
+        schema: 'nomad_material_processing.general.EtchingRecipe',
+        processSchema: 'nomad_material_processing.general.Etching'
+    })
+});
+
 
 async function loadProcessTypes() {
     const response = await fetch('./process-types');
@@ -39,6 +57,14 @@ async function loadProcessTypes() {
         throw new Error('No process types configured.');
     }
 
+    for (const [key, definition] of Object.entries(result)) {
+        const approved = ORIGINAL_PROCESS_TYPES[key];
+        if (!approved || !definition ||
+            definition.schema !== approved.schema ||
+            definition.processSchema !== approved.processSchema) {
+            throw new Error('Non-original process or recipe m_def rejected: ' + key);
+        }
+    }
     return result;
 }
 
@@ -121,10 +147,13 @@ async function queryEntries(schema, pageSize, include) {
 }
 
 function substrateStatus(substrate) {
-    if (substrate.grown) return 'grown';
-    if (substrate.processed) return 'processed';
-    if (substrate.asDelivered) return 'as_delivered';
-    return '';
+    if (!substrate || !substrate.entryId) return '';
+    // Never invent as_delivered/processed/grown NOMAD quantities.
+    // A substrate with an original Cleaning/Annealing/Etching process
+    // referencing it is processed; otherwise it is unprocessed.
+    return treatmentHistoryState.some(function(treatment) {
+        return treatmentReferencesSubstrate(treatment, substrate.entryId);
+    }) ? 'processed' : 'unprocessed';
 }
 
 function referenceEntryId(reference) {
@@ -137,55 +166,14 @@ function referenceEntryId(reference) {
     return match ? match[1] : null;
 }
 
-function cutParentEntryIds() {
-    const parentIds = new Set();
-    substrates.forEach(function(substrate) {
-        const parentEntryId = referenceEntryId(substrate.parentSample);
-        if (parentEntryId) parentIds.add(parentEntryId);
-    });
-    return parentIds;
-}
-
-function substrateHasBeenCut(substrate) {
-    return Boolean(substrate && substrate.entryId && cutParentEntryIds().has(substrate.entryId));
-}
-
-function substrateByEntryId(entryId) {
-    if (!entryId) return null;
-    return substrates.find(function(substrate) { return substrate.entryId === entryId; }) || null;
-}
-
-function substrateLineage(substrate) {
-    const lineage = [];
-    const seen = new Set();
-    let current = substrate;
-    while (current && current.entryId && !seen.has(current.entryId)) {
-        seen.add(current.entryId);
-        lineage.push(current);
-        const parentEntryId = referenceEntryId(current.parentSample);
-        if (!parentEntryId) break;
-        current = substrateByEntryId(parentEntryId);
-    }
-    return lineage;
-}
-
 function referenceContainsEntryId(reference, substrateEntryId) {
-    if (!reference || !substrateEntryId) return false;
-    if (typeof reference === 'string') {
-        return reference.includes(substrateEntryId);
-    }
-    if (typeof reference === 'object') {
-        return JSON.stringify(reference).includes(substrateEntryId);
-    }
-    return false;
+    // Match the actual referenced entry, not an arbitrary substring of JSON.
+    return Boolean(substrateEntryId) &&
+        referenceEntryId(reference) === substrateEntryId;
 }
 
 function treatmentReferencesSubstrate(treatment, substrateEntryId) {
     if (!treatment || !treatment.data || !substrateEntryId) return false;
-
-    if (referenceContainsEntryId(treatment.data.parent_sample, substrateEntryId)) {
-        return true;
-    }
 
     const samples = treatment.data.samples || [];
     return samples.some(function(sample) {
@@ -244,18 +232,10 @@ function formatProcessingDateTime(value) {
 
 
 function treatmentHistoryForSubstrate(substrate) {
-    const rows = [];
-    substrateLineage(substrate).forEach(function(lineageSubstrate, index) {
-        treatmentHistoryState.forEach(function(treatment) {
-            if (treatmentReferencesSubstrate(treatment, lineageSubstrate.entryId)) {
-                rows.push({
-                    treatment: treatment,
-                    substrate: lineageSubstrate,
-                    inherited: index > 0
-                });
-            }
-        });
-    });
+    // Only the original Process.samples[] reference is verified.
+    const rows = treatmentHistoryState.filter(function(treatment) {
+        return treatmentReferencesSubstrate(treatment, substrate.entryId);
+    }).map(function(treatment) { return {treatment: treatment}; });
     rows.sort(function(a, b) {
         return String(treatmentDate(a.treatment)).localeCompare(String(treatmentDate(b.treatment)));
     });
@@ -263,16 +243,6 @@ function treatmentHistoryForSubstrate(substrate) {
 }
 
 function renderHistoryDetails(container, substrate, history) {
-    const lineage = substrateLineage(substrate);
-    if (lineage.length > 1) {
-        const lineageInfo = document.createElement('div');
-        lineageInfo.className = 'history-lineage';
-        lineageInfo.textContent = 'Lineage: ' + lineage.slice().reverse().map(function(item) {
-            return item.labId || item.entryId;
-        }).join(' -> ');
-        container.appendChild(lineageInfo);
-    }
-
     history.forEach(function(row) {
         const item = document.createElement('div');
         item.className = 'history-item';
@@ -280,153 +250,89 @@ function renderHistoryDetails(container, substrate, history) {
         title.className = 'history-title';
         title.textContent = row.treatment.label + ': ' + row.treatment.entryName;
         item.appendChild(title);
-
-        const details = [];
         const date = treatmentDate(row.treatment);
-        if (date) details.push(formatProcessingDateTime(date));
-        if (row.inherited) {
-            details.push('inherited from ' + (row.substrate.labId || row.substrate.entryId));
-        }
-        if (details.length) {
+        if (date) {
             const meta = document.createElement('div');
             meta.className = 'history-meta';
-            meta.textContent = details.join(' · ');
+            meta.textContent = formatProcessingDateTime(date);
             item.appendChild(meta);
         }
         container.appendChild(item);
     });
 }
 
+// The original CrystallineSubstrate has no PDI-only flags or batch fields.
+// Read the exact archive produced by the Intake app (Stage 4).
+function originalSubstrateFields(data) {
+    const components = Array.isArray(data.components) ? data.components : [];
+    const substance = (components[0] && components[0].pure_substance) || {};
+    const formula = String(substance.molecular_formula || '').trim();
+    const crystal = (data.crystal_properties || {});
+    const hkl = ((crystal.surface_orientation || {}).hkl_reciprocal || {});
+    const hklText = ['h_index', 'k_index', 'l_index'].every(function(k) {
+        return hkl[k] !== undefined && hkl[k] !== null;
+    }) ? [hkl.h_index, hkl.k_index, hkl.l_index].join(' ') : '';
+    const description = String(data.description || '');
+    const crystalMatch = description.match(/^Crystal ID:\s*(.*)$/m);
+    const chargeMatch = description.match(/^Charge ID:\s*(.*)$/m);
+    return {
+        formula: formula,
+        material: formula,
+        crystalId: crystalMatch ? crystalMatch[1].trim() : '',
+        chargeId: chargeMatch ? chargeMatch[1].trim() : '',
+        orientation: hklText,
+    };
+}
+
 async function loadSubstrates() {
-    const entries = await queryEntries('pdi_nomad_plugin.mbe.materials.SubstrateMbe', 1000, [
-        'entry_id', 'upload_id', 'entry_name', 'data.lab_id', 'data.material_designation',
-        'data.chemical_formula', 'data.crystal_id', 'data.charge_id', 'data.surface_orientation_label',
-        'data.m_def', 'data.geometry', 'data.parent_sample', 'data.as_delivered', 'data.processed', 'data.grown'
+    const schema = 'nomad_material_processing.general.CrystallineSubstrate';
+    const entries = await queryEntries(schema, 1000, [
+        'entry_id', 'upload_id', 'entry_name', 'data'
     ]);
     return entries.filter(function(entry) {
-        const data = entry.data || {};
-        return data.m_def === 'pdi_nomad_plugin.mbe.materials.SubstrateMbe';
+        return entry.data && entry.data.m_def === schema;
     }).map(function(entry) {
-        const data = entry.data || {};
+        const data = entry.data;
+        const fields = originalSubstrateFields(data);
         return {
             entryId: entry.entry_id,
             uploadId: entry.upload_id,
-            labId: data.lab_id || entry.entry_name || entry.entry_id,
-            material: data.material_designation || data.chemical_formula || '',
-            formula: data.chemical_formula || '',
-            crystalId: data.crystal_id || '',
-            chargeId: data.charge_id || '',
-            orientation: data.surface_orientation_label || '',
+            labId: data.lab_id || data.name || entry.entry_name || entry.entry_id,
+            material: fields.material,
+            formula: fields.formula,
+            crystalId: fields.crystalId,
+            chargeId: fields.chargeId,
+            orientation: fields.orientation,
             geometry: data.geometry || null,
-            parentSample: data.parent_sample || null,
-            asDelivered: Boolean(data.as_delivered),
-            processed: Boolean(data.processed),
-            grown: Boolean(data.grown),
+            // Status is derived from original processing references.
             selected: false
         };
     }).sort(function(a, b) {
         return String(a.labId).localeCompare(
-            String(b.labId),
-            undefined,
+            String(b.labId), undefined,
             {numeric: true, sensitivity: 'base'}
         );
     });
 }
 
 // Adapt *existing* legacy library-template geometry for display/validation only.
-// SampleCutPDI execution persists only official NOMAD Geometry subclasses.
-function readExistingCutTemplateGeometry(value) {
-    if (!value || typeof value !== 'object') return null;
-    const existingType = String(value.m_def || '');
-    if (existingType.startsWith('nomad_material_processing.general.')) {
-        return value;
-    }
-    const kind = String(value.shape || '').toLowerCase();
-    const thickness = geometryNumber(value.height);
-    // SampleCutGeometryPDI has optional physical thickness. Retain an explicitly
-    // stored value; do not fabricate it when the recipe omits height.
-    if (value.height !== undefined && value.height !== null &&
-        !(thickness > 0)) return null;
-    const width = geometryNumber(value.width);
-    const length = geometryNumber(value.length);
-    if ((kind === '' || kind === 'rectangle') && width > 0 && length > 0) {
-        const square = Math.abs(width - length) <= 1e-9;
-        const result = {
-            m_def: NOMAD_GEOMETRY + (square ? 'SquareCuboid' : 'RectangleCuboid'),
-            width: width,
-            length: length
-        };
-        if (thickness > 0) result.height = thickness;
-        return result;
-    }
-    const radius = geometryNumber(value.radius);
-    if (radius > 0 && (kind === 'circle' || kind === 'circular_sector')) {
-        const result = {
-            m_def: NOMAD_GEOMETRY + (kind === 'circle' ? 'Cylinder' : 'CylinderSector'),
-            radius: radius
-        };
-        if (thickness > 0) result.height = thickness;
-        if (kind === 'circular_sector') {
-            const angle = geometryNumber(value.central_angle);
-            if (!(angle > 0 && angle <= 360)) return null;
-            result.central_angle = angle;
-        }
-        return result;
-    }
-    return null;
-}
-
+// Archived cut-template geometry is for read-only display; no cut schema is registered.
 async function loadRecipes() {
     const result = [];
     for (const [type, definition] of Object.entries(recipeSchemas)) {
-        const isCut = definition.kind === 'sample_cut';
-        const include = [
-            'entry_id', 'upload_id', 'entry_name', 'data.name', 'data.lab_id'
-        ];
-        if (isCut) {
-            include.push(
-                'data.input_geometry', 'data.number_of_samples',
-                'data.children_geometry'
-            );
-        }
-        const entries = await queryEntries(definition.schema, 200, include);
+        const entries = await queryEntries(definition.schema, 200, [
+            'entry_id', 'upload_id', 'entry_name', 'data.name', 'data.lab_id',
+            'data.steps', 'data.instruments'
+        ]);
         entries.forEach(function(entry) {
             const data = entry.data || {};
             result.push({
                 type: type,
                 entryId: entry.entry_id,
                 uploadId: entry.upload_id,
-                name: data.lab_id || data.name || entry.entry_name || entry.entry_id,
-                inputGeometry: isCut ? readExistingCutTemplateGeometry(data.input_geometry) : null,
-                sourceParentEntryId: null,
-                numberOfSamples: data.number_of_samples || null,
-                childrenGeometry: isCut ? readExistingCutTemplateGeometry(data.children_geometry) : null
+                name: data.lab_id || data.name || entry.entry_name || entry.entry_id
             });
         });
-
-        // Preserve the previous functionality: completed SampleCutPDI actions can
-        // still be reused as parameter templates, without ever changing them.
-        if (isCut && definition.processSchema !== definition.schema) {
-            const historic = await queryEntries(definition.processSchema, 200, [
-                'entry_id', 'upload_id', 'entry_name', 'data.name',
-                'data.parent_sample', 'data.number_of_samples',
-                'data.children_geometry'
-            ]);
-            historic.forEach(function(entry) {
-                const data = entry.data || {};
-                result.push({
-                    type: type,
-                    entryId: entry.entry_id,
-                    uploadId: entry.upload_id,
-                    name: '(Previous cut) ' +
-                        (data.lab_id || data.name || entry.entry_name || entry.entry_id),
-                    inputGeometry: null,
-                    sourceParentEntryId: referenceEntryId(data.parent_sample),
-                    numberOfSamples: data.number_of_samples || null,
-                    childrenGeometry: readExistingCutTemplateGeometry(data.children_geometry)
-                });
-            });
-        }
     }
     return result;
 }
@@ -540,7 +446,6 @@ function filteredSubstrates() {
     const orientation = document.getElementById('orientationFilter').value;
     const status = document.getElementById('statusFilter').value;
     return substrates.filter(function(substrate) {
-        if (substrateHasBeenCut(substrate)) return false;
         const searchable = [substrate.labId, substrate.material, substrate.formula, substrate.crystalId, substrate.chargeId, substrate.orientation]
             .filter(Boolean).join(' ').toLowerCase();
         return (!search || searchable.includes(search)) &&
@@ -554,7 +459,6 @@ function filteredSubstrates() {
 function renderSubstrates() {
     const container = document.getElementById('substrateResults');
     const visible = filteredSubstrates();
-    const cutCount = substrates.filter(substrateHasBeenCut).length;
     container.innerHTML = '';
 
     visible.forEach(function(substrate) {
@@ -612,8 +516,7 @@ function renderSubstrates() {
 
     document.getElementById('substrateStatus').textContent =
         visible.length + ' matching substrate' + (visible.length === 1 ? '' : 's') +
-        '; ' + substrates.filter(function(item) { return item.selected && !substrateHasBeenCut(item); }).length + ' selected' +
-        (cutCount ? '; ' + cutCount + ' cut parent' + (cutCount === 1 ? '' : 's') + ' hidden from physical processing.' : '.');
+        '; ' + substrates.filter(function(item) { return item.selected; }).length + ' selected.';
 }
 
 
@@ -621,312 +524,12 @@ function renderSubstrates() {
 // shape is read only to support old, not-yet-migrated archives.
 const NOMAD_GEOMETRY = 'nomad_material_processing.general.';
 
-function geometryKind(geometry) {
-    if (!geometry || typeof geometry !== 'object') return null;
-    const type = String(geometry.m_def || '').split('.').pop();
-    if (type === 'SquareCuboid') return 'square';
-    if (type === 'RectangleCuboid' || type === 'Parallelepiped') return 'rectangle';
-    if (type === 'Cylinder') return 'circle';
-    if (type === 'CylinderSector') return 'circular_sector';
-    if (type === 'IrregularParallelSurfaces') return 'irregular';
-    // Legacy read-only compatibility. New archives never use these fields.
-    if (geometry.shape === 'rectangle') return 'rectangle';
-    if (geometry.shape === 'circle') return 'circle';
-    if (geometry.shape === 'circular_sector') return 'circular_sector';
-    return null;
-}
-
-function geometryFromForm(card) {
-    const type = card.querySelector('.cut-shape').value;
-    const readMm = function(selector) {
-        const input = card.querySelector(selector);
-        if (!input || input.value.trim() === '') return null;
-        const value = Number(input.value);
-        return Number.isFinite(value) && value > 0 ? value / 1000 : null;
-    };
-    if (type === 'square' || type === 'rectangle') {
-        const width = readMm('.cut-width');
-        const length = readMm('.cut-length');
-        if (!width || !length) {
-            throw new Error('Specify positive child width and length (mm).');
-        }
-        if (type === 'square' && Math.abs(width - length) > 1e-9) {
-            throw new Error('Square child geometry needs equal width and length.');
-        }
-        return {
-            m_def: NOMAD_GEOMETRY + (type === 'square' ? 'SquareCuboid' : 'RectangleCuboid'),
-            width: width, length: length
-        };
-    }
-    if (type === 'circle' || type === 'circular_sector') {
-        const radius = readMm('.cut-radius');
-        if (!radius) throw new Error('Specify a positive child radius (mm).');
-        const result = {
-            m_def: NOMAD_GEOMETRY + (type === 'circle' ? 'Cylinder' : 'CylinderSector'),
-            radius: radius
-        };
-        if (type === 'circular_sector') {
-            const angle = Number(card.querySelector('.cut-angle').value);
-            if (!(angle > 0 && angle <= 360)) {
-                throw new Error('Sector angle must be between 0 and 360 degrees.');
-            }
-            result.central_angle = angle;
-        }
-        return result;
-    }
-    throw new Error('Unsupported child geometry: ' + type);
-}
-
-function prefillCutFromSubstrate(card) {
-    const selected = substrates.filter(function(s) { return s.selected && !substrateHasBeenCut(s); });
-    if (!selected.length || !selected[0].geometry) {
-        throw new Error('Select a parent substrate with a NOMAD Geometry first.');
-    }
-    const parent = selected[0].geometry;
-    const kind = geometryKind(parent);
-    if (!['square','rectangle','circle','circular_sector'].includes(kind)) {
-        throw new Error('Cannot prefill unsupported parent geometry.');
-    }
-    card.querySelector('.cut-shape').value = kind;
-    const setMm = function(selector, value) {
-        card.querySelector(selector).value =
-            Number.isFinite(geometryNumber(value)) ? 1000 * geometryNumber(value) : '';
-    };
-    setMm('.cut-width', parent.width);
-    setMm('.cut-length', parent.length);
-    setMm('.cut-radius', parent.radius);
-    // Parent thickness is always inherited at cut execution.
-    card.querySelector('.cut-angle').value = kind === 'circular_sector' ?
-        geometryNumber(parent.central_angle) || 90 : 90;
-    updateCutFieldVisibility(card);
-}
-
-function updateCutFieldVisibility(card) {
-    const cut = card.querySelector('.sample-cut-manual');
-    if (!cut) return;
-    const manual = !card.querySelector('.recipe-select').value;
-    cut.style.display = manual ? 'block' : 'none';
-    const kind = card.querySelector('.cut-shape').value;
-    card.querySelectorAll('.cut-rect').forEach(function(field) {
-        field.style.display = kind === 'square' || kind === 'rectangle' ? '' : 'none';
-    });
-    card.querySelectorAll('.cut-round').forEach(function(field) {
-        field.style.display = kind === 'circle' || kind === 'circular_sector' ? '' : 'none';
-    });
-    card.querySelectorAll('.cut-sector').forEach(function(field) {
-        field.style.display = kind === 'circular_sector' ? '' : 'none';
-    });
-}
-
-function geometryNumber(value) {
-    if (typeof value === 'number' && Number.isFinite(value)) {
-        return value;
-    }
-    if (
-        value &&
-        typeof value === 'object' &&
-        typeof value.magnitude === 'number' &&
-        Number.isFinite(value.magnitude)
-    ) {
-        return value.magnitude;
-    }
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-}
-
-function geometryXY(geometry) {
-    if (!geometry || typeof geometry !== 'object') return null;
-
-    const width = geometryNumber(geometry.width);
-    let length = geometryNumber(geometry.length);
-
-    if (!Number.isFinite(width)) return null;
-    if (!Number.isFinite(length)) length = width;
-
-    return {width: width, length: length};
-}
-
-function sampleCutChildGeometry(parentGeometry, recipeGeometry) {
-    if (!recipeGeometry || typeof recipeGeometry !== 'object') {
-        throw new Error('Child geometry is missing.');
-    }
-    const kind = geometryKind(recipeGeometry);
-    const specifiedHeight = geometryNumber(recipeGeometry.height);
-    const parentHeight = geometryNumber(parentGeometry && parentGeometry.height);
-    const height = specifiedHeight > 0 ? specifiedHeight : parentHeight;
-    if (!(height > 0)) {
-        throw new Error('Neither child geometry nor parent geometry specifies a valid thickness.');
-    }
-    const output = {height: height};
-    if (kind === 'square' || kind === 'rectangle') {
-        const width = geometryNumber(recipeGeometry.width);
-        const length = geometryNumber(recipeGeometry.length);
-        if (!(width > 0 && length > 0)) {
-            throw new Error('Child width and length must be positive.');
-        }
-        const square = kind === 'square' || Math.abs(width - length) <= 1e-9;
-        output.m_def = NOMAD_GEOMETRY + (square ? 'SquareCuboid' : 'RectangleCuboid');
-        output.width = width;
-        output.length = length;
-        return output;
-    }
-    if (kind === 'circle' || kind === 'circular_sector') {
-        const radius = geometryNumber(recipeGeometry.radius);
-        if (!(radius > 0)) throw new Error('Child radius must be positive.');
-        output.m_def = NOMAD_GEOMETRY + (kind === 'circle' ? 'Cylinder' : 'CylinderSector');
-        output.radius = radius;
-        if (kind === 'circular_sector') {
-            const angle = geometryNumber(recipeGeometry.central_angle);
-            if (!(angle > 0 && angle <= 360)) throw new Error('Invalid sector angle.');
-            output.central_angle = angle;
-        }
-        return output;
-    }
-    throw new Error('Unsupported existing NOMAD Geometry subclass.');
-}
-
-function geometryMatches(first, second) {
-    if (!first || !second) return false;
-    const a = geometryKind(first);
-    const b = geometryKind(second);
-    const rectangular = ['square','rectangle'];
-    if (a !== b && !(rectangular.includes(a) && rectangular.includes(b))) return false;
-    // Linear sizes are in meters. Ignore thickness for matching a cutting footprint.
-    const tolerance = 0.00005;
-    if (a === 'circle' || a === 'circular_sector') {
-        const r1 = geometryNumber(first.radius);
-        const r2 = geometryNumber(second.radius);
-        if (!(r1 > 0 && r2 > 0 && Math.abs(r1 - r2) <= tolerance)) return false;
-        if (a === 'circle') return true;
-        const angle1 = geometryNumber(first.central_angle);
-        const angle2 = geometryNumber(second.central_angle);
-        return angle1 > 0 && angle2 > 0 && Math.abs(angle1 - angle2) < 1e-6;
-    }
-    const xy1 = geometryXY(first);
-    const xy2 = geometryXY(second);
-    if (!xy1 || !xy2) return false;
-    return (Math.abs(xy1.width - xy2.width) <= tolerance &&
-            Math.abs(xy1.length - xy2.length) <= tolerance) ||
-           (Math.abs(xy1.width - xy2.length) <= tolerance &&
-            Math.abs(xy1.length - xy2.width) <= tolerance);
-}
-
-function geometryDisplay(geometry) {
-    const kind = geometryKind(geometry);
-    if (kind === 'circle' || kind === 'circular_sector') {
-        const radius = geometryNumber(geometry.radius);
-        const angle = kind === 'circle' ? 360 : geometryNumber(geometry.central_angle);
-        return radius > 0 ?
-            ('R ' + (1000 * radius).toFixed(2) + ' mm' +
-             (kind === 'circular_sector' ? ', ' + angle + '°' : '')) : 'Not specified';
-    }
-    if (kind !== 'square' && kind !== 'rectangle') return 'Not specified';
-    const value = geometryXY(geometry);
-    if (!value) return 'Not specified';
-    function mm(number) {
-        return (number * 1000).toLocaleString(undefined, {maximumFractionDigits: 3});
-    }
-    return mm(value.width) + ' × ' + mm(value.length) + ' mm';
-}
-
-function isSampleCutType(type) {
-    return Boolean(
-        recipeSchemas[type] &&
-        recipeSchemas[type].kind === 'sample_cut'
-    );
-}
-
-function updateProcessCardMode(card) {
-    const type = card.querySelector('.process-type').value;
-    const isSampleCut = isSampleCutType(type);
-    const recipeLabel = card.querySelector('.recipe-label');
-    const details = card.querySelector('.sample-cut-details');
-
-    recipeLabel.textContent = isSampleCut ? 'Cut recipe' : 'Recipe';
-    details.style.display = isSampleCut ? 'block' : 'none';
-
-    updateSampleCutDetails(card);
-}
-
-function updateSampleCutDetails(card) {
-    const details = card.querySelector('.sample-cut-details');
-    if (!details || details.style.display === 'none') return;
-    const recipeSelect = card.querySelector('.recipe-select');
-    const recipe = recipes.find(function(item) { return item.entryId === recipeSelect.value; });
-    const parent = card.querySelector('.sample-cut-parent-geometry');
-    const output = card.querySelector('.sample-cut-output');
-    updateCutFieldVisibility(card);
-    if (recipe) {
-        const originalParent = substrateByEntryId(recipe.sourceParentEntryId);
-        const input = recipe.inputGeometry ||
-            (originalParent && originalParent.geometry) || null;
-        parent.textContent = input ? geometryDisplay(input) :
-            'Previous parent not in current substrate catalogue';
-        output.textContent = String(recipe.numberOfSamples || '?') + ' × ' +
-            geometryDisplay(recipe.childrenGeometry);
-    } else {
-        const selected = substrates.filter(function(s) { return s.selected && !substrateHasBeenCut(s); });
-        parent.textContent = selected.length ? geometryDisplay(selected[0].geometry) : 'Select parent substrate';
-        try {
-            const geometry = geometryFromForm(card);
-            output.textContent = String(Number(card.querySelector('.cut-count').value) || '?') +
-                ' × ' + geometryDisplay(geometry);
-        } catch (_) { output.textContent = 'Specify output geometry and child count'; }
-    }
-}
-
-function planarArea(geometry) {
-    const kind = geometryKind(geometry);
-    if (kind === 'square' || kind === 'rectangle') {
-        const xy = geometryXY(geometry);
-        return xy && xy.width > 0 && xy.length > 0 ? xy.width * xy.length : null;
-    }
-    if (kind === 'circle' || kind === 'circular_sector') {
-        const r = geometryNumber(geometry.radius);
-        const angle = kind === 'circle' ? 360 : geometryNumber(geometry.central_angle);
-        return r > 0 && angle > 0 && angle <= 360 ? Math.PI * r * r * angle / 360 : null;
-    }
-    return null;
-}
-
-function validateSampleCutRecipe(recipe, selectedSubstrates, processIndex) {
-    if (!recipe || !Number.isInteger(Number(recipe.numberOfSamples)) ||
-        Number(recipe.numberOfSamples) < 1 || !recipe.childrenGeometry) {
-        throw new Error('Process ' + (processIndex + 1) +
-            ': specify a positive child count and valid child geometry.');
-    }
-    for (const substrate of selectedSubstrates) {
-        if (!substrate.geometry) {
-            throw new Error('Parent ' + substrate.labId + ' has no Geometry in NOMAD.');
-        }
-        if (recipe.inputGeometry && !geometryMatches(substrate.geometry, recipe.inputGeometry)) {
-            throw new Error('Process ' + (processIndex + 1) +
-                ': parent geometry does not match cut configuration: ' + substrate.labId);
-        }
-        // Validate the canonical output using this parent's inherited thickness.
-        const childGeometry = sampleCutChildGeometry(substrate.geometry, recipe.childrenGeometry);
-        const parentArea = planarArea(substrate.geometry);
-        const childArea = planarArea(childGeometry);
-        if (parentArea !== null && childArea !== null &&
-            Number(recipe.numberOfSamples) * childArea > parentArea * 1.000001) {
-            throw new Error('Requested child pieces have a greater total area than parent ' +
-                substrate.labId + '. Adjust child dimensions or count.');
-        }
-    }
-}
-
 function updateRecipeSelect(card) {
     const type = card.querySelector('.process-type').value;
     const select = card.querySelector('.recipe-select');
-    const isCut = isSampleCutType(type);
-    const matching = recipes.filter(function(recipe) {
-        return recipe.type === type && (!isCut ||
-            (recipe.numberOfSamples && recipe.childrenGeometry &&
-             (recipe.inputGeometry || recipe.sourceParentEntryId)));
-    });
+    const matching = recipes.filter(function(recipe) { return recipe.type === type; });
     select.innerHTML = '<option value="">' +
-        (isCut ? 'Custom cut (from selected parent)' :
-        (matching.length ? 'Select recipe...' : 'No recipes found')) + '</option>';
+        (matching.length ? 'Select recipe...' : 'No recipes found') + '</option>';
     matching.forEach(function(recipe) {
         const option = document.createElement('option');
         option.value = recipe.entryId;
@@ -934,8 +537,7 @@ function updateRecipeSelect(card) {
         option.textContent = recipe.name;
         select.appendChild(option);
     });
-    select.disabled = !isCut && matching.length === 0;
-    updateProcessCardMode(card);
+    select.disabled = matching.length === 0;
 }
 
 function collapseOthers(active) {
@@ -974,39 +576,6 @@ function addProcess() {
                 <div><label>Date / Time</label><input class="process-datetime" type="datetime-local" step="1" value="${localDateTimeValue()}"></div>
             </div>
             <label class="recipe-label">Recipe</label><select class="recipe-select"></select>
-            <div class="sample-cut-details" style="display:none;">
-                <div class="sample-cut-detail-grid">
-                    <div>
-                        <label>Expected parent geometry</label>
-                        <div class="sample-cut-readonly sample-cut-parent-geometry">Select a cut recipe</div>
-                    </div>
-                    <div>
-                        <label>Output per parent</label>
-                        <div class="sample-cut-readonly sample-cut-output">Select a cut recipe</div>
-                    </div>
-                </div>
-                <div class="sample-cut-manual">
-                    <div class="sample-cut-detail-grid">
-                        <div><label>Number of child substrates per parent</label><input class="cut-count" type="number" min="1" step="1" value="2"></div>
-                        <div><label>Child geometry</label><select class="cut-shape">
-                            <option value="square">Square cuboid</option>
-                            <option value="rectangle">Rectangular cuboid</option>
-                            <option value="circle">Circular wafer</option>
-                            <option value="circular_sector">Circular sector</option>
-                        </select></div>
-                        <div class="cut-rect"><label>Child width (mm)</label><input class="cut-width" type="number" min="0" step="any"></div>
-                        <div class="cut-rect"><label>Child length (mm)</label><input class="cut-length" type="number" min="0" step="any"></div>
-                        <div class="cut-round"><label>Child radius (mm)</label><input class="cut-radius" type="number" min="0" step="any"></div>
-                        <div class="cut-sector"><label>Central angle (°)</label><input class="cut-angle" type="number" min="0" max="360" step="any" value="90"></div>
-                        <div class="sample-cut-note">Thickness is inherited from the selected parent substrate.</div>
-                    </div>
-                    <button class="prefill-cut-from-parent" type="button">Copy selected parent geometry as starting point</button>
-                    <div class="sample-cut-note">Edit dimensions to the actual cut pieces; copying the parent's full size does not automatically divide it.</div>
-                </div>
-                <div class="sample-cut-note">
-                    Select an existing Lab Library cut recipe, use custom settings, or reuse a previous cut as a template. Execution always uses SampleCutPDI.
-                </div>
-            </div>
             <label>Comments</label><textarea class="process-comments" placeholder="Optional"></textarea>
             <div class="process-footer"><button class="remove-button" type="button">Remove process</button><button class="collapse-button" type="button">Done / collapse</button></div>
         </div>`;
@@ -1020,21 +589,9 @@ function addProcess() {
     typeSelect.addEventListener('change', function() {
         meta.textContent = recipeSchemas[typeSelect.value].label;
         updateRecipeSelect(card);
-        updateProcessCardMode(card);
         updateSaveSummary();
     });
-    card.querySelector('.recipe-select').addEventListener('change', function() {
-        updateSampleCutDetails(card);
-        updateSaveSummary();
-    });
-    card.querySelector('.prefill-cut-from-parent').addEventListener('click', function() {
-        try { prefillCutFromSubstrate(card); updateSampleCutDetails(card); }
-        catch (err) { document.getElementById('processStatus').textContent = err.message; }
-    });
-    card.querySelectorAll('.sample-cut-manual input, .sample-cut-manual select').forEach(function(input) {
-        input.addEventListener('input', function() { updateSampleCutDetails(card); });
-        input.addEventListener('change', function() { updateSampleCutDetails(card); });
-    });
+    card.querySelector('.recipe-select').addEventListener('change', updateSaveSummary);
     card.querySelector('.collapse-button').addEventListener('click', function() { card.classList.remove('open'); });
     card.querySelector('.remove-button').addEventListener('click', function() { card.remove(); renumberProcesses(); });
     updateRecipeSelect(card);
@@ -1044,42 +601,16 @@ function addProcess() {
 function processDefinitions() {
     return Array.from(document.querySelectorAll('.process-card')).map(function(card) {
         const type = card.querySelector('.process-type').value;
-        const recipeSelect = card.querySelector('.recipe-select');
-        const savedRecipe = recipes.find(function(item) { return item.entryId === recipeSelect.value; });
-        let recipe = savedRecipe || null;
-        if (isSampleCutType(type)) {
-            if (savedRecipe) {
-                let inputGeometry = savedRecipe.inputGeometry;
-                if (!inputGeometry && savedRecipe.sourceParentEntryId) {
-                    const source = substrateByEntryId(savedRecipe.sourceParentEntryId);
-                    if (!source || !source.geometry) {
-                        throw new Error(
-                            'Previous cut parent geometry cannot be retrieved. ' +
-                            'Use custom settings.'
-                        );
-                    }
-                    inputGeometry = source.geometry;
-                }
-                if (!inputGeometry) {
-                    throw new Error('Selected cut recipe has no usable parent geometry.');
-                }
-                recipe = Object.assign({}, savedRecipe, {inputGeometry: inputGeometry});
-            } else {
-                const selected = substrates.filter(function(s) { return s.selected && !substrateHasBeenCut(s); });
-                if (!selected.length || !selected[0].geometry) {
-                    throw new Error('Select a parent substrate with geometry before configuring SampleCut.');
-                }
-                recipe = {
-                    numberOfSamples: Number(card.querySelector('.cut-count').value),
-                    inputGeometry: selected[0].geometry,
-                    childrenGeometry: geometryFromForm(card)
-                };
-            }
+        if (!Object.hasOwn(ORIGINAL_PROCESS_TYPES, type)) {
+            throw new Error('Unsupported processing action: ' + type);
         }
+        const recipeSelect = card.querySelector('.recipe-select');
+        const recipe = recipes.find(function(item) {
+            return item.type === type && item.entryId === recipeSelect.value;
+        }) || null;
         return {
             type: type,
-            kind: recipeSchemas[type] ? recipeSchemas[type].kind || 'process' : 'process',
-            recipe: recipe || null,
+            recipe: recipe,
             datetime: card.querySelector('.process-datetime').value,
             comments: card.querySelector('.process-comments').value.trim()
         };
@@ -1098,12 +629,6 @@ function safePart(value) {
 }
 
 function processArchiveData(definition, selectedSubstrates, index) {
-    if (definition.kind === 'sample_cut') {
-        throw new Error(
-            'Process ' + (index + 1) +
-            ': sample cut must be saved per parent substrate.'
-        );
-    }
     if (!definition.recipe) throw new Error('Process ' + (index + 1) + ': select a recipe.');
     if (!definition.datetime) throw new Error('Process ' + (index + 1) + ': enter date / time.');
     const schema = recipeSchemas[definition.type];
@@ -1131,57 +656,27 @@ function processArchiveData(definition, selectedSubstrates, index) {
             };
         })
     };
+    // Do not duplicate the upstream Process normalizer. Its original
+    // implementation reads the referenced recipe and copies instructions
+    // during NOMAD processing. Only a recipe reference belongs here.
     if (definition.comments) data.description = definition.comments;
     return data;
 }
 
-
-function sampleCutArchiveData(definition, substrate, index) {
-    validateSampleCutRecipe(definition.recipe, [substrate], index);
-
-    if (!definition.datetime) {
-        throw new Error(
-            'Process ' + (index + 1) + ': enter date / time.'
-        );
-    }
-    if (!substrate.entryId || !substrate.uploadId) {
-        throw new Error(
-            'Process ' + (index + 1) +
-            ': substrate ' + (substrate.labId || '(unknown)') +
-            ' has no valid NOMAD entry/upload reference.'
-        );
-    }
-
-    const schema = recipeSchemas[definition.type];
-    if (!schema || schema.kind !== 'sample_cut') {
-        throw new Error('Unsupported sample cut type: ' + definition.type);
-    }
-
-    const data = {
-        m_def: schema.processSchema,
-        name: schema.label + ' - ' + substrate.labId,
-        datetime: new Date(definition.datetime).toISOString(),
-        number_of_samples: definition.recipe.numberOfSamples,
-        children_geometry: sampleCutChildGeometry(
-            substrate.geometry,
-            definition.recipe.childrenGeometry
-        ),
-        parent_sample: {
-            name: substrate.labId,
-            reference: nomadArchiveReference(
-                substrate.uploadId,
-                substrate.entryId
-            )
-        },
-        trigger_cut_sample: true
-    };
-
-    if (definition.comments) data.description = definition.comments;
-
-    return data;
-}
 
 async function uploadArchive(uploadId, filename, data) {
+    // Server validates against the installed original NOMAD metainfo BEFORE PUT.
+    // If validation fails, no archive is written.
+    const preflightResponse = await fetch('./validate-process', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        body: JSON.stringify({data: data})
+    });
+    const preflightResult = await preflightResponse.json().catch(function() { return {}; });
+    if (!preflightResponse.ok || preflightResult.valid !== true || preflightResult.schema !== data.m_def) {
+        const detail = preflightResult.detail || 'Original NOMAD process validation failed.';
+        throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+    }
     const params = new URLSearchParams();
     params.append('file_name', filename);
     params.append('overwrite_if_exists', 'false');
@@ -1240,18 +735,23 @@ async function saveProcesses() {
     const button = document.getElementById('saveProcessesButton');
     const status = document.getElementById('processStatus');
     const uploadId = document.getElementById('targetUpload').value;
-    const selected = substrates.filter(function(item) { return item.selected && !substrateHasBeenCut(item); });
-    const invalidSelected = substrates.filter(function(item) { return item.selected && substrateHasBeenCut(item); });
+    const selected = substrates.filter(function(item) { return item.selected; });
     let definitions;
     try { definitions = processDefinitions(); }
-    catch (err) { status.textContent = 'Error: ' + err.message; return; }
-    if (invalidSelected.length) {
-        status.textContent = 'Cut parent substrates are no longer physically available and cannot be processed.';
-        return;
-    }
+    catch (error) { status.textContent = 'Error: ' + error.message; return; }
     if (!uploadId) { status.textContent = 'Select a target upload first.'; return; }
     if (!selected.length) { status.textContent = 'Select at least one substrate.'; return; }
     if (!definitions.length) { status.textContent = 'Add at least one process.'; return; }
+
+    // Validate every action before writing; never invoke a local PDI normalizer.
+    try {
+        definitions.forEach(function(definition, i) {
+            processArchiveData(definition, selected, i);
+        });
+    } catch (error) {
+        status.textContent = 'Validation failed before upload: ' + error.message;
+        return;
+    }
 
     button.disabled = true;
     let saved = 0;
@@ -1260,130 +760,47 @@ async function saveProcesses() {
         for (let i = 0; i < definitions.length; i++) {
             const definition = definitions[i];
             const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '');
-
-            if (definition.kind === 'sample_cut') {
-                validateSampleCutRecipe(definition.recipe, selected, i);
-
-                for (let parentIndex = 0; parentIndex < selected.length; parentIndex++) {
-                    const substrate = selected[parentIndex];
-                    const data = sampleCutArchiveData(
-                        definition,
-                        substrate,
-                        i
-                    );
-                    const filename =
-                        'processing_sample_cut_' +
-                        safePart(substrate.labId) +
-                        '_' +
-                        stamp +
-                        '_' +
-                        String(i + 1) +
-                        '_' +
-                        String(parentIndex + 1) +
-                        '.archive.json';
-
-                    status.textContent =
-                        'Cutting parent ' +
-                        String(parentIndex + 1) +
-                        ' of ' +
-                        selected.length +
-                        ' for process ' +
-                        String(i + 1) +
-                        '...';
-
-                    const responseData = await uploadArchive(uploadId, filename, data);
-                    uploadedEntries.push({
-                        filename: filename,
-                        entryId: responseData.processing && responseData.processing.entry
-                            ? responseData.processing.entry.entry_id : null
-                    });
-                    saved += 1;
-                }
-            } else {
-                const data = processArchiveData(definition, selected, i);
-                const filename =
-                    'processing_' +
-                    safePart(definition.type) +
-                    '_' +
-                    stamp +
-                    '_' +
-                    String(i + 1) +
-                    '.archive.json';
-
-                status.textContent =
-                    'Saving process ' +
-                    String(i + 1) +
-                    ' of ' +
-                    definitions.length +
-                    '...';
-
-                const responseData = await uploadArchive(uploadId, filename, data);
-                uploadedEntries.push({
-                    filename: filename,
-                    entryId: responseData.processing && responseData.processing.entry
-                        ? responseData.processing.entry.entry_id : null
-                });
-                saved += 1;
-            }
+            const data = processArchiveData(definition, selected, i);
+            const filename = 'processing_' + safePart(definition.type) + '_' +
+                stamp + '_' + String(i + 1) + '.archive.json';
+            status.textContent = 'Saving process ' + (i + 1) + ' of ' + definitions.length + '...';
+            const result = await uploadArchive(uploadId, filename, data);
+            uploadedEntries.push({
+                filename: filename,
+                entryId: result.processing && result.processing.entry
+                    ? result.processing.entry.entry_id : null
+            });
+            saved += 1;
         }
-
         let indexed = false;
         let lastRefreshError = null;
-
-        // Wait for NOMAD archive queries to expose all newly saved entries.
-        // The upload itself has already completed; never upload again here.
         for (let attempt = 0; attempt < 8; attempt++) {
-            status.textContent =
-                saved + ' process/action entries saved. ' +
-                'Updating NOMAD data (' + (attempt + 1) + '/8)...';
-
+            status.textContent = saved + ' process entries saved; updating NOMAD (' + (attempt + 1) + '/8)...';
             try {
                 await refreshProcessingData({catalogs: false});
-
                 indexed = uploadedEntries.every(function(uploaded) {
                     return treatmentHistoryState.some(function(entry) {
                         return entry.uploadId === uploadId && (
-                            (uploaded.entryId &&
-                             entry.entryId === uploaded.entryId) ||
-                            String(entry.mainfile || '')
-                                .split('/').pop() === uploaded.filename
+                            (uploaded.entryId && entry.entryId === uploaded.entryId) ||
+                            String(entry.mainfile || '').split('/').pop() === uploaded.filename
                         );
                     });
                 });
-
-                if (indexed) {
-                    break;
-                }
-            } catch (refreshError) {
-                lastRefreshError = refreshError;
-                console.warn('NOMAD refresh failed:', refreshError);
+                if (indexed) break;
+            } catch (error) {
+                lastRefreshError = error;
+                console.warn('NOMAD refresh failed:', error);
             }
-
             if (attempt < 7) {
                 await new Promise(function(resolve) {
-                    setTimeout(
-                        resolve,
-                        Math.min(1000 * (attempt + 1), 4000)
-                    );
+                    setTimeout(resolve, Math.min(1000 * (attempt + 1), 4000));
                 });
             }
         }
-
-        if (indexed) {
-            status.textContent =
-                saved + ' process/action entries saved and ' +
-                'visible in NOMAD. Processing display updated.';
-        } else {
-            status.textContent =
-                saved + ' process/action entries saved, but not ' +
-                'all are visible in NOMAD queries yet. ' +
-                'Switch away and back to refresh. ' +
-                'Do not upload the same processes again.' +
-                (lastRefreshError
-                    ? ' Last refresh error: ' + lastRefreshError.message
-                    : '');
-        }
-
+        status.textContent = indexed
+            ? saved + ' process entries saved and visible in NOMAD.'
+            : saved + ' process entries saved but not yet all visible in NOMAD. Do not re-upload blindly.' +
+              (lastRefreshError ? ' Last refresh error: ' + lastRefreshError.message : '');
     } catch (error) {
         status.textContent = (saved ? saved + ' process(es) saved; next process failed: ' : 'Error: ') + error.message;
     } finally {
@@ -1400,7 +817,7 @@ function selectIncomingSubstrate(entryId) {
         return item.entryId === entryId;
     });
 
-    if (!selected || substrateHasBeenCut(selected)) {
+    if (!selected) {
         return false;
     }
 
@@ -1533,8 +950,7 @@ function refreshProcessCardCatalogs() {
             meta.textContent = recipeSchemas[oldType].label || oldType;
         }
 
-        updateProcessCardMode(card);
-    });
+        });
 }
 
 let processingRefreshPromise = null;
@@ -1567,18 +983,8 @@ function refreshProcessingData(options) {
                 .map(function(item) { return item.entryId; })
         );
 
-        const cutParentIds = new Set(
-            freshSubstrates
-                .map(function(item) {
-                    return referenceEntryId(item.parentSample);
-                })
-                .filter(Boolean)
-        );
-
         freshSubstrates.forEach(function(item) {
-            item.selected =
-                selectedEntryIds.has(item.entryId) &&
-                !cutParentIds.has(item.entryId);
+            item.selected = selectedEntryIds.has(item.entryId);
             item.historyOpen = openHistoryIds.has(item.entryId);
         });
 

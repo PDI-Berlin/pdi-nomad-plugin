@@ -62,143 +62,6 @@ function formatSquareSize(geometry) {
     return formatNumber(w) + ' × ' + formatNumber(l) + ' mm';
 }
 
-// SampleCutRecipePDI uses SampleCutGeometryPDI with an existing shape enum:
-// rectangle, circle, circular_sector. All lengths are stored in meters.
-function cutRecipeShape(geometry) {
-    if (!geometry || typeof geometry !== 'object') return 'rectangle';
-    const shape = String(geometry.shape || '').toLowerCase();
-    if (['rectangle', 'circle', 'circular_sector'].includes(shape)) return shape;
-    // Backward compatibility: older square recipes did not store shape.
-    if (geometryNumber(geometry.radius) > 0) {
-        return geometryNumber(geometry.central_angle) > 0 &&
-            geometryNumber(geometry.central_angle) < 360
-            ? 'circular_sector' : 'circle';
-    }
-    return 'rectangle';
-}
-
-function cutRecipeGeometryLabel(geometry) {
-    if (!geometry) return '—';
-    const shape = cutRecipeShape(geometry);
-    const height = geometryNumber(geometry.height);
-    let footprint = '—';
-    if (shape === 'rectangle') {
-        footprint = formatSquareSize(geometry);
-    } else {
-        const radius = geometryNumber(geometry.radius);
-        if (radius > 0) {
-            footprint = 'R ' + formatNumber(radius * 1000) + ' mm';
-            if (shape === 'circular_sector') {
-                const angle = geometryNumber(geometry.central_angle);
-                footprint += ', ' + formatNumber(angle) + '° sector';
-            } else {
-                footprint += ', circle';
-            }
-        }
-    }
-    if (height > 0) footprint += ', thickness ' + formatNumber(height * 1000) + ' mm';
-    return footprint;
-}
-
-function cutRecipeGeometryId(geometry) {
-    const shape = geometry.shape;
-    const clean = function(number) {
-        return formatNumber(number).replace('.', 'p');
-    };
-    if (shape === 'rectangle') {
-        const width = geometry.width * 1000;
-        const length = geometry.length * 1000;
-        return Math.abs(width - length) < 1e-8
-            ? clean(width)
-            : 'RECT_' + clean(width) + 'X' + clean(length);
-    }
-    const radius = clean(geometry.radius * 1000);
-    return shape === 'circle'
-        ? 'CIRCLE_R' + radius
-        : 'SECTOR_R' + radius + '_A' + clean(geometry.central_angle);
-}
-
-function cutGeometryField(id) {
-    return document.getElementById(id);
-}
-
-function cutGeometryPositiveMm(id, label, optional) {
-    const raw = String(cutGeometryField(id).value || '').trim();
-    if (optional && raw === '') return null;
-    const value = Number(raw);
-    if (!raw || !Number.isFinite(value) || value <= 0) {
-        throw new Error(label + ' must be positive (mm).');
-    }
-    return value / 1000;
-}
-
-function readCutRecipeGeometry(prefix, previous) {
-    const shape = cutGeometryField(prefix + 'Shape').value;
-    const data = previous && typeof previous === 'object'
-        ? JSON.parse(JSON.stringify(previous)) : {};
-    // Keep old subsection metadata; remove stale dimensions when shape changes.
-    ['width', 'length', 'radius', 'central_angle', 'height'].forEach(function(key) {
-        delete data[key];
-    });
-    // Existing template subsection uses SampleCutGeometryPDI, not a runtime
-    // NOMAD geometry subclass. Do not introduce a foreign m_def in a recipe.
-    if (String(data.m_def || '').startsWith('nomad_material_processing.general.')) {
-        delete data.m_def;
-    }
-    data.shape = shape;
-    if (shape === 'rectangle') {
-        data.width = cutGeometryPositiveMm(prefix + 'Width', 'Width', false);
-        data.length = cutGeometryPositiveMm(prefix + 'Length', 'Length', false);
-    } else if (shape === 'circle' || shape === 'circular_sector') {
-        data.radius = cutGeometryPositiveMm(prefix + 'Radius', 'Radius', false);
-        if (shape === 'circular_sector') {
-            const raw = String(cutGeometryField(prefix + 'Angle').value || '').trim();
-            const angle = Number(raw);
-            if (!raw || !Number.isFinite(angle) || angle <= 0 || angle > 360) {
-                throw new Error('Central angle must be greater than 0° and at most 360°.');
-            }
-            data.central_angle = angle;
-        }
-    } else {
-        throw new Error('Unsupported SampleCutGeometryPDI shape: ' + shape);
-    }
-    const height = cutGeometryPositiveMm(prefix + 'Height', 'Thickness', true);
-    if (height !== null) data.height = height;
-    return data;
-}
-
-function populateCutRecipeGeometry(prefix, geometry, defaultSizeMm) {
-    const shape = cutRecipeShape(geometry);
-    cutGeometryField(prefix + 'Shape').value = shape;
-    const readMm = function(value, fallback) {
-        const number = geometryNumber(value);
-        return number > 0 ? formatNumber(number * 1000) : fallback;
-    };
-    cutGeometryField(prefix + 'Width').value = readMm(geometry && geometry.width, String(defaultSizeMm));
-    cutGeometryField(prefix + 'Length').value = readMm(geometry && geometry.length, String(defaultSizeMm));
-    cutGeometryField(prefix + 'Radius').value = readMm(geometry && geometry.radius, String(defaultSizeMm / 2));
-    cutGeometryField(prefix + 'Angle').value =
-        String(geometryNumber(geometry && geometry.central_angle) || 90);
-    cutGeometryField(prefix + 'Height').value = readMm(geometry && geometry.height, '');
-    updateCutRecipeGeometryVisibility(prefix);
-}
-
-function updateCutRecipeGeometryVisibility(prefix) {
-    const shape = cutGeometryField(prefix + 'Shape').value;
-    const rectangle = shape === 'rectangle';
-    const sector = shape === 'circular_sector';
-    const group = document.getElementById(prefix + 'GeometryFields');
-    group.querySelectorAll('.cut-rectangle').forEach(function(el) {
-        el.classList.toggle('hidden', !rectangle);
-    });
-    group.querySelectorAll('.cut-radius').forEach(function(el) {
-        el.classList.toggle('hidden', rectangle);
-    });
-    group.querySelectorAll('.cut-sector').forEach(function(el) {
-        el.classList.toggle('hidden', !sector);
-    });
-}
-
 function tagsArray(value) {
     return String(value || '')
         .split(',')
@@ -479,25 +342,15 @@ function scalarSummary(data) {
 function itemDetail(item) {
     const data = item.data || {};
     if (currentType === 'processing_recipe') return scalarSummary(data) || 'Recipe parameters stored in NOMAD';
-    if (currentType === 'sample_cut_recipe') {
-        return (
-            'Parent ' + cutRecipeGeometryLabel(data.input_geometry) +
-            ' → ' + (data.number_of_samples || '—') +
-            ' × ' + cutRecipeGeometryLabel(data.children_geometry)
-        );
-    }
     if (currentType === 'holder') {
         const positions = Array.isArray(data.positions) ? data.positions : [];
         const size = inferHolderSizeMm(data);
         return positions.length + ' position(s)' +
             (size ? ' · ' + formatNumber(size) + ' × ' + formatNumber(size) + ' mm' : '') +
-            ' · ' + holderWorkflowLabel(data);
+            ' · physical holder definition';
     }
     if (currentType === 'insert') {
-        return (
-            'Outer ' + formatSquareSize(data.outer_geometry) +
-            ' · Opening ' + formatSquareSize(data.inner_geometry)
-        );
+        return 'Insert definition (geometry unavailable until original-schema verification)';
     }
     return '';
 }
@@ -512,7 +365,6 @@ function filteredItems() {
 
 function createRowLabel() {
     if (currentType === 'processing_recipe') return '+ Create new ' + currentDefinition().label.toLowerCase() + ' recipe';
-    if (currentType === 'sample_cut_recipe') return '+ Create new sample cut recipe';
     if (currentType === 'holder') return '+ Create new holder';
     if (currentType === 'insert') return '+ Create new insert';
     return '+ Create new item';
@@ -595,244 +447,63 @@ function renderLibrary() {
 }
 
 
-const HOLDER_SYSTEM_STATES = [
-    'empty',
-    'ungrown',
-    'grown'
-];
-
-
-function holderSystemState(data) {
-    const tags =
-        data && Array.isArray(data.tags)
-            ? data.tags
-            : [];
-
-    if (tags.includes('grown')) return 'grown';
-    if (tags.includes('ungrown')) return 'ungrown';
-    if (tags.includes('empty')) return 'empty';
-
-    return 'empty';
-}
-
-
+// Holder definitions describe physical geometry only. Operational state belongs
+// to original FilledSubstrateHolder usage entries, not fabricated holder tags.
 function isPhysicalHolderLibraryItem(item) {
     const data = item.data || {};
     const mDef = String(data.m_def || '');
-
-    if (
-        mDef.includes(
-            'FilledSubstrateHolderPDI'
-        )
-    ) {
-        return false;
-    }
-
-    /*
-     * FilledSubstrateHolderPDI contains a reference
-     * to the physical holder. This is an additional
-     * guard for older entries where m_def is incomplete.
-     */
-    if (data.substrate_holder) {
-        return false;
-    }
-
-    return true;
+    return !data.substrate_holder &&
+        (!mDef || mDef === 'nomad_material_processing.vapor_deposition.general.SubstrateHolder');
 }
-
 
 function physicalHolderKey(item) {
     const data = item.data || {};
-
-    return String(
-        data.lab_id ||
-        data.name ||
-        item.entryName ||
-        item.entryId ||
-        ''
-    ).trim();
+    return String(data.lab_id || data.name || item.entryName || item.entryId || '').trim();
 }
-
 
 function physicalHolderScore(item) {
-    const data = item.data || {};
-    const tags =
-        Array.isArray(data.tags)
-            ? data.tags
-            : [];
-
-    const positions =
-        Array.isArray(data.positions)
-            ? data.positions
-            : [];
-
-    let score =
-        positions.length;
-
-    /*
-     * Prefer an entry already carrying our current
-     * workflow state.
-     */
-    if (
-        tags.some(function(tag) {
-            return HOLDER_SYSTEM_STATES.includes(tag);
-        })
-    ) {
-        score += 10000;
-    }
-
-    /*
-     * If duplicate physical holder definitions exist,
-     * prefer the one already referenced by NOMAD.
-     */
-    try {
-        if (itemUsage(item).locked) {
-            score += 1000;
-        }
-    } catch (_) {}
-
-    return score;
+    const positions = Array.isArray((item.data || {}).positions)
+        ? item.data.positions : [];
+    return positions.length + (itemUsage(item).locked ? 1000 : 0);
 }
-
 
 function canonicalPhysicalHolderItems(items) {
-    const holders =
-        new Map();
-
-    (items || [])
-        .filter(
-            isPhysicalHolderLibraryItem
-        )
-        .forEach(function(item) {
-            const key =
-                physicalHolderKey(item);
-
-            if (!key) {
-                return;
-            }
-
-            const previous =
-                holders.get(key);
-
-            if (
-                !previous ||
-                physicalHolderScore(item) >
-                    physicalHolderScore(previous)
-            ) {
-                holders.set(
-                    key,
-                    item
-                );
-            }
-        });
-
-    return Array.from(
-        holders.values()
-    );
-}
-
-
-/*
- * Lab Library edits holder geometry, not the operational workflow state.
- * Keep existing user/instrument tags and exactly one reserved state tag.
- * A duplicate/new holder intentionally starts at "empty".
- */
-function managedHolderTags(data, originalData) {
-    const id = String(data.lab_id || data.name || '').trim();
-    const prior = originalData || {};
-    const priorIds = new Set(
-        [prior.lab_id, prior.name]
-            .map(function(value) { return String(value || '').trim(); })
-            .filter(Boolean)
-    );
-    const state = holderSystemState(data);
-    const existing = Array.isArray(data.tags) ? data.tags : [];
-    const otherTags = existing.filter(function(tag) {
-        return typeof tag === 'string' &&
-            Boolean(tag.trim()) &&
-            !HOLDER_SYSTEM_STATES.includes(tag) &&
-            tag !== id &&
-            !priorIds.has(tag);
-    });
-
-    return Array.from(new Set([id, ...otherTags, state].filter(Boolean)));
-}
-
-function holderWorkflowLabel(data) {
-    const state = holderSystemState(data);
-    const hasExplicitState = Array.isArray(data && data.tags) &&
-        data.tags.some(function(tag) {
-            return HOLDER_SYSTEM_STATES.includes(tag);
-        });
-    if (!hasExplicitState) return 'Empty (assumed: no workflow tag)';
-    if (state === 'ungrown') return 'Filled (ungrown)';
-    if (state === 'grown') return 'Grown';
-    return 'Empty';
-}
-
-/*
- * An MBE experiment can change the same physical holder's state while
- * its Lab Library editor is open. Refuse a stale edit rather than
- * silently overwriting the newer state or any additional tags.
- * NOMAD does not provide an atomic compare-and-swap here: a simultaneous
- * write between this check and PUT remains an integration limitation.
- */
-function holderTagSnapshot(tags) {
-    return Array.from(new Set(
-        (Array.isArray(tags) ? tags : [])
-            .filter(function(tag) { return typeof tag === 'string'; })
-    )).sort();
-}
-
-async function assertHolderTagsNotChanged(item) {
-    if (!item || !item.entryId) {
-        throw new Error('Cannot verify the current physical holder state.');
-    }
-
-    const response = await fetch(
-        nomadApiBase() + '/entries/' +
-            encodeURIComponent(item.entryId) + '/archive/query',
-        {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({required: '*'})
+    const holders = new Map();
+    (items || []).filter(isPhysicalHolderLibraryItem).forEach(function(item) {
+        const key = physicalHolderKey(item);
+        if (!key) return;
+        const prior = holders.get(key);
+        if (!prior || physicalHolderScore(item) > physicalHolderScore(prior)) {
+            holders.set(key, item);
         }
+    });
+    return Array.from(holders.values());
+}
+
+async function assertHolderGeometryNotChanged(item) {
+    if (!item || !item.entryId) {
+        throw new Error('Cannot verify current holder definition.');
+    }
+    const response = await fetch(
+        nomadApiBase() + '/entries/' + encodeURIComponent(item.entryId) + '/archive/query',
+        {method: 'POST', headers: {'Content-Type': 'application/json'},
+         body: JSON.stringify({required: '*'})}
     );
-    if (!response.ok) {
-        throw new Error('Could not verify current holder tags (' +
-            response.status + '). Nothing was saved.');
-    }
-
-    const result = await response.json();
-    const latest = result && result.data && result.data.archive &&
-        result.data.archive.data;
+    if (!response.ok) throw new Error('Cannot verify holder before edit. Nothing saved.');
+    const archive = await response.json();
+    const latest = archive && archive.data && archive.data.archive && archive.data.archive.data;
     if (!latest || typeof latest !== 'object') {
-        throw new Error('Current holder archive could not be read. Nothing was saved.');
+        throw new Error('Cannot read latest holder before edit. Nothing saved.');
     }
-
     const original = item.data || {};
-    if (String(latest.lab_id || '') !== String(original.lab_id || '') ||
-        JSON.stringify(holderTagSnapshot(latest.tags)) !==
-            JSON.stringify(holderTagSnapshot(original.tags))) {
-        throw new Error(
-            'Holder ID or tags changed in NOMAD since this editor opened. ' +
-            'Close and reload the Lab Library before editing. Nothing was saved.'
-        );
+    const fields = ['lab_id', 'name', 'positions', 'number_of_positions',
+                    'outer_diameter', 'thickness', 'holder_material'];
+    for (const field of fields) {
+        if (JSON.stringify(latest[field] ?? null) !== JSON.stringify(original[field] ?? null)) {
+            throw new Error('Holder definition changed in NOMAD (' + field + '). Reload before editing.');
+        }
     }
 }
-
-
-function managedInsertTags(data) {
-    const id =
-        String(
-            data.lab_id ||
-            data.name ||
-            ''
-        ).trim();
-
-    return id ? [id] : [];
-}
-
 
 async function loadCurrentType() {
     const status = document.getElementById('libraryStatus');
@@ -985,7 +656,6 @@ function cleaningReadonlyView(data) {
                 ? formatNumber(Number(step.temperature))
                 : '—';
 
-        const agitation = step.agitation || 'None';
 
         return `
             <div class="cleaning-step-row">
@@ -1000,7 +670,6 @@ function cleaningReadonlyView(data) {
                 </div>
 
                 <div class="cleaning-step-secondary">
-                    ${readonlyViewField('Agitation', agitation)}
                     ${readonlyViewField('Comment', step.comment || '—')}
                 </div>
             </div>
@@ -1032,155 +701,45 @@ function cleaningReadonlyView(data) {
 }
 
 function annealingReadonlyView(data) {
-    const instrument =
-        data.location ||
-        (
-            Array.isArray(data.instruments) &&
-            data.instruments[0] &&
-            data.instruments[0].name
-        ) ||
-        '—';
-
-    const atmosphere = data.atmosphere || '—';
-
-    const steps =
-        Array.isArray(data.steps) && data.steps.length
-            ? data.steps
-            : [];
-
+    const instrument = data.location || (
+        Array.isArray(data.instruments) && data.instruments[0] && data.instruments[0].name
+    ) || '—';
+    const steps = Array.isArray(data.steps) ? data.steps : [];
     const stepsHtml = steps.map(function(step, index) {
-        const temperature =
-            step.operation_temperature !== undefined &&
-            step.operation_temperature !== null
-                ? formatNumber(Number(step.operation_temperature))
-                : '—';
-
-        const duration =
-            step.duration !== undefined && step.duration !== null
-                ? formatNumber(Number(step.duration) / 60)
-                : '—';
-
-        const rampRate =
-            step.ramp_rate !== undefined &&
-            step.ramp_rate !== null
-                ? formatNumber(Number(step.ramp_rate) * 60)
-                : '—';
-
+        const starting = step.starting_temperature == null
+            ? '—' : formatNumber(Number(step.starting_temperature));
+        const ending = step.ending_temperature == null
+            ? '—' : formatNumber(Number(step.ending_temperature));
+        const duration = step.duration == null
+            ? '—' : formatNumber(Number(step.duration) / 60);
         return `
             <div class="annealing-step-row">
-                <div class="annealing-step-heading">
-                    <strong>Step ${index + 1}</strong>
-                </div>
-
+                <div class="annealing-step-heading"><strong>Step ${index + 1}</strong></div>
                 <div class="annealing-step-fields">
-                    ${readonlyViewField(
-                        'Operation temperature (°C)',
-                        temperature
-                    )}
-
-                    ${readonlyViewField(
-                        'Duration (min)',
-                        duration
-                    )}
-
-                    ${readonlyViewField(
-                        'Ramp rate (°C/min)',
-                        rampRate
-                    )}
+                    ${readonlyViewField('Starting temperature (°C)', starting)}
+                    ${readonlyViewField('Ending temperature (°C)', ending)}
+                    ${readonlyViewField('Duration (min)', duration)}
                 </div>
-
-                ${readonlyViewField(
-                    'Comment',
-                    step.comment || '—'
-                )}
+                ${readonlyViewField('Comment', step.comment || '—')}
             </div>
         `;
     }).join('');
-
-    let conditions = '';
-    conditions += readonlyViewField(
-        'Instrument / location',
-        instrument
-    );
-    conditions += readonlyViewField(
-        'Gas / atmosphere',
-        atmosphere
-    );
-
-    if (atmosphere !== 'Vacuum') {
-        conditions += readonlyViewField(
-            'Gas flow (sccm)',
-            data.gas_flow_sccm !== undefined
-                ? formatNumber(Number(data.gas_flow_sccm))
-                : '—'
-        );
-    }
-
-    if (instrument === 'MBE growth chamber') {
-        conditions += readonlyViewField(
-            'RF power (W)',
-            data.rf_power_w !== undefined
-                ? formatNumber(Number(data.rf_power_w))
-                : '—'
-        );
-    }
-
     return `
         <div class="annealing-layout">
             <div class="annealing-left-column">
                 <h3>Recipe</h3>
-
                 ${readonlyViewField('Recipe name', data.name || '—')}
-                ${readonlyViewTextarea(
-                    'Description',
-                    data.description || ''
-                )}
+                ${readonlyViewTextarea('Description', data.description || '')}
             </div>
-
             <div class="annealing-right-column">
                 <h3>Conditions</h3>
-
-                <div class="field-grid">
-                    ${conditions}
-                </div>
-
-                <div class="annealing-steps-heading">
-                    <h3>Process steps</h3>
-                </div>
-
-                ${
-                    stepsHtml ||
-                    '<div class="muted">No process steps stored.</div>'
-                }
+                ${readonlyViewField('Instrument / location', instrument)}
+                <div class="annealing-steps-heading"><h3>Process steps</h3></div>
+                ${stepsHtml || '<div class="muted">No process steps stored.</div>'}
             </div>
         </div>
     `;
 }
-
-function backSideCoatingReadonlyView(data) {
-    const material =
-        data.coating_material ||
-        (
-            data.coating_reagents &&
-            data.coating_reagents.name
-        ) ||
-        '—';
-
-    const thicknessUm =
-        data.thickness !== undefined &&
-        data.thickness !== null
-            ? formatNumber(Number(data.thickness) * 1e6)
-            : '—';
-
-    return `
-        <h3>Back-side coating</h3>
-        <div class="field-grid">
-            ${readonlyViewField('Coating material', material)}
-            ${readonlyViewField('Thickness (µm)', thicknessUm)}
-        </div>
-    `;
-}
-
 
 function etchingReadonlyView(data) {
     const definition = currentDefinition() || {};
@@ -1225,9 +784,7 @@ function openView(item) {
     let metadata = '';
     metadata += viewRow('ID', data.lab_id || '—');
     if (currentType === 'holder') {
-        metadata += viewRow('Holder workflow', holderWorkflowLabel(data));
-        metadata += viewRow('Holder tags',
-            Array.isArray(data.tags) ? data.tags.join(', ') : '—');
+        metadata += viewRow('Holder type', 'Physical holder geometry');
     }
     metadata += viewRow(
         'State',
@@ -1262,11 +819,6 @@ function openView(item) {
         formHtml = annealingReadonlyView(data);
     } else if (
         currentType === 'processing_recipe' &&
-        currentSubtype === 'back_side_coating'
-    ) {
-        formHtml = backSideCoatingReadonlyView(data);
-    } else if (
-        currentType === 'processing_recipe' &&
         currentSubtype === 'etching'
     ) {
         formHtml = etchingReadonlyView(data);
@@ -1282,7 +834,7 @@ function openView(item) {
     }
 
     if (currentType === 'processing_recipe' &&
-        ['cleaning', 'annealing', 'back_side_coating'].includes(currentSubtype)) {
+        ['cleaning', 'annealing'].includes(currentSubtype)) {
         formHtml += additionalRecipeReadonlyView(data);
     }
 
@@ -1385,10 +937,6 @@ function attachSizeToggle(selectId, wrapId) {
 
 function inferHolderSizeMm(data) {
     const positions = Array.isArray(data.positions) ? data.positions : [];
-    for (const position of positions) {
-        const xy = geometryXY(position.slot_geometry);
-        if (xy && Math.abs(xy.width - xy.length) < 1e-12) return xy.width * 1000;
-    }
     const match = String(data.lab_id || '').match(/^[HM]\d+_(\d+(?:\.\d+)?)$/);
     return match ? Number(match[1]) : null;
 }
@@ -1516,52 +1064,9 @@ function generatedId() {
             );
         }
 
-        if (currentSubtype === 'back_side_coating') {
-            const materialInput =
-                document.getElementById('backCoatingMaterial');
-
-            const thicknessInput =
-                document.getElementById('backCoatingThickness');
-
-            const material =
-                materialInput ? materialInput.value : 'Ti';
-
-            const raw =
-                thicknessInput ? thicknessInput.value.trim() : '';
-
-            let namePart = material;
-
-            if (raw !== '') {
-                const thickness = Number(raw);
-
-                if (Number.isFinite(thickness) && thickness > 0) {
-                    const token =
-                        formatNumber(thickness).replace('.', 'p');
-
-                    namePart += '_' + token + 'um';
-                }
-            }
-
-            return nextNamedRecipeId(
-                prefix,
-                namePart,
-                allProcessingCatalogs[currentSubtype] || []
-            );
-        }
-
         return nextSequentialId(prefix, allProcessingCatalogs[currentSubtype] || []);
     }
 
-    if (currentType === 'sample_cut_recipe') {
-        const parent = readCutRecipeGeometry('cutParent');
-        const child = readCutRecipeGeometry('cutChild');
-        const count = Number(document.getElementById('cutChildCount').value);
-        if (!Number.isInteger(count) || count < 1) {
-            throw new Error('Children per parent must be a positive integer.');
-        }
-        return 'CUT_' + cutRecipeGeometryId(parent) +
-            '_TO_' + count + 'X' + cutRecipeGeometryId(child);
-    }
 
     if (currentType === 'holder') {
         const material = document.getElementById('holderMaterial').value;
@@ -1708,8 +1213,6 @@ function generatedCleaningRecipeId() {
     const reagents = [];
     const durations = [];
     const temperatures = [];
-    const devices = [];
-    const seenDevices = new Set();
 
     rows.forEach(function(row) {
         const reagentSelect =
@@ -1787,36 +1290,6 @@ function generatedCleaningRecipeId() {
         }
 
 
-        const agitation =
-            row.querySelector(
-                '.cleaning-agitation'
-            );
-
-        const value =
-            agitation
-                ? agitation.value
-                : '';
-
-        let device = '';
-
-        if (
-            value === 'Ultrasonic bath'
-        ) {
-            device = 'US';
-        } else if (
-            value === 'Hot plate' ||
-            value === 'Heating plate'
-        ) {
-            device = 'HP';
-        }
-
-        if (
-            device &&
-            !seenDevices.has(device)
-        ) {
-            seenDevices.add(device);
-            devices.push(device);
-        }
     });
 
 
@@ -1846,11 +1319,6 @@ function generatedCleaningRecipeId() {
         parts.push(temperaturePart);
     }
 
-    if (devices.length) {
-        parts.push(
-            devices.join('_')
-        );
-    }
 
     return parts.join('_');
 }
@@ -1890,86 +1358,29 @@ function annealingTemperatureId(values) {
 
 
 function generatedAnnealingRecipeId() {
-    const instrument =
-        document.getElementById('annealingInstrument');
-
-    const atmosphere =
-        document.getElementById('annealingAtmosphere');
-
-    const rows = Array.from(
-        document.querySelectorAll(
-            '#annealingSteps .annealing-step-row'
-        )
-    );
-
+    const instrument = document.getElementById('annealingInstrument');
+    const rows = Array.from(document.querySelectorAll('#annealingSteps .annealing-step-row'));
     const temperatures = [];
     const durations = [];
-
     rows.forEach(function(row) {
-        const temperature =
-            row.querySelector(
-                '.annealing-operation-temperature'
-            );
-
-        if (
-            temperature &&
-            temperature.value !== ''
-        ) {
+        const temperature = row.querySelector('.annealing-ending-temperature');
+        const duration = row.querySelector('.annealing-duration');
+        if (temperature && temperature.value !== '') {
             const value = Number(temperature.value);
-
-            if (Number.isFinite(value)) {
-                temperatures.push(value);
-            }
+            if (Number.isFinite(value)) temperatures.push(value);
         }
-
-        const duration =
-            row.querySelector(
-                '.annealing-duration'
-            );
-
-        if (
-            duration &&
-            duration.value !== ''
-        ) {
+        if (duration && duration.value !== '') {
             const value = Number(duration.value);
-
-            if (Number.isFinite(value)) {
-                durations.push(value);
-            }
+            if (Number.isFinite(value)) durations.push(value);
         }
     });
-
-    const parts = [
-        'Ann',
-        annealingInstrumentAbbreviation(
-            instrument ? instrument.value : ''
-        )
-    ];
-
-    const temperaturePart =
-        annealingTemperatureId(temperatures);
-
-    if (temperaturePart) {
-        parts.push(temperaturePart);
-    }
-
-    const durationPart =
-        cleaningDurationId(durations);
-
-    if (durationPart) {
-        parts.push(durationPart);
-    }
-
-    if (
-        atmosphere &&
-        atmosphere.value
-    ) {
-        parts.push(atmosphere.value);
-    }
-
+    const parts = ['Ann', annealingInstrumentAbbreviation(instrument ? instrument.value : '')];
+    const temperaturePart = annealingTemperatureId(temperatures);
+    if (temperaturePart) parts.push(temperaturePart);
+    const durationPart = cleaningDurationId(durations);
+    if (durationPart) parts.push(durationPart);
     return parts.join('_');
 }
-
 
 function updateGeneratedId() {
     try {
@@ -2488,7 +1899,11 @@ function addHolderPosition(position) {
     const rhoInput =
         input(
             'position-rho',
-            mm(position.rho),
+            (function() {
+                const x = geometryNumber(position.x_position) || 0;
+                const y = geometryNumber(position.y_position) || 0;
+                return formatNumber(Math.hypot(x, y) * 1000);
+            })(),
             'number',
             '0.1'
         );
@@ -2499,9 +1914,11 @@ function addHolderPosition(position) {
     const thetaInput =
         input(
             'position-theta',
-            geometryNumber(
-                position.theta
-            ),
+            (function() {
+                const x = geometryNumber(position.x_position) || 0;
+                const y = geometryNumber(position.y_position) || 0;
+                return formatNumber((Math.atan2(-y, x) * 180 / Math.PI + 360) % 360);
+            })(),
             'number',
             '0.1'
         );
@@ -2605,17 +2022,20 @@ function friendlyFieldLabel(field) {
 
 function cleaningReagentName(step) {
     const reagent = step && step.cleaning_reagents;
-    if (!reagent) return '';
-    if (Array.isArray(reagent)) return reagent[0] && reagent[0].name ? reagent[0].name : '';
+    // NOMAD 1.0.6 CleaningStep.cleaning_reagents: repeats=false.
+    if (!reagent || typeof reagent !== 'object' || Array.isArray(reagent)) {
+        return '';
+    }
     return reagent.name || '';
 }
 
 function cleaningStepHtml(step, index) {
     step = step || {};
-    const reagent = cleaningReagentName(step);
+    // An original CleaningStep can store the medium in `name` without a
+    // CompositeSystemReference. Never create a fictitious reference.
+    const reagent = cleaningReagentName(step) || String(step.name || '');
     const durationMin = step.duration != null ? Number(step.duration) / 60 : '';
     const temperature = step.temperature != null ? step.temperature : '';
-    const agitation = step.agitation || '';
     const comment = step.comment || '';
 
     const knownReagents = [
@@ -2679,14 +2099,6 @@ function cleaningStepHtml(step, index) {
             </div>
 
             <div class="cleaning-step-secondary">
-                <div>
-                    <label>Agitation *</label>
-                    <select class="cleaning-agitation" required>
-                        <option value="__none__" ${!agitation ? 'selected' : ''}>None</option>
-                        <option value="Hot plate" ${agitation === 'Hot plate' ? 'selected' : ''}>Hot plate</option>
-                        <option value="Ultrasonic bath" ${agitation === 'Ultrasonic bath' ? 'selected' : ''}>Ultrasonic bath</option>
-                    </select>
-                </div>
 
                 <div>
                     <label>Comment</label>
@@ -2840,7 +2252,6 @@ function renderCleaningFields(seedData) {
 
             const durationRaw = row.querySelector('.cleaning-duration').value.trim();
             const temperatureRaw = row.querySelector('.cleaning-temperature').value.trim();
-            const agitation = row.querySelector('.cleaning-agitation').value;
             const comment = row.querySelector('.cleaning-comment').value.trim();
 
             // Editing the visible controls must not erase other existing
@@ -2850,10 +2261,18 @@ function renderCleaningFields(seedData) {
             ));
 
             if (reagent) {
+                // Reagent is free text in the original step's `name`.
+                // Only existing, unchanged NOMAD references may survive.
+                const previousReagent =
+                    cleaningReagentName(step) || String(step.name || '');
+                const currentRef = step.cleaning_reagents;
+                if (previousReagent !== reagent || !currentRef ||
+                    typeof currentRef !== 'object' || Array.isArray(currentRef) ||
+                    typeof currentRef.reference !== 'string' ||
+                    !currentRef.reference.trim()) {
+                    delete step.cleaning_reagents;
+                }
                 step.name = reagent;
-                step.cleaning_reagents = Object.assign(
-                    {}, step.cleaning_reagents || {}, {name: reagent}
-                );
             }
 
             if (durationRaw !== '') {
@@ -2864,11 +2283,7 @@ function renderCleaningFields(seedData) {
                 step.temperature = Number(temperatureRaw);
             }
 
-            if (agitation && agitation !== '__none__') {
-                step.agitation = agitation;
-            } else {
-                delete step.agitation;
-            }
+            delete step.agitation; // Drop obsolete PDI-only quantity.
             if (comment) step.comment = comment;
             else delete step.comment;
 
@@ -2919,137 +2334,85 @@ function annealingInstrumentName(seedData) {
     if (Array.isArray(instruments) && instruments.length && instruments[0].name) {
         return String(instruments[0].name);
     }
+    if ((seedData || {}).location) return String(seedData.location);
     return 'Tube furnace – MBE lab';
 }
 
 function annealingStepHtml(step, index) {
     step = step || {};
-
-    const durationMin =
-        step.duration != null ? Number(step.duration) / 60 : '';
-
-    const operationTemperature =
-        step.operation_temperature != null
-            ? step.operation_temperature
-            : (
-                step.ending_temperature != null
-                    ? step.ending_temperature
-                    : (
-                        step.starting_temperature != null
-                            ? step.starting_temperature
-                            : ''
-                    )
-            );
-
-    // Stored internally as K/s. Display existing values as °C/min.
-    const rampRate =
-        step.ramp_rate != null ? Number(step.ramp_rate) * 60 : '';
-
-    const comment = step.comment || '';
-
+    const duration = step.duration != null ? Number(step.duration) / 60 : '';
+    const starting = step.starting_temperature == null ? '' : step.starting_temperature;
+    const ending = step.ending_temperature == null ? '' : step.ending_temperature;
     return `
         <div class="annealing-step-row">
             <div class="annealing-step-header">
                 <strong>Step ${index + 1}</strong>
                 <button type="button" class="annealing-remove-step">Remove step</button>
             </div>
-
             <div class="annealing-step-primary">
                 <div>
-                    <label>Operation temperature (°C) *</label>
-                    <input
-                        class="annealing-operation-temperature"
-                        type="number"
-                        step="0.1"
-                        required
-                        value="${operationTemperature}">
+                    <label>Starting temperature (°C)</label>
+                    <input class="annealing-starting-temperature" type="number" step="0.1"
+                        value="${escapeHtml(String(starting))}">
                 </div>
-
+                <div>
+                    <label>Ending temperature (°C) *</label>
+                    <input class="annealing-ending-temperature" type="number" step="0.1"
+                        required value="${escapeHtml(String(ending))}">
+                </div>
                 <div>
                     <label>Duration (min) *</label>
-                    <input
-                        class="annealing-duration"
-                        type="number"
-                        step="0.01"
-                        min="0.01"
-                        required
-                        value="${durationMin}">
-                </div>
-
-                <div>
-                    <label>Ramp rate</label>
-                    <div class="annealing-ramp-control">
-                        <input
-                            class="annealing-ramp-rate"
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            value="${rampRate}">
-                        <select class="annealing-ramp-unit">
-                            <option value="c_per_min" selected>°C/min</option>
-                            <option value="c_per_s">°C/s</option>
-                        </select>
-                    </div>
+                    <input class="annealing-duration" type="number" step="0.01"
+                        min="0.01" required value="${escapeHtml(String(duration))}">
                 </div>
             </div>
-
             <div class="annealing-step-secondary">
                 <div>
                     <label>Comment</label>
-                    <input
-                        class="annealing-comment"
-                        type="text"
-                        value="${escapeHtml(comment)}">
+                    <input class="annealing-comment" type="text"
+                        value="${escapeHtml(step.comment || '')}">
                 </div>
             </div>
         </div>
     `;
 }
 
+// Keep only the quantities defined by original AnnealingStep.m_def.
+// This is GUI payload preparation, not a NOMAD metainfo normalizer.
+function originalAnnealingStep(source) {
+    const result = {};
+    ['name', 'start_time', 'comment', 'duration',
+        'starting_temperature', 'ending_temperature'].forEach(function(key) {
+        if (source && Object.prototype.hasOwnProperty.call(source, key)) {
+            result[key] = source[key];
+        }
+    });
+    return result;
+}
+
 function renderAnnealingFields(seedData) {
     restoreProcessingTemplateBlock();
-
     const container = document.getElementById('processingDynamicFields');
     container.classList.remove('cleaning-editor');
     container.classList.add('annealing-editor');
 
     const instrument = annealingInstrumentName(seedData);
-    const atmosphere = String((seedData || {}).atmosphere || 'Vacuum');
-    const gasFlow =
-        (seedData || {}).gas_flow_sccm != null
-            ? (seedData || {}).gas_flow_sccm
-            : '';
-    const rfPower =
-        (seedData || {}).rf_power_w != null
-            ? (seedData || {}).rf_power_w
-            : '';
-
     container.innerHTML = `
         <div class="annealing-left-column">
             <div>
                 <label for="annealingRecipeName">Recipe name</label>
-                <input
-                    id="annealingRecipeName"
-                    type="text"
-                    required
+                <input id="annealingRecipeName" type="text" required
                     placeholder="e.g. STO_O2_950C"
-                    value="${escapeHtml(
-                        (seedData || {}).name &&
+                    value="${escapeHtml((seedData || {}).name &&
                         (seedData || {}).name !== (seedData || {}).lab_id
-                            ? (seedData || {}).name
-                            : ''
-                    )}">
+                        ? (seedData || {}).name : '')}">
             </div>
-
             <div>
                 <label for="annealingDescription">Description</label>
-                <input
-                    id="annealingDescription"
-                    type="text"
+                <input id="annealingDescription" type="text"
                     value="${escapeHtml((seedData || {}).description || '')}">
             </div>
         </div>
-
         <div class="annealing-right-column">
             <div class="annealing-condition-grid">
                 <div>
@@ -3063,63 +2426,20 @@ function renderAnnealingFields(seedData) {
                         <option ${instrument === 'MBE 2nd transfer chamber' ? 'selected' : ''}>MBE 2nd transfer chamber</option>
                     </select>
                 </div>
-
-                <div>
-                    <label for="annealingAtmosphere">Gas / atmosphere *</label>
-                    <select id="annealingAtmosphere" required>
-                        <option value="Vacuum" ${atmosphere === 'Vacuum' ? 'selected' : ''}>Vacuum</option>
-                        <option value="O2" ${atmosphere === 'O2' ? 'selected' : ''}>O₂</option>
-                        <option value="Ar" ${atmosphere === 'Ar' ? 'selected' : ''}>Ar</option>
-                        <option value="N2" ${atmosphere === 'N2' ? 'selected' : ''}>N₂</option>
-                    </select>
-                </div>
-
-                <div>
-                    <label for="annealingGasFlow">Gas flow (sccm)</label>
-                    <input
-                        id="annealingGasFlow"
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        value="${gasFlow}">
-                </div>
-
-                <div id="annealingRfPowerWrap">
-                    <label for="annealingRfPower">RF power (W)</label>
-                    <input
-                        id="annealingRfPower"
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        value="${rfPower}">
-                </div>
             </div>
-
-            <div class="annealing-steps-heading">
-                <h3>Process steps</h3>
-            </div>
-
+            <div class="annealing-steps-heading"><h3>Process steps</h3></div>
             <div id="annealingSteps"></div>
             <button type="button" id="addAnnealingStep">+ Add step</button>
         </div>
     `;
 
     const left = container.querySelector('.annealing-left-column');
-
     const templateBlock = document.getElementById('processingTemplateBlock');
-    if (left && templateBlock) {
-        left.insertBefore(templateBlock, left.firstChild);
-    }
-
+    if (left && templateBlock) left.insertBefore(templateBlock, left.firstChild);
     const targetUpload = document.getElementById('targetUploadFields');
-    if (left && targetUpload) {
-        left.appendChild(targetUpload);
-    }
-
-    const nameInput = document.getElementById('annealingRecipeName');
-    if (nameInput) {
-        nameInput.addEventListener('input', updateGeneratedId);
-    }
+    if (left && targetUpload) left.appendChild(targetUpload);
+    document.getElementById('annealingRecipeName')
+        .addEventListener('input', updateGeneratedId);
 
     const instrumentSelect = document.getElementById('annealingInstrument');
     if (instrument && !Array.from(instrumentSelect.options).some(function(option) {
@@ -3131,210 +2451,47 @@ function renderAnnealingFields(seedData) {
         existing.selected = true;
         instrumentSelect.appendChild(existing);
     }
-    const atmosphereSelect = document.getElementById('annealingAtmosphere');
-    const gasFlowInput = document.getElementById('annealingGasFlow');
-    const rfWrap = document.getElementById('annealingRfPowerWrap');
+    instrumentSelect.addEventListener('change', updateGeneratedId);
 
-    function updateAnnealingConditions() {
-        const currentAtmosphere = atmosphereSelect.value;
-        const instrument = instrumentSelect.value;
-
-        let allowedAtmospheres;
-        let fallbackAtmosphere = 'Vacuum';
-
-        if (instrument === 'Oven Chemlab') {
-            allowedAtmospheres = [
-                ['Air', 'Air']
-            ];
-            fallbackAtmosphere = 'Air';
-        } else if (
-            instrument === 'Rapid Thermal Annealing'
-        ) {
-            allowedAtmospheres = [
-                ['N2', 'N₂'],
-                ['O2', 'O₂'],
-                ['Ar', 'Ar'],
-                ['Air', 'Air']
-            ];
-            fallbackAtmosphere = 'Air';
-        } else if (
-            instrument === 'Tube furnace – MBE lab' ||
-            instrument === 'Tube furnace – 6th floor'
-        ) {
-            allowedAtmospheres = [
-                ['Vacuum', 'Vacuum'],
-                ['O2', 'O₂'],
-                ['Ar', 'Ar'],
-                ['N2', 'N₂'],
-                ['Air', 'Air']
-            ];
-        } else {
-            allowedAtmospheres = [
-                ['Vacuum', 'Vacuum'],
-                ['O2', 'O₂'],
-                ['Ar', 'Ar']
-            ];
-        }
-
-        atmosphereSelect.innerHTML = '';
-
-        allowedAtmospheres.forEach(function(pair) {
-            const option =
-                document.createElement('option');
-
-            option.value = pair[0];
-            option.textContent = pair[1];
-
-            atmosphereSelect.appendChild(option);
-        });
-
-        if (
-            allowedAtmospheres.some(
-                function(pair) {
-                    return pair[0] ===
-                           currentAtmosphere;
-                }
-            )
-        ) {
-            atmosphereSelect.value =
-                currentAtmosphere;
-        } else {
-            atmosphereSelect.value =
-                fallbackAtmosphere;
-        }
-
-        atmosphereSelect.disabled =
-            instrument === 'Oven Chemlab';
-
-        const hasRfPlasma =
-            instrument === 'MBE growth chamber';
-
-        rfWrap.classList.toggle(
-            'hidden',
-            !hasRfPlasma
-        );
-
-        if (!hasRfPlasma) {
-            document
-                .getElementById('annealingRfPower')
-                .value = '';
-        }
-
-        /*
-         * Vacuum and ambient air do not require
-         * a gas-flow value.
-         */
-        const needsGasFlow =
-            atmosphereSelect.value !== 'Vacuum' &&
-            atmosphereSelect.value !== 'Air';
-
-        gasFlowInput.disabled = !needsGasFlow;
-        gasFlowInput.required = needsGasFlow;
-
-        if (!needsGasFlow) {
-            gasFlowInput.value = '';
-        }
-    }
-
-
-    instrumentSelect.addEventListener('change', function() {
-        updateAnnealingConditions();
-        updateGeneratedId();
-    });
-    atmosphereSelect.addEventListener('change', function() {
-        updateAnnealingConditions();
-        updateGeneratedId();
-    });
-    updateAnnealingConditions();
-
-    const steps =
-        Array.isArray(seedData.steps) && seedData.steps.length
-            ? seedData.steps
-            : [{}];
-
+    const steps = Array.isArray(seedData.steps) && seedData.steps.length
+        ? seedData.steps.map(originalAnnealingStep) : [{}];
     const stepContainer = document.getElementById('annealingSteps');
-
     if (container.dataset.annealingIdHook !== '1') {
         container.dataset.annealingIdHook = '1';
-
-        container.addEventListener(
-            'input',
-            updateGeneratedId
-        );
-
-        container.addEventListener(
-            'change',
-            updateGeneratedId
-        );
+        container.addEventListener('input', updateGeneratedId);
+        container.addEventListener('change', updateGeneratedId);
     }
 
     function syncAnnealingStepsFromDom() {
-        const rows =
-            Array.from(stepContainer.querySelectorAll('.annealing-step-row'));
-
-        rows.forEach(function(row, index) {
-            const operationTemperature =
-                row.querySelector('.annealing-operation-temperature').value.trim();
-
-            const duration =
-                row.querySelector('.annealing-duration').value.trim();
-
-            const rampRate =
-                row.querySelector('.annealing-ramp-rate').value.trim();
-
-            const rampUnit =
-                row.querySelector('.annealing-ramp-unit').value;
-
-            const comment =
-                row.querySelector('.annealing-comment').value.trim();
-
-            const step = JSON.parse(JSON.stringify(
-                row.__recipeSourceStep || steps[index] || {}
-            ));
-
-            if (operationTemperature !== '') {
-                step.operation_temperature = Number(operationTemperature);
-            }
-
-            if (duration !== '') {
-                step.duration = Number(duration) * 60;
-            }
-
-            if (rampRate !== '') {
-                const value = Number(rampRate);
-
-                // Internal schema unit: K/s
-                step.ramp_rate =
-                    rampUnit === 'c_per_min'
-                        ? value / 60
-                        : value;
-            }
-
-            if (comment) step.comment = comment;
-            else delete step.comment;
-            if (rampRate === '') delete step.ramp_rate;
-
-            steps[index] = step;
-        });
+        Array.from(stepContainer.querySelectorAll('.annealing-step-row'))
+            .forEach(function(row, index) {
+                const starting = row.querySelector('.annealing-starting-temperature').value.trim();
+                const ending = row.querySelector('.annealing-ending-temperature').value.trim();
+                const duration = row.querySelector('.annealing-duration').value.trim();
+                const comment = row.querySelector('.annealing-comment').value.trim();
+                const step = originalAnnealingStep(row.__recipeSourceStep || steps[index] || {});
+                if (starting !== '') step.starting_temperature = Number(starting);
+                else delete step.starting_temperature;
+                if (ending !== '') step.ending_temperature = Number(ending);
+                else delete step.ending_temperature;
+                if (duration !== '') step.duration = Number(duration) * 60;
+                else delete step.duration;
+                if (comment) step.comment = comment;
+                else delete step.comment;
+                steps[index] = step;
+            });
     }
 
     function redraw() {
-        stepContainer.innerHTML =
-            steps.map(annealingStepHtml).join('');
+        stepContainer.innerHTML = steps.map(annealingStepHtml).join('');
         Array.from(stepContainer.querySelectorAll('.annealing-step-row'))
             .forEach(function(row, index) {
-                row.__recipeSourceStep = JSON.parse(JSON.stringify(
-                    steps[index] || {}
-                ));
+                row.__recipeSourceStep = originalAnnealingStep(steps[index]);
             });
-
         updateGeneratedId();
-
-        stepContainer
-            .querySelectorAll('.annealing-remove-step')
+        stepContainer.querySelectorAll('.annealing-remove-step')
             .forEach(function(button, index) {
                 button.disabled = steps.length === 1;
-
                 button.addEventListener('click', function() {
                     syncAnnealingStepsFromDom();
                     steps.splice(index, 1);
@@ -3342,113 +2499,14 @@ function renderAnnealingFields(seedData) {
                 });
             });
     }
-
-    document
-        .getElementById('addAnnealingStep')
-        .addEventListener('click', function() {
-            syncAnnealingStepsFromDom();
-            steps.push({});
-            redraw();
-        });
-
+    document.getElementById('addAnnealingStep').addEventListener('click', function() {
+        syncAnnealingStepsFromDom();
+        steps.push({});
+        redraw();
+    });
     redraw();
     updateGeneratedId();
 }
-
-function renderBackSideCoatingFields(seedData) {
-    restoreProcessingTemplateBlock();
-
-    const container =
-        document.getElementById('processingDynamicFields');
-
-    container.classList.remove(
-        'cleaning-editor',
-        'annealing-editor'
-    );
-
-    const material =
-        (seedData || {}).coating_material ||
-        (
-            (seedData || {}).coating_reagents &&
-            (seedData || {}).coating_reagents.name
-        ) ||
-        'Ti';
-
-    const thicknessUm =
-        (seedData || {}).thickness !== undefined &&
-        (seedData || {}).thickness !== null
-            ? Number((seedData || {}).thickness) * 1e6
-            : '';
-
-    container.innerHTML = `
-        <div class="cleaning-left-column">
-            <div>
-                <label for="backCoatingMaterial">
-                    Coating material
-                </label>
-
-                <select id="backCoatingMaterial">
-                    <option
-                        value="Ti"
-                        ${material === 'Ti' ? 'selected' : ''}>
-                        Ti
-                    </option>
-
-                    <option
-                        value="SrRuO3"
-                        ${material === 'SrRuO3' ? 'selected' : ''}>
-                        SrRuO3
-                    </option>
-                </select>
-            </div>
-
-            <div>
-                <label for="backCoatingThickness">
-                    Thickness (µm)
-                </label>
-
-                <input
-                    id="backCoatingThickness"
-                    type="number"
-                    min="0"
-                    step="any"
-                    required
-                    value="${escapeHtml(thicknessUm)}">
-            </div>
-        </div>
-    `;
-
-    const left =
-        container.querySelector('.cleaning-left-column');
-
-    const templateBlock =
-        document.getElementById('processingTemplateBlock');
-
-    if (left && templateBlock) {
-        left.insertBefore(
-            templateBlock,
-            left.firstChild
-        );
-    }
-
-    const target =
-        document.getElementById('targetUploadFields');
-
-    if (left && target) {
-        left.appendChild(target);
-    }
-
-    document
-        .getElementById('backCoatingMaterial')
-        .addEventListener('change', updateGeneratedId);
-
-    document
-        .getElementById('backCoatingThickness')
-        .addEventListener('input', updateGeneratedId);
-
-    updateGeneratedId();
-}
-
 
 function renderSchemaScalarFields(container, seedData, overrideSpecs) {
     const definition = currentDefinition() || {};
@@ -3523,17 +2581,24 @@ function renderEtchingFields(seedData) {
         <div class="cleaning-right-column">
             <h3>Etching parameters</h3>
             <p class="helper">Fields below come from the existing
-                EtchingRecipePDI schema. Numerical values use the stored
+                installed original EtchingRecipe schema. Numerical values use the stored
                 NOMAD units shown in the labels.</p>
             <div id="etchingSchemaFields" class="field-grid"></div>
             <div id="etchingSubsectionFields"></div>
         </div>
     `;
     const scalarContainer = document.getElementById('etchingSchemaFields');
-    renderSchemaScalarFields(scalarContainer, seedData || {});
+    const scalarSpecs = (currentDefinition().field_specs || [])
+        .filter(function(spec) {
+            return !['name', 'description', 'lab_id', 'recipe']
+                .includes(spec.name);
+        });
+    renderSchemaScalarFields(scalarContainer, seedData || {}, scalarSpecs);
 
     const subsectionContainer = document.getElementById('etchingSubsectionFields');
-    (currentDefinition().subsection_specs || []).forEach(function(spec) {
+    (currentDefinition().subsection_specs || [])
+        .filter(function(spec) { return spec.name !== 'samples'; })
+        .forEach(function(spec) {
         const wrapper = document.createElement('div');
         wrapper.className = 'schema-subsection';
         wrapper.dataset.section = spec.name;
@@ -3572,12 +2637,7 @@ function renderEtchingFields(seedData) {
 const EDITED_RECIPE_FIELDS = {
     cleaning: ['name', 'description', 'method', 'duration', 'steps'],
     annealing: [
-        'name', 'description', 'duration', 'steps', 'atmosphere',
-        'gas_flow_sccm', 'rf_power_w', 'location', 'instruments'
-    ],
-    back_side_coating: [
-        'name', 'description', 'coating_material', 'thickness',
-        'coating_reagents', 'temperature', 'duration'
+        'name', 'description', 'duration', 'steps', 'location', 'instruments'
     ]
 };
 
@@ -3590,7 +2650,7 @@ function additionalRecipeSpecs() {
         }),
         sections: (def.subsection_specs || []).filter(function(spec) {
             return !edited.has(spec.name) &&
-                !['samples', 'instruments', 'parent_sample', 'children_samples']
+                !['samples', 'instruments']
                     .includes(spec.name);
         })
     };
@@ -3722,12 +2782,6 @@ function renderProcessingDynamicFields(seedData) {
         return;
     }
 
-    if (currentSubtype === 'back_side_coating') {
-        renderBackSideCoatingFields(seedData || {});
-        renderRecipeAdditionalFields(seedData || {});
-        return;
-    }
-
     if (currentSubtype === 'etching') {
         renderEtchingFields(seedData || {});
         return;
@@ -3763,7 +2817,7 @@ function populateEditor(data) {
     restoreTargetUploadFields();
     restoreProcessingTemplateBlock();
     data = data || {};
-    ['processingFields','sampleCutFields','holderFields','insertFields'].forEach(function(id) {
+    ['processingFields','holderFields','insertFields'].forEach(function(id) {
         document.getElementById(id).classList.add('hidden');
     });
 
@@ -3772,22 +2826,6 @@ function populateEditor(data) {
         populateProcessingTemplate(data);
     }
 
-    if (currentType === 'sample_cut_recipe') {
-        document.getElementById('sampleCutFields').classList.remove('hidden');
-        populateCutRecipeGeometry('cutParent', data.input_geometry, 10);
-        populateCutRecipeGeometry('cutChild', data.children_geometry, 5);
-        const childCount = Number(data.number_of_samples) || 4;
-        const countSelect = document.getElementById('cutChildCount');
-        if (!Array.from(countSelect.options).some(function(option) {
-            return option.value === String(childCount);
-        })) {
-            const option = document.createElement('option');
-            option.value = String(childCount);
-            option.textContent = String(childCount);
-            countSelect.appendChild(option);
-        }
-        countSelect.value = String(childCount);
-    }
 
     if (currentType === 'holder') {
         document.getElementById('holderFields').classList.remove('hidden');
@@ -3801,7 +2839,14 @@ function populateEditor(data) {
         const positions = Array.isArray(data.positions) ? data.positions : [];
         positions.forEach(addHolderPosition);
         if (!positions.length) {
-            ['A','B','C','D','E'].forEach(function(name) { addHolderPosition({name:name}); });
+            // 10x10 mm cross: A center, B right, C below, D left, E above.
+            [
+                {name:'A', x_position:0, y_position:0},
+                {name:'B', x_position:0.01, y_position:0},
+                {name:'C', x_position:0, y_position:-0.01},
+                {name:'D', x_position:-0.01, y_position:0},
+                {name:'E', x_position:0, y_position:0.01},
+            ].forEach(addHolderPosition);
         }
     }
 
@@ -3824,7 +2869,7 @@ function populateEditor(data) {
 }
 
 function entityNoun() {
-    if (currentType === 'processing_recipe' || currentType === 'sample_cut_recipe') return 'recipe';
+    if (currentType === 'processing_recipe') return 'recipe';
     if (currentType === 'holder') return 'holder';
     if (currentType === 'insert') return 'insert';
     return 'item';
@@ -3940,6 +2985,10 @@ function readEtchingFields(data) {
         }
         data[name] = value;
     });
+
+    // Recipes are definitions, not executions.
+    delete data.samples;
+    delete data.recipe;
 }
 
 function readCleaningFields(data) {
@@ -4009,35 +3058,45 @@ function readCleaningFields(data) {
             );
         }
 
-        const agitation =
-            row.querySelector('.cleaning-agitation').value;
-
-        if (!agitation) {
-            throw new Error(
-                'Step ' + number + ': select an agitation setting.'
-            );
-        }
-
         const durationSeconds = durationMinutes * 60;
         totalDuration += durationSeconds;
 
         const sourceStep = row.__recipeSourceStep || {};
-        const step = Object.assign(
-            {}, JSON.parse(JSON.stringify(sourceStep)), {
-                name: reagent,
-                duration: durationSeconds,
-                temperature: temperature,
-                cleaning_reagents: Object.assign(
-                    {}, sourceStep.cleaning_reagents || {}, {name: reagent}
-                )
+        // Copy only quantities from the original CleaningStep.m_def.
+        // Do not transfer custom fields from old development templates.
+        const step = {};
+        ['start_time', 'comment'].forEach(function(key) {
+            if (Object.prototype.hasOwnProperty.call(sourceStep, key)) {
+                step[key] = JSON.parse(JSON.stringify(sourceStep[key]));
             }
-        );
+        });
+        step.name = reagent;
+        step.duration = durationSeconds;
+        step.temperature = temperature;
 
-        if (agitation !== '__none__') {
-            step.agitation = agitation;
-        } else {
-            delete step.agitation;
+        // NOMAD 1.0.6 CleaningStep.cleaning_reagents is a SINGLE
+        // CompositeSystemReference (repeats=false), not a list.
+        // Only preserve an actual, unchanged existing reference.
+        const originalReagent = sourceStep.cleaning_reagents;
+        const previousReagent = String(
+            cleaningReagentName(sourceStep) || sourceStep.name || ''
+        );
+        if (previousReagent === reagent && originalReagent &&
+            typeof originalReagent === 'object' &&
+            !Array.isArray(originalReagent) &&
+            typeof originalReagent.reference === 'string' &&
+            Boolean(originalReagent.reference.trim())) {
+            // Original CompositeSystemReference quantities only.
+            const copy = {};
+            ['name', 'lab_id', 'reference'].forEach(function(key) {
+                if (Object.prototype.hasOwnProperty.call(originalReagent, key)) {
+                    copy[key] = originalReagent[key];
+                }
+            });
+            step.cleaning_reagents = copy;
         }
+        
+        // Original CleaningStep has no PDI-only agitation field.
 
         const comment =
             row.querySelector('.cleaning-comment').value.trim();
@@ -4053,228 +3112,69 @@ function readCleaningFields(data) {
 
 
 function readAnnealingFields(data) {
-    const recipeName =
-        document.getElementById('annealingRecipeName').value.trim();
-
-    if (!recipeName) {
-        throw new Error('Recipe name is required.');
-    }
-
+    // Exclude stale non-original fields from templates or previous PDI payloads.
+    // Allowed root fields are taken from original AnnealingRecipe.m_def (1.0.6).
+    const allowed = new Set([
+        'm_def', 'name', 'datetime', 'lab_id', 'description', 'method',
+        'location', 'end_time', 'tags', 'duration', 'steps', 'instruments'
+    ]);
+    Object.keys(data).forEach(function(key) {
+        if (!allowed.has(key)) delete data[key];
+    });
+    const recipeName = document.getElementById('annealingRecipeName').value.trim();
+    if (!recipeName) throw new Error('Recipe name is required.');
     data.name = recipeName;
-
-    const description =
-        document.getElementById('annealingDescription').value.trim();
-
+    const description = document.getElementById('annealingDescription').value.trim();
     if (description) data.description = description;
     else delete data.description;
 
-    const instrument =
-        document.getElementById('annealingInstrument').value;
-
-    if (!instrument) {
-        throw new Error('Annealing instrument / location is required.');
+    const instrument = document.getElementById('annealingInstrument').value;
+    if (!instrument) throw new Error('Annealing instrument / location is required.');
+    const previousLocation = data.location;
+    const sameInstrument = annealingInstrumentName(data) === instrument;
+    if (sameInstrument && Array.isArray(data.instruments)) {
+        const references = data.instruments.filter(function(ref) {
+            return ref && typeof ref.reference === 'string' && ref.reference.trim() &&
+                (ref.name === instrument || (!ref.name && previousLocation === instrument));
+        });
+        if (references.length) data.instruments = references;
+        else delete data.instruments;
+    } else {
+        delete data.instruments;
     }
-
-    // Keep both the human-readable location and the NOMAD
-    // InstrumentReference structure.
     data.location = instrument;
-    data.instruments = [{
-        name: instrument
-    }];
-
-    const atmosphere =
-        document.getElementById('annealingAtmosphere').value;
-
-    if (!atmosphere) {
-        throw new Error('Gas / atmosphere is required.');
-    }
-
-    data.atmosphere = atmosphere;
-
-    const gasFlowInput =
-        document.getElementById('annealingGasFlow');
-
-    if (
-        atmosphere === 'Vacuum' ||
-        atmosphere === 'Air'
-    ) {
-        delete data.gas_flow_sccm;
-    } else {
-        const gasFlow = Number(gasFlowInput.value);
-
-        if (!Number.isFinite(gasFlow) || gasFlow <= 0) {
-            throw new Error(
-                'Gas flow must be greater than zero for ' +
-                atmosphere + '.'
-            );
-        }
-
-        data.gas_flow_sccm = gasFlow;
-    }
-
-    const rfInput =
-        document.getElementById('annealingRfPower');
-
-    if (instrument === 'MBE growth chamber') {
-        const rawRf = rfInput.value.trim();
-
-        if (rawRf === '') {
-            delete data.rf_power_w;
-        } else {
-            const rfPower = Number(rawRf);
-
-            if (!Number.isFinite(rfPower) || rfPower < 0) {
-                throw new Error(
-                    'RF power must be zero or greater.'
-                );
-            }
-
-            data.rf_power_w = rfPower;
-        }
-    } else {
-        delete data.rf_power_w;
-    }
-
-    const rows =
-        Array.from(document.querySelectorAll('.annealing-step-row'));
-
-    if (!rows.length) {
-        throw new Error(
-            'Annealing requires at least one process step.'
-        );
-    }
-
+    const rows = Array.from(document.querySelectorAll('.annealing-step-row'));
+    if (!rows.length) throw new Error('Annealing requires at least one process step.');
     let totalDuration = 0;
-
     data.steps = rows.map(function(row, index) {
         const number = index + 1;
-
-        const temperature =
-            Number(
-                row.querySelector(
-                    '.annealing-operation-temperature'
-                ).value
-            );
-
-        if (!Number.isFinite(temperature)) {
-            throw new Error(
-                'Step ' + number +
-                ': operation temperature is required.'
-            );
+        const startRaw = row.querySelector('.annealing-starting-temperature').value.trim();
+        const endRaw = row.querySelector('.annealing-ending-temperature').value.trim();
+        const durationRaw = row.querySelector('.annealing-duration').value.trim();
+        if (!endRaw || !Number.isFinite(Number(endRaw))) {
+            throw new Error('Step ' + number + ': ending temperature is required.');
         }
-
-        const durationMinutes =
-            Number(row.querySelector('.annealing-duration').value);
-
-        if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
-            throw new Error(
-                'Step ' + number +
-                ': duration must be greater than zero.'
-            );
+        if (startRaw && !Number.isFinite(Number(startRaw))) {
+            throw new Error('Step ' + number + ': invalid starting temperature.');
         }
-
-        const durationSeconds = durationMinutes * 60;
-        totalDuration += durationSeconds;
-
-        const step = Object.assign(
-            {}, JSON.parse(JSON.stringify(row.__recipeSourceStep || {})), {
-                name: 'Step ' + number,
-                operation_temperature: temperature,
-                duration: durationSeconds
-            }
-        );
-
-        const rampRaw =
-            row.querySelector('.annealing-ramp-rate').value.trim();
-
-        if (rampRaw !== '') {
-            const ramp = Number(rampRaw);
-
-            if (!Number.isFinite(ramp) || ramp < 0) {
-                throw new Error(
-                    'Step ' + number +
-                    ': ramp rate must be zero or greater.'
-                );
-            }
-
-            const unit =
-                row.querySelector('.annealing-ramp-unit').value;
-
-            // NOMAD storage unit: K/s.
-            // A temperature difference of 1 °C equals 1 K.
-            step.ramp_rate =
-                unit === 'c_per_min'
-                    ? ramp / 60
-                    : ramp;
+        if (!durationRaw || !Number.isFinite(Number(durationRaw)) ||
+            Number(durationRaw) <= 0) {
+            throw new Error('Step ' + number + ': duration must be greater than zero.');
         }
-
-        const comment =
-            row.querySelector('.annealing-comment').value.trim();
-
+        const step = originalAnnealingStep(row.__recipeSourceStep || {});
+        step.name = step.name || 'Step ' + number;
+        if (startRaw) step.starting_temperature = Number(startRaw);
+        else delete step.starting_temperature;
+        step.ending_temperature = Number(endRaw);
+        step.duration = Number(durationRaw) * 60;
+        totalDuration += step.duration;
+        const comment = row.querySelector('.annealing-comment').value.trim();
         if (comment) step.comment = comment;
         else delete step.comment;
-        if (rampRaw === '') delete step.ramp_rate;
-
         return step;
     });
-
     data.duration = totalDuration;
-
-    // Remove obsolete fields if an older template contained them.
-    data.steps.forEach(function(step) {
-        delete step.starting_temperature;
-        delete step.ending_temperature;
-    });
 }
-
-function readBackSideCoatingFields(data) {
-    const material =
-        document.getElementById('backCoatingMaterial').value;
-
-    const thicknessUm =
-        Number(
-            document.getElementById(
-                'backCoatingThickness'
-            ).value
-        );
-
-    if (!['Ti', 'SrRuO3'].includes(material)) {
-        throw new Error(
-            'Coating material must be Ti or SrRuO3.'
-        );
-    }
-
-    if (
-        !Number.isFinite(thicknessUm) ||
-        thicknessUm <= 0
-    ) {
-        throw new Error(
-            'Thickness must be greater than zero.'
-        );
-    }
-
-    data.coating_material = material;
-
-    // NOMAD storage unit: meter
-    data.thickness = thicknessUm / 1e6;
-
-    // Preserve compatibility with the existing
-    // BackSideCoatingPDI reagent subsection.
-    data.coating_reagents = Object.assign(
-        {}, data.coating_reagents || {}, {name: material}
-    );
-
-    data.name =
-        material + ' ' +
-        formatNumber(thicknessUm) +
-        ' µm back-side coating';
-
-    // These inherited fields are not part of
-    // the PDI back-side coating recipe.
-    delete data.temperature;
-    delete data.duration;
-}
-
 
 function editorArchiveData() {
     const existing = editorItem && editorMode === 'edit'
@@ -4294,6 +3194,9 @@ function editorArchiveData() {
         );
     }
 
+    if (!['processing_recipe', 'holder', 'insert'].includes(currentType)) {
+        throw new Error('Unsupported library item type');
+    }
     if (currentType === 'processing_recipe') {
         if (editorMode !== 'edit') {
             const template = document.getElementById('processingTemplate').value;
@@ -4304,7 +3207,7 @@ function editorArchiveData() {
                 data.name = data.lab_id;
             }
             // Recipes are reusable definitions, not executions. In particular,
-            // EtchingRecipePDI inherits from EtchingPDI and may normalize
+            // The original EtchingRecipe inherits the original Etching process and can normalize
             // referenced samples if samples were copied from an old template.
             delete data.samples;
             delete data.recipe;
@@ -4313,8 +3216,6 @@ function editorArchiveData() {
             readCleaningFields(data);
         } else if (currentSubtype === 'annealing') {
             readAnnealingFields(data);
-        } else if (currentSubtype === 'back_side_coating') {
-            readBackSideCoatingFields(data);
         } else if (currentSubtype === 'etching') {
             if (editorMode === 'edit' && Array.isArray(data.samples) &&
                 data.samples.length) {
@@ -4333,15 +3234,6 @@ function editorArchiveData() {
         }
     }
 
-    if (currentType === 'sample_cut_recipe') {
-        const count = Number(document.getElementById('cutChildCount').value);
-        if (!Number.isInteger(count) || count < 1) {
-            throw new Error('Children per parent must be a positive integer.');
-        }
-        data.input_geometry = readCutRecipeGeometry('cutParent', data.input_geometry);
-        data.number_of_samples = count;
-        data.children_geometry = readCutRecipeGeometry('cutChild', data.children_geometry);
-    }
 
     if (currentType === 'holder') {
         const rows =
@@ -4455,22 +3347,8 @@ function editorArchiveData() {
                         name:
                             name,
 
-                        slot_geometry: {
-                            width:
-                                size /
-                                1000,
-
-                            length:
-                                size /
-                                1000
-                        },
-
-                        rho:
-                            rho /
-                            1000,
-
-                        theta:
-                            theta
+                        x_position: (rho / 1000) * Math.cos(theta * Math.PI / 180),
+                        y_position: -(rho / 1000) * Math.sin(theta * Math.PI / 180)
                     };
                 }
             );
@@ -4478,25 +3356,40 @@ function editorArchiveData() {
         data.number_of_positions =
             data.positions.length;
 
-        data.tags = managedHolderTags(
-            data,
-            editorMode === 'edit' && editorItem ? editorItem.data : null
-        );
+        // Only real SubstrateHolder fields are written; never write workflow tags.
+        delete data.tags;
 }
 
     if (currentType === 'insert') {
-        const outer = selectedSquareSize('insertOuterSize','insertOuterCustom');
-        const inner = selectedSquareSize('insertInnerSize','insertInnerCustom');
-        if (inner > outer) throw new Error('Sample opening cannot be larger than the outer insert size.');
-        data.outer_geometry = {width:outer/1000, length:outer/1000};
-        data.inner_geometry = {width:inner/1000, length:inner/1000};
-        data.tags = managedInsertTags(data);
+        // Do not serialize unverified insert geometry subsections.
+        delete data.outer_geometry;
+        delete data.inner_geometry;
+        delete data.tags;
     }
 
     return data;
 }
 
+async function validateRecipeBeforeUpload(data) {
+    // Validate the EXACT GUI payload with installed original NOMAD classes.
+    // This is read-only; failure MUST prevent the following HTTP PUT.
+    const response = await fetch('validate-recipe', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        body: JSON.stringify({data: data})
+    });
+    const result = await response.json().catch(function() { return {}; });
+    if (!response.ok || result.valid !== true || result.schema !== data.m_def) {
+        const detail = result.detail || 'Original NOMAD archive validation failed.';
+        throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+    }
+    return result;
+}
+
 async function uploadArchive(uploadId, filename, data, overwrite) {
+    if (currentType === 'processing_recipe') {
+        await validateRecipeBeforeUpload(data);
+    }
     const params = new URLSearchParams();
     params.append('file_name', filename);
     params.append('overwrite_if_exists', overwrite ? 'true' : 'false');
@@ -4525,6 +3418,14 @@ async function saveEditor(event) {
     const status = document.getElementById('editorStatus');
     button.disabled = true;
     try {
+        // Original NOMAD sections without a verified EntryArchive.data root
+        // must never reach the HTTP PUT path. This is an app-level safety
+        // check; it does not introduce a schema, parser, or normalizer.
+        const definition = currentDefinition();
+        if (!definition || definition.write_supported !== true) {
+            throw new Error((definition && definition.write_block_reason) ||
+                'This NOMAD section cannot be uploaded safely. No changes were written.');
+        }
         const data = editorArchiveData();
         let uploadId;
         let filename;
@@ -4545,7 +3446,7 @@ async function saveEditor(event) {
                 );
             }
             if (currentType === 'holder') {
-                await assertHolderTagsNotChanged(editorItem);
+                await assertHolderGeometryNotChanged(editorItem);
             }
 
             uploadId = editorItem.uploadId;
@@ -4612,34 +3513,17 @@ async function loadUploads() {
 }
 
 function populateStaticControls() {
+    const removedCutEditor = document.getElementById('sampleCutFields');
+    if (removedCutEditor) removedCutEditor.remove();
     ['holderSize','insertOuterSize','insertInnerSize'].forEach(function(id) {
         fillSizeSelect(id, true);
-    });
-
-    const childCount = document.getElementById('cutChildCount');
-    [1,2,4,6,8,9,16].forEach(function(count) {
-        const option = document.createElement('option');
-        option.value = String(count);
-        option.textContent = String(count);
-        childCount.appendChild(option);
     });
 
     attachSizeToggle('holderSize','holderCustomSizeWrap');
     attachSizeToggle('insertOuterSize','insertOuterCustomWrap');
     attachSizeToggle('insertInnerSize','insertInnerCustomWrap');
 
-    ['cutParent', 'cutChild'].forEach(function(prefix) {
-        const group = document.getElementById(prefix + 'GeometryFields');
-        group.querySelectorAll('input, select').forEach(function(input) {
-            input.addEventListener('input', updateGeneratedId);
-            input.addEventListener('change', function() {
-                updateCutRecipeGeometryVisibility(prefix);
-                updateGeneratedId();
-            });
-        });
-    });
-
-    ['holderMaterial','holderNumber','cutChildCount','insertNumber','insertFamily'].forEach(function(id) {
+    ['holderMaterial','holderNumber','insertNumber','insertFamily'].forEach(function(id) {
         document.getElementById(id).addEventListener('input', function() {
             if (id === 'insertFamily') {
                 document.getElementById('insertFamilyCustomWrap').classList.toggle(
