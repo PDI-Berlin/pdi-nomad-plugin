@@ -177,14 +177,20 @@ def test_plugin_entrypoints_are_exactly_approved_apps_and_independent_epic():
     assert not [k for k in entries.keys() - original.keys() if k.endswith('_schema')]
 
 
+def _line_ending_hashes(path):
+    """Pin EPIC source content while allowing only Git CRLF/LF conversion."""
+    data = path.read_bytes()
+    canonical_lf = data.replace(b'\r\n', b'\n')
+    variants = (data, canonical_lf, canonical_lf.replace(b'\n', b'\r\n'))
+    return {hashlib.sha256(item).hexdigest() for item in variants}
+
+
 def test_no_other_parser_classes_and_epic_source_integrity():
     assert EPIC.is_file(), 'Existing EPIC parser disappeared'
-    assert (
-        hashlib.sha256((EPIC_FOLDER / '__init__.py').read_bytes()).hexdigest()
-        == EPIC_ENTRYPOINT_SHA256
-    ), 'EPIC parser registration source changed; explicit review required.'
-    actual = hashlib.sha256(EPIC.read_bytes()).hexdigest()
-    assert actual == EPIC_APPROVED_SHA256, (
+    assert EPIC_ENTRYPOINT_SHA256 in _line_ending_hashes(EPIC_FOLDER / '__init__.py'), (
+        'EPIC parser registration source changed; explicit review required.'
+    )
+    assert EPIC_APPROVED_SHA256 in _line_ending_hashes(EPIC), (
         'Existing independently developed EPIC parser changed. '
         'Review provenance and update the approved digest separately, NEVER silently.'
     )

@@ -130,7 +130,7 @@ def test_processing_browser_preflight_blocks_upload():
         ],
         cwd=ROOT,
         check=True,
-        capture_output=True,
+        capture_output=False,
         text=True,
     )
 

@@ -223,7 +223,10 @@ def test_existing_epic_parser_is_preserved():
 
 
 def test_no_local_schema_package_registration():
-    import tomllib
+    try:
+        import tomllib
+    except ModuleNotFoundError:  # Python 3.10
+        import tomli as tomllib
 
     with (ROOT / 'pyproject.toml').open('rb') as stream:
         entries = tomllib.load(stream)['project']['entry-points']['nomad.plugin']

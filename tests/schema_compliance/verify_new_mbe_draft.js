@@ -26,7 +26,11 @@ assert.equal(result.original_sections.filled_holder.substrate_holder,
 const pos = result.original_sections.filled_holder.positions;
 assert.equal(pos[0].substrate.reference, '../uploads/up2/archive/sample1#data');
 assert.equal(pos[0].insert_reduction.reference, '../uploads/up3/archive/insert1#data');
-assert.equal(pos[0].slot_geometry, undefined); // SquareCuboid not a Geometry subtype
+assert.deepStrictEqual(pos[0].slot_geometry, {
+  m_def: 'nomad_material_processing.general.SquareCuboid',
+  width: 0.01,
+  length: 0.01
+}); // Original NOMAD slot geometry is preserved
 assert.equal(pos[1].slot_geometry.central_angle, 90);
 assert.equal(pos[1].substrate, undefined); // no fake dummy reference
 assert.ok(result.warnings.some(x => x.includes('dummy')));
