@@ -1,15 +1,20 @@
 """Verify actual Lab Library writer payloads against live ORIGINAL NOMAD metainfo."""
+
 from __future__ import annotations
 
 import ast
 import json
+import sys
 from pathlib import Path
 
 import pytest
 
-import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from schema_compliance.original_contract import ROOT, assert_original_archive_data, baseline
+from schema_compliance.original_contract import (
+    ROOT,
+    assert_original_archive_data,
+    baseline,
+)
 
 APP = ROOT / 'src/pdi_nomad_plugin/mbe/lab_library/app.py'
 JS = ROOT / 'src/pdi_nomad_plugin/mbe/lab_library/static/app.js'
@@ -19,8 +24,12 @@ INSERT = 'nomad_material_processing.vapor_deposition.general.InsertReduction'
 
 def _registrations():
     source = ast.parse(APP.read_text(encoding='utf-8-sig'))
-    literal = next(n.value for n in source.body if isinstance(n, ast.Assign)
-                   and any(isinstance(t, ast.Name) and t.id == 'LIBRARY_TYPES' for t in n.targets))
+    literal = next(
+        n.value
+        for n in source.body
+        if isinstance(n, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == 'LIBRARY_TYPES' for t in n.targets)
+    )
     return ast.literal_eval(literal)
 
 
@@ -36,17 +45,22 @@ def _extract_js_function(name):
         elif text[index] == '}':
             depth -= 1
             if depth == 0:
-                return text[start:index + 1]
+                return text[start : index + 1]
     raise AssertionError(f'Unclosed JS function {name}')
 
 
 def test_lab_library_registry_original_only_and_unsupported_features_removed():
     types = _registrations()
     assert set(types) == {'processing_recipe', 'holder', 'insert'}
-    assert set(types['processing_recipe']['schemas']) == {'cleaning','annealing','etching'}
+    assert set(types['processing_recipe']['schemas']) == {
+        'cleaning',
+        'annealing',
+        'etching',
+    }
     assert types['holder']['schema'] == HOLDER
     assert types['insert']['schema'] == INSERT
     approved = baseline()
+
     def iterate(data):
         if isinstance(data, dict):
             for k, v in data.items():
@@ -56,14 +70,17 @@ def test_lab_library_registry_original_only_and_unsupported_features_removed():
                     assert all(x in approved for x in v)
                 else:
                     iterate(v)
+
     iterate(types)
 
 
 @pytest.mark.parametrize('kind', ['holder', 'insert'])
 def test_holder_and_insert_editor_emit_only_original_fields(kind):
     import quickjs
+
     ctx = quickjs.Context()
-    ctx.eval('''
+    ctx.eval(
+        """
         let currentType = 'holder';
         let editorItem = null;
         let editorMode = 'create';
@@ -83,7 +100,8 @@ def test_holder_and_insert_editor_emit_only_original_fields(kind):
             }
         }];
         let document = {querySelectorAll: function(_) { return fakeRows; }};
-    ''' % (HOLDER, INSERT))
+    """.replace("'%s' : '%s'", f"'{HOLDER}' : '{INSERT}'")
+    )
     ctx.eval(_extract_js_function('editorArchiveData'))
     ctx.eval('currentType = ' + json.dumps(kind))
     archive = json.loads(ctx.eval('JSON.stringify(editorArchiveData())'))

@@ -4,9 +4,9 @@ Unlike static source scans, these cases import the actual upstream classes and
 check their metainfo identity and the effective normalizer implementation.
 Existing repository policy tests are never edited by this patch.
 """
+
 from __future__ import annotations
 
-import importlib
 from pathlib import Path
 
 import pytest
@@ -14,18 +14,21 @@ import pytest
 from .original_contract import baseline
 
 
-@pytest.mark.parametrize('class_name', [
-    'nomad_material_processing.general.CrystallineSubstrate',
-    'nomad_material_processing.general.Cleaning',
-    'nomad_material_processing.general.CleaningRecipe',
-    'nomad_material_processing.general.Annealing',
-    'nomad_material_processing.general.AnnealingRecipe',
-    'nomad_material_processing.general.Etching',
-    'nomad_material_processing.general.EtchingRecipe',
-    'nomad_material_processing.vapor_deposition.general.SubstrateHolder',
-    'nomad_material_processing.vapor_deposition.general.FilledSubstrateHolder',
-    'nomad_material_processing.vapor_deposition.general.InsertReduction',
-])
+@pytest.mark.parametrize(
+    'class_name',
+    [
+        'nomad_material_processing.general.CrystallineSubstrate',
+        'nomad_material_processing.general.Cleaning',
+        'nomad_material_processing.general.CleaningRecipe',
+        'nomad_material_processing.general.Annealing',
+        'nomad_material_processing.general.AnnealingRecipe',
+        'nomad_material_processing.general.Etching',
+        'nomad_material_processing.general.EtchingRecipe',
+        'nomad_material_processing.vapor_deposition.general.SubstrateHolder',
+        'nomad_material_processing.vapor_deposition.general.FilledSubstrateHolder',
+        'nomad_material_processing.vapor_deposition.general.InsertReduction',
+    ],
+)
 def test_real_original_schema_and_normalizer(class_name):
     pytest.importorskip('nomad')
     pytest.importorskip('nomad_material_processing')
@@ -42,12 +45,15 @@ def test_real_original_schema_and_normalizer(class_name):
     assert_upstream_normalizer(cls)
     # Exact Quantities, Subsections and units against the unchanged baseline.
     from .original_contract import schema_differences
+
     assert schema_differences(class_name, specs[class_name]) == []
 
 
 def test_process_client_does_not_reimplement_recipe_normalization():
     root = Path(__file__).resolve().parents[2]
-    source = (root / 'src/pdi_nomad_plugin/mbe/processing/static/app.js').read_text(encoding='utf-8')
+    source = (root / 'src/pdi_nomad_plugin/mbe/processing/static/app.js').read_text(
+        encoding='utf-8'
+    )
     begin = source.index('function processArchiveData(')
     end = source.index('\n\nasync function uploadArchive(', begin)
     process = source[begin:end]
@@ -57,7 +63,6 @@ def test_process_client_does_not_reimplement_recipe_normalization():
     assert 'data.steps =' not in process
     assert 'data.instruments =' not in process
     assert 'function sampleCutArchiveData(' not in source
-
 
 
 def test_original_process_preflight_requires_upstream_normalizer():

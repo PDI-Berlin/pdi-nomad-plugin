@@ -34,7 +34,6 @@ PROCESS_TYPES = {
 # classes are found and runtime-validated. No PDI fallback is permitted.
 
 
-
 @app.post('/validate-process')
 async def validate_process(payload: dict):
     """Validate the *exact* proposed process against installed upstream metainfo.

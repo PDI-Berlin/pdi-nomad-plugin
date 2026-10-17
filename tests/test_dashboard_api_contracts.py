@@ -117,7 +117,9 @@ class DashboardApiContractTests(unittest.TestCase):
         # Delegating functions must use the verified helper rather than
         # introducing independent, unverifiable queries.
         self.assertIn('queryEntriesBySchema', js_function(mbe, 'loadTreatmentRecipes'))
-        self.assertIn('queryEntriesBySchema', js_function(mbe, 'loadTreatmentHistoryEntries'))
+        self.assertIn(
+            'queryEntriesBySchema', js_function(mbe, 'loadTreatmentHistoryEntries')
+        )
         self.assertNotIn('queryExperimentHolderReferences', mbe)
 
     def test_substrates_and_history_use_shared_helper(self):
@@ -160,6 +162,7 @@ class DashboardApiContractTests(unittest.TestCase):
                     f'Missing fixture: {path}',
                 )
                 import yaml
+
                 fixture = yaml.safe_load(text(path))
                 self.assertEqual(fixture['data']['m_def'], schema)
                 self.assertNotIn('pdi_nomad_plugin.', text(path))
@@ -167,10 +170,16 @@ class DashboardApiContractTests(unittest.TestCase):
     def test_no_modified_growth_normalizer_in_local_schema(self):
         # Original normalizer behavior must be taken directly from upstream/main.
         import subprocess
+
         rel = 'src/pdi_nomad_plugin/mbe/processes.py'
-        original = subprocess.check_output(
-            ['git', 'show', f'upstream/main:{rel}'], cwd=ROOT,
-        ).decode('utf-8-sig').replace('\r\n', '\n')
+        original = (
+            subprocess.check_output(
+                ['git', 'show', f'upstream/main:{rel}'],
+                cwd=ROOT,
+            )
+            .decode('utf-8-sig')
+            .replace('\r\n', '\n')
+        )
         current = text(ROOT / rel).replace('\r\n', '\n')
         self.assertEqual(current, original)
 

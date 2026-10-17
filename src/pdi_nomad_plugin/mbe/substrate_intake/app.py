@@ -8,11 +8,11 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from nomad.config import config
 from nomad_material_processing.general import (
-    SquareCuboid,
-    RectangleCuboid,
+    CrystallineSubstrate,
     Cylinder,
     CylinderSector,
-    CrystallineSubstrate,
+    RectangleCuboid,
+    SquareCuboid,
 )
 from pydantic import BaseModel
 
@@ -50,7 +50,11 @@ class SubstrateIntakePreview(BaseModel):
 
 # All 118 recognized element symbols. Validation is restricted to the UI/API
 # adapter; it does not duplicate or replace any NOMAD normalizer.
-ELEMENT_SYMBOLS = frozenset('H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu Hf Ta W Re Os Ir Pt Au Hg Tl Pb Bi Po At Rn Fr Ra Ac Th Pa U Np Pu Am Cm Bk Cf Es Fm Md No Lr Rf Db Sg Bh Hs Mt Ds Rg Cn Nh Fl Mc Lv Ts Og'.split())
+MILLER_TRIPLET_LENGTH = 3
+
+ELEMENT_SYMBOLS = frozenset(
+    'H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu Hf Ta W Re Os Ir Pt Au Hg Tl Pb Bi Po At Rn Fr Ra Ac Th Pa U Np Pu Am Cm Bk Cf Es Fm Md No Lr Rf Db Sg Bh Hs Mt Ds Rg Cn Nh Fl Mc Lv Ts Og'.split()
+)
 
 
 def validate_chemical_formula(formula: str) -> str:
@@ -64,7 +68,9 @@ def validate_chemical_formula(formula: str) -> str:
         raise ValueError('Select a material or enter its chemical formula.')
     parts = re.findall(r'[A-Z][a-z]?|\(|\)|(?:\d+(?:\.\d+)?)', value)
     if not parts or ''.join(parts) != value:
-        raise ValueError('Invalid chemical formula; use real element symbols (e.g. SrTiO3).')
+        raise ValueError(
+            'Invalid chemical formula; use real element symbols (e.g. SrTiO3).'
+        )
 
     def parse_group(pos: int, nested: bool = False):
         count = 0
@@ -72,7 +78,9 @@ def validate_chemical_formula(formula: str) -> str:
             token = parts[pos]
             if token == ')':
                 if not nested or count == 0:
-                    raise ValueError('Unmatched or empty parentheses in chemical formula.')
+                    raise ValueError(
+                        'Unmatched or empty parentheses in chemical formula.'
+                    )
                 return pos + 1, count
             if token == '(':
                 pos, _ = parse_group(pos + 1, True)
@@ -121,7 +129,9 @@ def parse_triplet(value: str, kind: str):
         tokens = list(cleaned)
     else:
         tokens = cleaned.replace(',', ' ').split()
-    if len(tokens) != 3 or not all(re.fullmatch(r'[+-]?\d+', x) for x in tokens):
+    if len(tokens) != MILLER_TRIPLET_LENGTH or not all(
+        re.fullmatch(r'[+-]?\d+', x) for x in tokens
+    ):
         raise ValueError(f'{kind}: specify three integer indices, e.g. 1 -1 0.')
     indices = tuple(int(t) for t in tokens)
     if indices == (0, 0, 0):
@@ -141,7 +151,11 @@ def formatted_indices(indices, brackets):
     if indices is None:
         return None
     left, right = brackets
-    return left + ' '.join(str(indices[key]) for key in ('h_index', 'k_index', 'l_index')) + right
+    return (
+        left
+        + ' '.join(str(indices[key]) for key in ('h_index', 'k_index', 'l_index'))
+        + right
+    )
 
 
 def parse_dimensions(width, length, height):
@@ -173,8 +187,10 @@ def parse_geometry(data: SubstrateIntakePreview):
 
     radius = data.radius_mm if data.radius_mm is not None else 25.4
     angle = (
-        360.0 if data.geometry_shape == 'circle'
-        else data.sector_angle_deg if data.sector_angle_deg is not None
+        360.0
+        if data.geometry_shape == 'circle'
+        else data.sector_angle_deg
+        if data.sector_angle_deg is not None
         else 90.0
     )
     thickness = data.thickness_mm
@@ -206,6 +222,7 @@ def parse_geometry(data: SubstrateIntakePreview):
 
     return geometry.m_to_dict(with_meta=True)
 
+
 @app.post('/api/preview')
 async def preview_substrate_batch(data: SubstrateIntakePreview):
     try:
@@ -217,11 +234,17 @@ async def preview_substrate_batch(data: SubstrateIntakePreview):
         offcut = parse_offcut_direction(data.offcut_direction)
         if data.offcut_angle is not None:
             if not math.isfinite(data.offcut_angle) or data.offcut_angle < 0:
-                raise ValueError('Offcut angle must be a non-negative number in degrees.')
+                raise ValueError(
+                    'Offcut angle must be a non-negative number in degrees.'
+                )
             if data.offcut_angle > 0 and offcut is None:
-                raise ValueError('Specify offcut direction [u v w] for a nonzero offcut.')
+                raise ValueError(
+                    'Specify offcut direction [u v w] for a nonzero offcut.'
+                )
         if offcut is not None and data.offcut_angle is None:
-            raise ValueError('Specify offcut angle in degrees for the offcut direction.')
+            raise ValueError(
+                'Specify offcut angle in degrees for the offcut direction.'
+            )
         if data.count < 1:
             raise ValueError('Number of substrates must be at least one.')
         geometry = parse_geometry(data)
@@ -245,14 +268,16 @@ async def preview_substrate_batch(data: SubstrateIntakePreview):
         'supplier': data.supplier.strip(),
         'supplier_id': data.supplier_id.strip(),
         'description': '\n'.join(descriptions),
-        'components': [{
-            'm_def': 'nomad.datamodel.metainfo.basesections.v1.PureSubstanceComponent',
-            'mass_fraction': 1.0,
-            'pure_substance': {
-                'm_def': 'nomad.datamodel.metainfo.basesections.v1.PureSubstanceSection',
-                'molecular_formula': formula,
-            },
-        }],
+        'components': [
+            {
+                'm_def': 'nomad.datamodel.metainfo.basesections.v1.PureSubstanceComponent',
+                'mass_fraction': 1.0,
+                'pure_substance': {
+                    'm_def': 'nomad.datamodel.metainfo.basesections.v1.PureSubstanceSection',
+                    'molecular_formula': formula,
+                },
+            }
+        ],
         'crystal_properties': {
             'surface_orientation': {'hkl_reciprocal': orientation},
         },
@@ -270,7 +295,10 @@ async def preview_substrate_batch(data: SubstrateIntakePreview):
 
     # Check the provenance of the real installed implementation. Neither
     # local PDI m_defs nor custom normalizers may enter this workflow.
-    from pdi_nomad_plugin.mbe.lab_library.original_preflight import assert_upstream_normalizer
+    from pdi_nomad_plugin.mbe.lab_library.original_preflight import (
+        assert_upstream_normalizer,
+    )
+
     assert_upstream_normalizer(CrystallineSubstrate)
 
     archives = []
@@ -290,16 +318,19 @@ async def preview_substrate_batch(data: SubstrateIntakePreview):
                 status_code=422,
                 detail=f'Substrate {child_id}: original-schema validation failed: {exc}',
             ) from exc
-        archives.append({
-            'filename': child_id + '.archive.json',
-            'data': child_data,
-        })
+        archives.append(
+            {
+                'filename': child_id + '.archive.json',
+                'data': child_data,
+            }
+        )
 
     # CrystallineSubstrate is an ORIGINAL ArchiveSection but NOT a verified
     # EntryArchive.data root in the pinned upstream NOMAD runtime. Keep the
     # complete physical-substrate preview, but never offer these as uploadable
     # archives until a legitimate upstream EntryData workflow is established.
     from nomad.datamodel.data import EntryData
+
     root_supported = issubclass(CrystallineSubstrate, EntryData)
     return {
         'batch_lab_id': lab_id,
@@ -308,7 +339,6 @@ async def preview_substrate_batch(data: SubstrateIntakePreview):
         'root_is_entrydata': root_supported,
         'reason': 'Original CrystallineSubstrate is not a verified uploadable EntryArchive.data root. No upload was made.',
     }
-
 
 
 @app.get('/', response_class=HTMLResponse)

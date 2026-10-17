@@ -4,6 +4,7 @@ The original NOMAD classes, references, units, and subsections are resolved
 from the *installed* NOMAD Core / nomad-material-processing distributions.
 No local metainfo schema or normalizer is declared here.
 """
+
 from __future__ import annotations
 
 from ..lab_library.original_preflight import (
@@ -38,10 +39,18 @@ def validate_original_process(data: dict, allowed_schemas: set[str]) -> dict:
             raise OriginalProcessValidationError('Missing original recipe reference.')
         samples = data.get('samples')
         if not isinstance(samples, list) or not samples:
-            raise OriginalProcessValidationError('At least one substrate reference is required.')
+            raise OriginalProcessValidationError(
+                'At least one substrate reference is required.'
+            )
         for i, sample in enumerate(samples):
-            if not isinstance(sample, dict) or not isinstance(sample.get('reference'), str) or not sample['reference'].strip():
-                raise OriginalProcessValidationError(f'samples[{i}] has no NOMAD reference.')
+            if (
+                not isinstance(sample, dict)
+                or not isinstance(sample.get('reference'), str)
+                or not sample['reference'].strip()
+            ):
+                raise OriginalProcessValidationError(
+                    f'samples[{i}] has no NOMAD reference.'
+                )
         # Process steps and instruments are copied from the referenced recipe
         # by the upstream Process normalizer during NOMAD server processing.
         # Supplying duplicates here would reimplement that normalizer.
@@ -61,7 +70,9 @@ def validate_original_process(data: dict, allowed_schemas: set[str]) -> dict:
                 'Original NOMAD m_validate errors: ' + '; '.join(map(str, errors))
             )
         if reparsed.data.m_def.qualified_name() != schema:
-            raise OriginalProcessValidationError('Process m_def changed during roundtrip.')
+            raise OriginalProcessValidationError(
+                'Process m_def changed during roundtrip.'
+            )
     except OriginalProcessValidationError:
         raise
     except Exception as exc:

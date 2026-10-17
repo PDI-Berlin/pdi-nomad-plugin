@@ -1,4 +1,5 @@
 """Read-only checks of actual upstream metainfo; never writes to NOMAD."""
+
 from __future__ import annotations
 
 import asyncio
@@ -26,11 +27,13 @@ def test_lab_library_preflight_is_before_http_put():
     end = code.index('async function saveEditor(', start)
     function = code[start:end]
     assert 'await validateRecipeBeforeUpload(data)' in function
-    assert function.index('await validateRecipeBeforeUpload(data)') < function.index('method:\'PUT\'')
+    assert function.index('await validateRecipeBeforeUpload(data)') < function.index(
+        "method:'PUT'"
+    )
     assert "fetch('validate-recipe'" in code
     backend = (LIB / 'app.py').read_text(encoding='utf-8')
     assert "@app.post('/validate-recipe')" in backend
-    assert 'validate_original_recipe(payload.get(\'data\'), allowed)' in backend
+    assert "validate_original_recipe(payload.get('data'), allowed)" in backend
 
 
 def test_intake_preview_has_hard_block_before_any_put():
@@ -58,23 +61,33 @@ def test_validator_is_original_only_and_never_normalizes_or_uploads():
     assert 'requests.' not in code
 
 
-@pytest.mark.parametrize('schema', [
-    'nomad_material_processing.general.CleaningRecipe',
-    'nomad_material_processing.general.AnnealingRecipe',
-    'nomad_material_processing.general.EtchingRecipe',
-])
+@pytest.mark.parametrize(
+    'schema',
+    [
+        'nomad_material_processing.general.CleaningRecipe',
+        'nomad_material_processing.general.AnnealingRecipe',
+        'nomad_material_processing.general.EtchingRecipe',
+    ],
+)
 def test_actual_original_recipe_archive_roundtrip(schema):
     pytest.importorskip('nomad')
     import importlib
+
     from nomad.datamodel.data import EntryData
 
-    preflight = _load_module(LIB / 'original_preflight.py', 'original_preflight_under_test')
+    preflight = _load_module(
+        LIB / 'original_preflight.py', 'original_preflight_under_test'
+    )
     module_name, name = schema.rsplit('.', 1)
     cls = getattr(importlib.import_module(module_name), name)
     assert cls.m_def.qualified_name() == schema
     assert cls.__module__ == module_name
     assert issubclass(cls, EntryData)
-    payload = {'m_def': schema, 'name': 'READ_ONLY_PREFLIGHT', 'lab_id': 'READ_ONLY_PREFLIGHT'}
+    payload = {
+        'm_def': schema,
+        'name': 'READ_ONLY_PREFLIGHT',
+        'lab_id': 'READ_ONLY_PREFLIGHT',
+    }
     result = preflight.validate_original_recipe(payload, {schema})
     assert result['valid'] is True
     assert result['schema'] == schema
@@ -82,9 +95,13 @@ def test_actual_original_recipe_archive_roundtrip(schema):
     assert result['server_parser_executed'] is False
 
     with pytest.raises(preflight.OriginalSchemaValidationError, match='Unknown field'):
-        preflight.validate_original_recipe({**payload, 'pdi_invented_field': 1}, {schema})
+        preflight.validate_original_recipe(
+            {**payload, 'pdi_invented_field': 1}, {schema}
+        )
     with pytest.raises(preflight.OriginalSchemaValidationError):
-        preflight.validate_original_recipe({**payload, 'samples': [{'name': 'X'}]}, {schema})
+        preflight.validate_original_recipe(
+            {**payload, 'samples': [{'name': 'X'}]}, {schema}
+        )
 
 
 def test_real_intake_payload_and_original_root():
@@ -94,10 +111,18 @@ def test_real_intake_payload_and_original_root():
 
     intake = _load_module(INTAKE / 'app.py', 'substrate_intake_under_test')
     request = intake.SubstrateIntakePreview(
-        supplier='Example Supplier', supplier_id='S123', material='SrTiO3',
-        crystal_id='C1', charge='B1', orientation='001',
-        offcut_angle=0.1, offcut_direction='110',
-        width_mm=10, length_mm=10, thickness_mm=0.5, count=2,
+        supplier='Example Supplier',
+        supplier_id='S123',
+        material='SrTiO3',
+        crystal_id='C1',
+        charge='B1',
+        orientation='001',
+        offcut_angle=0.1,
+        offcut_direction='110',
+        width_mm=10,
+        length_mm=10,
+        thickness_mm=0.5,
+        count=2,
     )
     result = asyncio.run(intake.preview_substrate_batch(request))
     assert len(result['archives']) == 2

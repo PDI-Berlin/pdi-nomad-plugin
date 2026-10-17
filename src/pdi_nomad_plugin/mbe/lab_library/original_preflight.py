@@ -3,6 +3,7 @@
 Not a parser, schema, or normalizer. No network or upload calls. The actual
 NOMAD archive parser/normalization on the server must still be integration-tested.
 """
+
 from __future__ import annotations
 
 import importlib
@@ -18,7 +19,9 @@ class OriginalSchemaValidationError(ValueError):
 
 
 def _resolve_original_class(qualified_name: str):
-    if not isinstance(qualified_name, str) or not qualified_name.startswith(ORIGINAL_MODULE_PREFIXES):
+    if not isinstance(qualified_name, str) or not qualified_name.startswith(
+        ORIGINAL_MODULE_PREFIXES
+    ):
         raise OriginalSchemaValidationError(f'Non-original m_def: {qualified_name!r}')
     module_name, sep, name = qualified_name.rpartition('.')
     if not sep:
@@ -27,9 +30,13 @@ def _resolve_original_class(qualified_name: str):
         module = importlib.import_module(module_name)
         cls = getattr(module, name)
     except (ImportError, AttributeError) as exc:
-        raise OriginalSchemaValidationError(f'Original m_def unavailable: {qualified_name}') from exc
+        raise OriginalSchemaValidationError(
+            f'Original m_def unavailable: {qualified_name}'
+        ) from exc
     if cls.__module__ != module_name or not hasattr(cls, 'm_def'):
-        raise OriginalSchemaValidationError(f'Invalid original metainfo class: {qualified_name}')
+        raise OriginalSchemaValidationError(
+            f'Invalid original metainfo class: {qualified_name}'
+        )
     if cls.m_def.qualified_name() != qualified_name:
         raise OriginalSchemaValidationError(f'm_def mismatch: {qualified_name}')
     # A symbol imported/re-exported from another source is not the installed
@@ -38,7 +45,9 @@ def _resolve_original_class(qualified_name: str):
         class_source = Path(inspect.getfile(cls)).resolve()
         module_source = Path(inspect.getfile(module)).resolve()
     except (TypeError, OSError) as exc:
-        raise OriginalSchemaValidationError('Original m_def source cannot be verified') from exc
+        raise OriginalSchemaValidationError(
+            'Original m_def source cannot be verified'
+        ) from exc
     if class_source != module_source:
         raise OriginalSchemaValidationError(f'm_def source mismatch: {qualified_name}')
     plugin_root = Path(__file__).resolve().parents[2]
@@ -76,7 +85,9 @@ def assert_upstream_normalizer(cls):
         try:
             source = Path(inspect.getfile(method)).resolve()
         except (TypeError, OSError) as exc:
-            raise OriginalSchemaValidationError('Normalizer source cannot be verified') from exc
+            raise OriginalSchemaValidationError(
+                'Normalizer source cannot be verified'
+            ) from exc
         if plugin_root == source or plugin_root in source.parents:
             raise OriginalSchemaValidationError('Project-local normalizer forbidden')
         return module_name + '.' + ancestor.__name__
@@ -96,7 +107,9 @@ def _check_original_tree(data: dict[str, Any], cls, path='data'):
     if declared is not None:
         actual = _resolve_original_class(declared)
         if not issubclass(actual, cls):
-            raise OriginalSchemaValidationError(f'{path}.m_def is not a subclass of the original expected schema')
+            raise OriginalSchemaValidationError(
+                f'{path}.m_def is not a subclass of the original expected schema'
+            )
         cls = actual
     quantities = cls.m_def.all_quantities
     subsections = cls.m_def.all_sub_sections
@@ -106,12 +119,16 @@ def _check_original_tree(data: dict[str, Any], cls, path='data'):
         if key in quantities:
             continue  # The ORIGINAL m_from_dict handles types, units, and references.
         if key not in subsections:
-            raise OriginalSchemaValidationError(f'Unknown field {path}.{key} for {cls.m_def.qualified_name()}')
+            raise OriginalSchemaValidationError(
+                f'Unknown field {path}.{key} for {cls.m_def.qualified_name()}'
+            )
         definition = subsections[key]
         try:
             child_cls = definition.sub_section.section_cls
         except (AttributeError, ValueError) as exc:
-            raise OriginalSchemaValidationError(f'Cannot resolve original subsection {path}.{key}') from exc
+            raise OriginalSchemaValidationError(
+                f'Cannot resolve original subsection {path}.{key}'
+            ) from exc
         if value is None:
             continue
         if definition.repeats:
@@ -136,14 +153,20 @@ def validate_original_recipe(data: dict, allowed_schemas: set[str]):
         raise OriginalSchemaValidationError('Missing recipe data object')
     qualified_name = data.get('m_def')
     if qualified_name not in allowed_schemas:
-        raise OriginalSchemaValidationError(f'Unapproved recipe m_def: {qualified_name!r}')
+        raise OriginalSchemaValidationError(
+            f'Unapproved recipe m_def: {qualified_name!r}'
+        )
     cls = _resolve_original_class(qualified_name)
     if not issubclass(cls, EntryData):
-        raise OriginalSchemaValidationError(f'{qualified_name} is not an EntryArchive.data root')
+        raise OriginalSchemaValidationError(
+            f'{qualified_name} is not an EntryArchive.data root'
+        )
     assert_upstream_normalizer(cls)
     for forbidden in ('samples', 'instruments'):
         if data.get(forbidden):
-            raise OriginalSchemaValidationError(f'Reusable recipes must not embed runtime {forbidden} references')
+            raise OriginalSchemaValidationError(
+                f'Reusable recipes must not embed runtime {forbidden} references'
+            )
     _check_original_tree(data, cls)
     try:
         section = cls.m_from_dict(data)
@@ -152,12 +175,28 @@ def validate_original_recipe(data: dict, allowed_schemas: set[str]):
         reparsed = EntryArchive.m_from_dict(serialized)
         errors, warnings = reparsed.m_validate()
     except Exception as exc:
-        raise OriginalSchemaValidationError(f'Original NOMAD metainfo validation failed: {exc}') from exc
+        raise OriginalSchemaValidationError(
+            f'Original NOMAD metainfo validation failed: {exc}'
+        ) from exc
     if errors:
-        raise OriginalSchemaValidationError('Original NOMAD m_validate errors: ' + '; '.join(map(str, errors)))
+        raise OriginalSchemaValidationError(
+            'Original NOMAD m_validate errors: ' + '; '.join(map(str, errors))
+        )
     if reparsed.data.m_def.qualified_name() != qualified_name:
-        raise OriginalSchemaValidationError('Original EntryArchive roundtrip changed the recipe m_def')
-    return {'valid': True, 'schema': qualified_name, 'warnings': [str(w) for w in warnings],
-            'checks': ['original_m_def', 'original_quantities_subsections', 'original_m_from_dict',
-                       'EntryArchive_roundtrip', 'original_m_validate'],
-            'normalizer_executed': False, 'server_parser_executed': False}
+        raise OriginalSchemaValidationError(
+            'Original EntryArchive roundtrip changed the recipe m_def'
+        )
+    return {
+        'valid': True,
+        'schema': qualified_name,
+        'warnings': [str(w) for w in warnings],
+        'checks': [
+            'original_m_def',
+            'original_quantities_subsections',
+            'original_m_from_dict',
+            'EntryArchive_roundtrip',
+            'original_m_validate',
+        ],
+        'normalizer_executed': False,
+        'server_parser_executed': False,
+    }

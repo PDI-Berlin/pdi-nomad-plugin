@@ -1,7 +1,9 @@
 """Strict regression checks for native Substrates search app + smoke archives."""
-from pathlib import Path
+
 import ast
 import json
+from pathlib import Path
+
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,11 +21,15 @@ EXPECTED = {
 def test_native_app_uses_exact_original_crystalline_substrate_mdef():
     source = APP.read_text('utf-8')
     tree = ast.parse(source)
-    candidates = [n.value.value for n in ast.walk(tree)
-                  if isinstance(n, ast.Assign)
-                  for t in n.targets if isinstance(t, ast.Name)
-                  and t.id == 'ORIGINAL_SUBSTRATE'
-                  and isinstance(n.value, ast.Constant)]
+    candidates = [
+        n.value.value
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Assign)
+        for t in n.targets
+        if isinstance(t, ast.Name)
+        and t.id == 'ORIGINAL_SUBSTRATE'
+        and isinstance(n.value, ast.Constant)
+    ]
     assert candidates == [ORIGINAL]
     assert 'pdi_nomad_plugin.mbe.materials.SubstrateMbe' not in source
     assert 'data.as_delivered' not in source
@@ -44,12 +50,16 @@ def test_dashboard_fixtures_use_only_original_metainfo_and_fields():
         assert schema in baseline, schema
         spec = baseline[schema]
         assert section.get('m_def', schema) == schema
-        assert set(section) <= (set(spec['quantities']) | set(spec['subsections']) | {'m_def'})
+        assert set(section) <= (
+            set(spec['quantities']) | set(spec['subsections']) | {'m_def'}
+        )
         for key, sub in spec['subsections'].items():
-            if key not in section: continue
+            if key not in section:
+                continue
             if sub['repeats']:
                 assert isinstance(section[key], list), (schema, key)
-                for child in section[key]: walk(child, child.get('m_def', sub['schema']))
+                for child in section[key]:
+                    walk(child, child.get('m_def', sub['schema']))
             else:
                 assert isinstance(section[key], dict), (schema, key)
                 child = section[key]

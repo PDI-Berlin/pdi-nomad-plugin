@@ -51,8 +51,10 @@ LIBRARY_TYPES = {
         'schema': 'nomad_material_processing.vapor_deposition.general.SubstrateHolder',
         'kind': 'holder',
         'write_supported': False,
-        'write_block_reason': ('Original SubstrateHolder has no verified '
-                               'EntryArchive.data root; no upload was made.'),
+        'write_block_reason': (
+            'Original SubstrateHolder has no verified '
+            'EntryArchive.data root; no upload was made.'
+        ),
         'usage_schemas': [
             'nomad_material_processing.vapor_deposition.general.FilledSubstrateHolder',
         ],
@@ -62,8 +64,10 @@ LIBRARY_TYPES = {
         'schema': 'nomad_material_processing.vapor_deposition.general.InsertReduction',
         'kind': 'insert',
         'write_supported': False,
-        'write_block_reason': ('Original InsertReduction has no verified '
-                               'EntryArchive.data root; no upload was made.'),
+        'write_block_reason': (
+            'Original InsertReduction has no verified '
+            'EntryArchive.data root; no upload was made.'
+        ),
         'usage_schemas': [
             'nomad_material_processing.vapor_deposition.general.FilledSubstrateHolder',
         ],
@@ -80,33 +84,59 @@ def _recipe_schema_details(schema_path):
     module_name, class_name = schema_path.rsplit('.', 1)
     cls = getattr(importlib.import_module(module_name), class_name)
     reserved = {
-        'm_def', 'name', 'lab_id', 'datetime', 'samples', 'recipe',
-        'starting_time', 'ending_time', 'end_time', 'location',
-        'tags', 'instruments', 'description',
+        'm_def',
+        'name',
+        'lab_id',
+        'datetime',
+        'samples',
+        'recipe',
+        'starting_time',
+        'ending_time',
+        'end_time',
+        'location',
+        'tags',
+        'instruments',
+        'description',
     }
     fields = []
     for name, quantity in cls.m_def.all_quantities.items():
         if name in reserved or getattr(quantity, 'shape', None):
             continue
         type_text = repr(getattr(quantity, 'type', '')).lower()
-        if any(word in type_text for word in (
-            'reference object', 'datetime', 'sectionproxy',
-        )):
+        if any(
+            word in type_text
+            for word in (
+                'reference object',
+                'datetime',
+                'sectionproxy',
+            )
+        ):
             continue
         if 'bool' in type_text:
             kind = 'boolean'
-        elif any(word in type_text for word in (
-            'int', 'float', 'number', 'm_double',
-        )) and 'm_enum' not in type_text:
+        elif (
+            any(
+                word in type_text
+                for word in (
+                    'int',
+                    'float',
+                    'number',
+                    'm_double',
+                )
+            )
+            and 'm_enum' not in type_text
+        ):
             kind = 'number'
         else:
             kind = 'text'
         unit = getattr(quantity, 'unit', None)
-        fields.append({
-            'name': name,
-            'kind': kind,
-            'unit': str(unit) if unit is not None else None,
-        })
+        fields.append(
+            {
+                'name': name,
+                'kind': kind,
+                'unit': str(unit) if unit is not None else None,
+            }
+        )
 
     subsections = []
     for name, subsection in cls.m_def.all_sub_sections.items():
@@ -118,11 +148,13 @@ def _recipe_schema_details(schema_path):
             child = subsection.sub_section.section_cls
         except (AttributeError, ValueError):
             continue
-        subsections.append({
-            'name': name,
-            'repeats': bool(subsection.repeats),
-            'schema': f'{child.__module__}.{child.__name__}',
-        })
+        subsections.append(
+            {
+                'name': name,
+                'repeats': bool(subsection.repeats),
+                'schema': f'{child.__module__}.{child.__name__}',
+            }
+        )
     return {'field_specs': fields, 'subsection_specs': subsections}
 
 

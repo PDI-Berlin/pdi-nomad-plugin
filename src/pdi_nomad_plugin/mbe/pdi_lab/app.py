@@ -1,5 +1,5 @@
-from pathlib import Path
 import json
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse
@@ -17,8 +17,11 @@ async def index():
     html = (TEMPLATE_DIR / 'index.html').read_text(encoding='utf-8')
     base = config.services.api_base_path.rstrip('/')
     injected = '<script>window.PDI_LAB_BASE = ' + json.dumps(base) + ';</script>'
-    return html.replace('<script src="static/app.js"></script>',
-                        injected + '<script src="static/app.js"></script>', 1)
+    return html.replace(
+        '<script src="static/app.js"></script>',
+        injected + '<script src="static/app.js"></script>',
+        1,
+    )
 
 
 @app.get('/static/styles.css')

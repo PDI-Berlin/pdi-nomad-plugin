@@ -5,7 +5,6 @@ from fastapi.responses import FileResponse, HTMLResponse
 from nomad.config import config
 from nomad.utils import hash as nomad_hash
 
-
 app = FastAPI()
 
 BASE_DIR = Path(__file__).resolve().parent

@@ -3,8 +3,9 @@
 This complements runtime m_def checks against NOMAD Core/material_processing:
 changing an old class without introducing a new class is not allowed either.
 """
-from pathlib import Path
+
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -19,10 +20,17 @@ ORIGINAL_MODULES = (
 
 @pytest.mark.parametrize('relative_path', ORIGINAL_MODULES)
 def test_pdi_original_schema_and_normalizer_source_is_unchanged(relative_path):
-    source = subprocess.check_output(
-        ['git', 'show', 'upstream/main:' + relative_path], cwd=ROOT,
-    ).decode('utf-8-sig').replace('\r\n', '\n')
-    current = (ROOT / relative_path).read_text(encoding='utf-8-sig').replace('\r\n', '\n')
+    source = (
+        subprocess.check_output(
+            ['git', 'show', 'upstream/main:' + relative_path],
+            cwd=ROOT,
+        )
+        .decode('utf-8-sig')
+        .replace('\r\n', '\n')
+    )
+    current = (
+        (ROOT / relative_path).read_text(encoding='utf-8-sig').replace('\r\n', '\n')
+    )
     assert current == source, f'{relative_path} differs from original upstream/main'
 
 

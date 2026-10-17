@@ -4,6 +4,7 @@ The native search app exposes only indexed, official metainfo quantities.
 Treatment/growth status is derived from process archives in the dedicated
 Substrate Search / Processing dashboards, not fictional substrate flags.
 """
+
 from nomad.config.models.plugins import AppEntryPoint
 from nomad.config.models.ui import App, Column, Menu, MenuItemTerms, SearchQuantities
 
@@ -30,9 +31,24 @@ substrateapp = AppEntryPoint(
             title='Filters',
             size='sm',
             items=[
-                MenuItemTerms(search_quantity=LAB_ID, options=100, show_input=True, show_statistics=False),
-                MenuItemTerms(search_quantity=SUPPLIER, options=50, show_input=True, show_statistics=False),
-                MenuItemTerms(search_quantity=SUPPLIER_ID, options=50, show_input=True, show_statistics=False),
+                MenuItemTerms(
+                    search_quantity=LAB_ID,
+                    options=100,
+                    show_input=True,
+                    show_statistics=False,
+                ),
+                MenuItemTerms(
+                    search_quantity=SUPPLIER,
+                    options=50,
+                    show_input=True,
+                    show_statistics=False,
+                ),
+                MenuItemTerms(
+                    search_quantity=SUPPLIER_ID,
+                    options=50,
+                    show_input=True,
+                    show_statistics=False,
+                ),
             ],
         ),
         search_quantities=SearchQuantities(include=[f'*#{ORIGINAL_SUBSTRATE}']),
