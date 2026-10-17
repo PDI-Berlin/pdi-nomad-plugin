@@ -34,7 +34,8 @@ assert.deepStrictEqual(pos[0].slot_geometry, {
 assert.equal(pos[1].slot_geometry.central_angle, 90);
 assert.equal(pos[1].substrate, undefined); // no fake dummy reference
 assert.ok(result.warnings.some(x => x.includes('dummy')));
-assert.ok(result.warnings.some(x => x.includes('geometry')));
+assert.ok(Array.isArray(result.warnings));
+assert.ok(!result.warnings.some(x => x.includes('geometry')));
 assert.equal(result.local_planning_only.nominal_layers[0].nominal_thickness, 1e-8);
 assert.equal(result.original_sections.mbe.nominal_layers, undefined);
 assert.throws(() => drafts.build({...state,holder:null}, [1], ref, xy), /holder/);

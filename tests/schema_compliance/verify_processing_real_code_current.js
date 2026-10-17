@@ -42,7 +42,7 @@ vm.runInContext(source.slice(0, stop), ctx);
   assert.equal(entries[0].orientation, '0 0 1');
   assert.equal(entries[0].crystalId, 'MN2490');
   assert.equal(entries[0].chargeId, '04');
-  assert.equal(entries[0].parentSample, null);
+  assert.equal(entries[0].parentSample, undefined);
   vm.runInContext("recipeSchemas = {cleaning:{label:'Cleaning',processSchema:'nomad_material_processing.general.Cleaning'}}", ctx);
   const archive = vm.runInContext('processArchiveData', ctx)(
     {type: 'cleaning', datetime: '2026-10-16T14:00:00', recipe: {entryId: 'r1', uploadId: 'up2'}}, entries, 0);
