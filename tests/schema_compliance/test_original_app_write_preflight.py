@@ -36,16 +36,20 @@ def test_lab_library_preflight_is_before_http_put():
     assert "validate_original_recipe(payload.get('data'), allowed)" in backend
 
 
-def test_intake_preview_has_hard_block_before_any_put():
+def test_intake_requires_verified_entrydata_root_before_put():
     code = (INTAKE / 'app.py').read_text(encoding='utf-8')
-    assert "'upload_supported': False" in code
+    assert "'upload_supported': True" in code
     start = code.index('async function saveToNomad()')
     guard = code.index('if (preview.upload_supported !== true)', start)
     put = code.index("method: 'PUT'", start)
     assert guard < put
-    assert 'CrystallineSubstrate.m_from_dict(child_data)' in code
+    assert 'SubstrateBatchMbe.m_from_dict(batch_data)' in code
+    assert 'EntryArchive(data=section)' in code
     assert 'saveButton.disabled = true;' in code
-    assert 'Upload unavailable (original archive root unverified)' in code
+    assert 'Upload a Substrate Batch and generate substrates' in code
+    guard_js = (INTAKE / 'static' / 'intake_duplicate_guard.js').read_text(encoding='utf-8')
+    assert 'body.directory_metadata.content' in guard_js
+    assert code.index('pdiIntakeDuplicateGuard.assertNoCollision', start) < put
 
 
 def test_validator_is_original_only_and_never_normalizes_or_uploads():
@@ -108,6 +112,7 @@ def test_real_intake_payload_and_original_root():
     pytest.importorskip('nomad')
     from nomad.datamodel.data import EntryData
     from nomad_material_processing.general import CrystallineSubstrate
+    from pdi_nomad_plugin.mbe.materials import SubstrateBatchMbe, SubstrateMbe
 
     intake = _load_module(INTAKE / 'app.py', 'substrate_intake_under_test')
     request = intake.SubstrateIntakePreview(
@@ -125,9 +130,11 @@ def test_real_intake_payload_and_original_root():
         count=2,
     )
     result = asyncio.run(intake.preview_substrate_batch(request))
-    assert len(result['archives']) == 2
-    assert result['upload_supported'] is False
-    assert result['root_is_entrydata'] is issubclass(CrystallineSubstrate, EntryData)
+    assert len(result['archives']) == 1
+    assert len(result['expected_children']) == 2
+    assert result['upload_supported'] is True
+    assert issubclass(SubstrateMbe, CrystallineSubstrate)
+    assert result['root_is_entrydata'] is issubclass(SubstrateBatchMbe, EntryData)
     for archive in result['archives']:
-        assert archive['data']['m_def'] == CrystallineSubstrate.m_def.qualified_name()
-        assert CrystallineSubstrate.m_from_dict(archive['data']) is not None
+        assert archive['data']['m_def'] == SubstrateBatchMbe.m_def.qualified_name()
+        assert SubstrateBatchMbe.m_from_dict(archive['data']) is not None

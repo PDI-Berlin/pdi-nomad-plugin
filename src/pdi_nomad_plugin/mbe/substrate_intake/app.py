@@ -1,7 +1,9 @@
 import math
 import re
 import unicodedata
+from datetime import date, datetime, time, timezone
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
@@ -14,7 +16,7 @@ from nomad_material_processing.general import (
     RectangleCuboid,
     SquareCuboid,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 app = FastAPI()
 
@@ -32,9 +34,11 @@ class SubstrateIntakePreview(BaseModel):
     supplier: str = ''
     supplier_id: str = ''
     material: str = ''
+    material_preset: str = ''  # Intake UI only; never a NOMAD Quantity.
     crystal_id: str = ''
     charge: str = ''
     polishing: str = ''
+    delivery_date: date | None = None
     orientation: str = ''
     offcut_angle: float | None = None
     offcut_direction: str = ''
@@ -46,6 +50,7 @@ class SubstrateIntakePreview(BaseModel):
     thickness_mm: float | None = None
     count: int = 1
     notes: str = ''
+    subsections: dict[str, Any] = Field(default_factory=dict)
 
 
 # All 118 recognized element symbols. Validation is restricted to the UI/API
@@ -171,11 +176,12 @@ def parse_dimensions(width, length, height):
         if abs(width - length) <= GEOMETRY_EQUALITY_TOLERANCE
         else RectangleCuboid
     )
-    return cls(
-        width=width / 1000,
-        length=length / 1000,
-        height=height / 1000,
-    ).m_to_dict(with_meta=True)
+    dimensions = {'width': width / 1000, 'height': height / 1000}
+    # A SquareCuboid has a single side width (x=y), whereas the original
+    # RectangleCuboid needs both independent in-plane dimensions.
+    if cls is RectangleCuboid:
+        dimensions['length'] = length / 1000
+    return cls(**dimensions).m_to_dict(with_meta=True)
 
 
 def parse_geometry(data: SubstrateIntakePreview):
@@ -223,11 +229,222 @@ def parse_geometry(data: SubstrateIntakePreview):
     return geometry.m_to_dict(with_meta=True)
 
 
+def _validate_section_tree(value, expected_cls, label):
+    """Strictly validate original NOMAD subsection m_defs and field names."""
+    import importlib
+
+    if not isinstance(value, dict):
+        raise ValueError(f'{label} must be a JSON object.')
+    selected_cls = expected_cls
+    m_def = value.get('m_def')
+    if m_def is not None:
+        if not isinstance(m_def, str) or not m_def.startswith(
+            ('nomad.', 'nomad_material_processing.')
+        ):
+            raise ValueError(f'{label}: only original NOMAD schema m_defs are allowed.')
+        try:
+            module, name = m_def.rsplit('.', 1)
+            selected_cls = getattr(importlib.import_module(module), name)
+        except (ValueError, AttributeError, ImportError) as exc:
+            raise ValueError(f'{label}: unknown original m_def {m_def}.') from exc
+        if not issubclass(selected_cls, expected_cls):
+            raise ValueError(f'{label}: {m_def} is not a valid original subtype.')
+
+    definition = selected_cls.m_def
+    allowed = (
+        set(definition.all_quantities)
+        | set(definition.all_sub_sections)
+        | {'m_def'}
+    )
+    extra = sorted(set(value) - allowed)
+    if extra:
+        raise ValueError(f'{label}: unsupported original-schema fields: {extra}')
+    if label.endswith(('hkl_reciprocal', 'hkl_direct')):
+        indices = [value.get(k) for k in ('h_index', 'k_index', 'l_index')]
+        if any(
+            type(x) not in (int, float) or not math.isfinite(x) or int(x) != x
+            for x in indices
+        ) or all(x == 0 for x in indices):
+            raise ValueError(f'{label}: three nonzero-together integer Miller indices required.')
+    for key, subsection in definition.all_sub_sections.items():
+        if key not in value or value[key] is None:
+            continue
+        inner_cls = subsection.sub_section.section_cls
+        items = value[key]
+        if subsection.repeats:
+            if not isinstance(items, list):
+                raise ValueError(f'{label}.{key} must be a JSON array.')
+        else:
+            items = [items]
+        for item in items:
+            _validate_section_tree(item, inner_cls, f'{label}.{key}')
+
+
+
+MAX_YSZ_Y_ATOMIC_FRACTION = 2 / 5
+
+# UI-only 8YSZ stoichiometry check: 1-x mol ZrO2 + x mol Y2O3.
+# Stored quantities are ORIGINAL NOMAD dopant atomic_fraction/mass_fraction.
+def ysz_fractions(oxide_fraction: float) -> tuple[float, float]:
+    if not math.isfinite(oxide_fraction) or not 0 <= oxide_fraction < 1:
+        raise ValueError('Y2O3 oxide fraction must be finite and in [0, 1).')
+    y = 2 * oxide_fraction
+    zr = 1 - oxide_fraction
+    oxygen = 2 + oxide_fraction
+    total_mass = zr * 91.224 + y * 88.90584 + oxygen * 15.999
+    return (y / (zr + y + oxygen), y * 88.90584 / total_mass)
+
+
+
+# Intake-only adaptation for original NOMAD elemental-composition / Dopant logic.
+# Neither upstream schemas nor their normalizers are replaced or wrapped.
+def apply_ysz_host_composition(base: dict, formula: str, preset: str = '') -> None:
+    dopants = base.get('dopants') or []
+    ydopants = [d for d in dopants if isinstance(d, dict) and d.get('element') == 'Y']
+    if preset == '8ysz' and (formula != 'ZrO2' or len(dopants) != 1 or len(ydopants) != 1):
+        raise ValueError('8YSZ requires ZrO2 with exactly one Y dopant.')
+    if formula != 'ZrO2' or not ydopants:
+        return
+    if len(dopants) != 1:
+        raise ValueError('ZrO2/Y concentration requires one Y dopant; additional dopants cannot be safely combined.')
+    a = ydopants[0].get('atomic_fraction')
+    w = ydopants[0].get('mass_fraction')
+    if a is None or w is None:
+        if preset:
+            raise ValueError('8YSZ requires both calculated dopant fractions.')
+        return
+    if not all(type(v) in (float, int) and math.isfinite(v) for v in (a, w)):
+        raise ValueError('Invalid Y dopant fractions.')
+    x = 3 * a / (2 * (1 - a))
+    expected_a, expected_w = ysz_fractions(x)
+    if (not math.isclose(expected_a, a, rel_tol=1e-7, abs_tol=1e-9) or
+        not math.isclose(expected_w, w, rel_tol=1e-6, abs_tol=1e-8)):
+        raise ValueError('Y dopant fractions do not match the ZrO2/Y2O3 model.')
+    if preset == '8ysz' and not math.isclose(x, 0.08, rel_tol=1e-6, abs_tol=1e-8):
+        raise ValueError('8YSZ preset requires exactly 8 mol-% Y2O3.')
+    # 1-x ZrO2 + x Y2O3 -> Zr=1-x, Y=2x, O=2+x.
+    # Only Zr and O are placed here. Y is appended by ORIGINAL Dopant.normalize.
+    zr, oxygen, yttrium = 1 - x, 2 + x, 2 * x
+    atom_total = zr + oxygen + yttrium
+    total_mass = zr * 91.224 + yttrium * 88.90584 + oxygen * 15.999
+    base['elemental_composition'] = [
+        {'element': 'Zr', 'atomic_fraction': zr / atom_total,
+         'mass_fraction': zr * 91.224 / total_mass},
+        {'element': 'O', 'atomic_fraction': oxygen / atom_total,
+         'mass_fraction': oxygen * 15.999 / total_mass},
+    ]
+
+def validate_dopant_fractions(base: dict, additions: dict) -> None:
+    def nonfinite(value, location='subsections'):
+        if isinstance(value, dict):
+            for k, v in value.items():
+                nonfinite(v, f'{location}.{k}')
+        elif isinstance(value, list):
+            for i, v in enumerate(value):
+                nonfinite(v, f'{location}[{i}]')
+        elif isinstance(value, float) and not math.isfinite(value):
+            raise ValueError(f'{location}: non-finite numbers (NaN/Inf) are forbidden.')
+    nonfinite(additions)
+    dopants = additions.get('dopants')
+    if not isinstance(dopants, list):
+        return  # Existing schema validator reports wrong structures.
+    components = base.get('components') or []
+    formula = (
+        (components[0].get('pure_substance') or {}).get('molecular_formula')
+        if components else None
+    )
+    for i, dopant in enumerate(dopants):
+        if not isinstance(dopant, dict):
+            continue  # Existing schema validator reports this error.
+        a = dopant.get('atomic_fraction')
+        w = dopant.get('mass_fraction')
+        if (a is None) != (w is None):
+            raise ValueError(f'dopants[{i}]: specify both atomic and mass fractions, or neither.')
+        if a is None:
+            continue
+        if any(type(v) not in (int, float) or not math.isfinite(v) or
+               v < 0 or v > 1 for v in (a, w)):
+            raise ValueError(f'dopants[{i}]: fractions must be finite numbers in [0,1].')
+        if formula == 'ZrO2' and dopant.get('element') == 'Y':
+            if a >= MAX_YSZ_Y_ATOMIC_FRACTION:
+                raise ValueError('YSZ: Y atomic fraction is outside ZrO2/Y2O3 model.')
+            x = 3 * a / (2 * (1 - a))
+            _, expected_mass = ysz_fractions(x)
+            if not math.isclose(w, expected_mass, rel_tol=1e-6, abs_tol=1e-8):
+                raise ValueError(
+                    f'dopants[{i}]: Y fractions disagree for ZrO2/Y2O3. '
+                    'Choose the YSZ mol-% Y2O3 concentration definition in the GUI.'
+                )
+
+
+def merge_original_subsections(base, additions):
+    """Use original m_defs only; never copy identity or lifecycle metadata."""
+    if not isinstance(additions, dict):
+        raise ValueError('subsections must be a JSON object.')
+    available = CrystallineSubstrate.m_def.all_sub_sections
+    if set(additions) - set(available):
+        raise ValueError(
+            'Unknown or forbidden subsection(s): '
+            + ', '.join(sorted(set(additions) - set(available)))
+        )
+    validate_dopant_fractions(base, additions)
+    # Reference import may not silently override the three visible hkl fields.
+    crystal = additions.get('crystal_properties')
+    if isinstance(crystal, dict):
+        imported_hkl = (
+            crystal.get('surface_orientation') or {}
+        ).get('hkl_reciprocal')
+        current_hkl = (
+            base.get('crystal_properties') or {}
+        ).get('surface_orientation', {}).get('hkl_reciprocal')
+        if imported_hkl is not None and imported_hkl != current_hkl:
+            raise ValueError(
+                'Reference hkl differs from the visible orientation inputs. '
+                'Update the three hkl fields in the form.'
+            )
+    for key, value in additions.items():
+        if value is None:
+            continue
+        subsection = available[key]
+        section_cls = subsection.sub_section.section_cls
+        if subsection.repeats:
+            if not isinstance(value, list):
+                raise ValueError(f'{key} must be a JSON array.')
+            for item in value:
+                _validate_section_tree(item, section_cls, key)
+        else:
+            _validate_section_tree(value, section_cls, key)
+        if key == 'crystal_properties':
+            # Add scalar crystal properties without deleting the existing
+            # hkl/miscut from the three dedicated typed inputs.
+            prior = base.get(key) or {}
+            merged = {**prior, **value}
+            for nested in ('surface_orientation', 'miscut'):
+                if isinstance(prior.get(nested), dict) and isinstance(value.get(nested), dict):
+                    merged[nested] = {**prior[nested], **value[nested]}
+            base[key] = merged
+        else:
+            base[key] = value
+    return base
+
+
 @app.post('/api/preview')
 async def preview_substrate_batch(data: SubstrateIntakePreview):
     try:
+        # A reference is an ordinary single SubstrateMbe entry with "reference"
+        # in the existing Charge / Batch ID. No extra identifier or new schema.
+        is_reference = 'reference' in data.charge.casefold()
+        if is_reference and data.count != 1:
+            raise ValueError(
+                'A charge marked reference requires exactly one substrate. '
+                'Set Number of substrates to 1.'
+            )
         lab_id = batch_lab_id(data.supplier_id, data.crystal_id, data.charge)
         formula = validate_chemical_formula(data.material)
+        if data.material_preset not in ('', '8ysz'):
+            raise ValueError('Unknown material preset.')
+        if data.material_preset == '8ysz' and formula != 'ZrO2':
+            raise ValueError('8YSZ preset requires host chemical formula ZrO2.')
         orientation = parse_orientation(data.orientation)
         if orientation is None:
             raise ValueError('Surface orientation (h k l) is required.')
@@ -251,23 +468,16 @@ async def preview_substrate_batch(data: SubstrateIntakePreview):
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    # There is no verified upstream batch schema that creates child entries.
-    # Create one ORIGINAL CrystallineSubstrate archive per physical substrate.
-    # The batch grouping exists only in the UI (lab_id prefix), not in metainfo.
-    descriptions = [
-        f'Crystal ID: {data.crystal_id.strip()}',
-        f'Charge ID: {data.charge.strip()}',
-    ]
-    if data.polishing.strip():
-        descriptions.append('Polishing: ' + data.polishing.strip())
-    if data.notes.strip():
-        descriptions.append(data.notes.strip())
-
+    # The existing, unchanged SubstrateBatchMbe normalizer creates physical
+    # SubstrateMbe entries and stores their references on the batch.
+    # All identifiers and polishing already have their own original quantities.
+    # Free-text description is exclusively for user-supplied notes.
     base_data = {
-        'm_def': 'nomad_material_processing.general.CrystallineSubstrate',
+        'm_def': 'pdi_nomad_plugin.mbe.materials.SubstrateMbe',
+        'crystal_id': data.crystal_id.strip(),
+        'charge_id': data.charge.strip(),
         'supplier': data.supplier.strip(),
         'supplier_id': data.supplier_id.strip(),
-        'description': '\n'.join(descriptions),
         'components': [
             {
                 'm_def': 'nomad.datamodel.metainfo.basesections.v1.PureSubstanceComponent',
@@ -283,6 +493,18 @@ async def preview_substrate_batch(data: SubstrateIntakePreview):
         },
         'geometry': geometry,
     }
+    if data.notes.strip():
+        base_data['description'] = data.notes.strip()
+    if data.delivery_date is not None:
+        # Original SubstrateMbe.delivery_date is a NOMAD Datetime quantity.
+        # A date-only label is represented as midnight UTC, explicitly.
+        base_data['delivery_date'] = datetime.combine(
+            data.delivery_date, time.min, tzinfo=timezone.utc
+        ).isoformat()
+    if data.polishing.strip():
+        if data.polishing not in ('Single-side', 'Double-side', 'other', 'none'):
+            raise HTTPException(status_code=422, detail='Unsupported polishing value.')
+        base_data['polishing'] = data.polishing
     if offcut is not None and data.offcut_angle is not None:
         base_data['crystal_properties']['miscut'] = {
             'cartesian_miscut': {
@@ -293,51 +515,113 @@ async def preview_substrate_batch(data: SubstrateIntakePreview):
             },
         }
 
-    # Check the provenance of the real installed implementation. Neither
-    # local PDI m_defs nor custom normalizers may enter this workflow.
+    try:
+        merge_original_subsections(base_data, data.subsections)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    # Pre-populate the host's Zr/O fractions of the COMPLETE YSZ system.
+    # The original Dopant normalizer appends Y to results.material itself.
+    # Therefore, adding Y here too would double-count the dopant.
+    try:
+        apply_ysz_host_composition(base_data, formula, data.material_preset)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    # Only the ORIGINAL PDI batch root is permitted. No custom normalizer is
+    # executed during preview; the installed NOMAD parser triggers it on upload.
     from pdi_nomad_plugin.mbe.lab_library.original_preflight import (
         assert_upstream_normalizer,
     )
 
     assert_upstream_normalizer(CrystallineSubstrate)
 
-    archives = []
-    for index in range(1, data.count + 1):
-        child_id = f'{lab_id}_{index}'
-        child_data = {
-            **base_data,
-            'name': child_id,
-            'lab_id': child_id,
-        }
-        # Validate against the actual installed NOMAD m_def. No PDI
-        # normalizer runs, and no custom schema is imported or used.
-        try:
-            CrystallineSubstrate.m_from_dict(child_data)
-        except Exception as exc:
-            raise HTTPException(
-                status_code=422,
-                detail=f'Substrate {child_id}: original-schema validation failed: {exc}',
-            ) from exc
-        archives.append(
-            {
-                'filename': child_id + '.archive.json',
-                'data': child_data,
-            }
-        )
-
-    # CrystallineSubstrate is an ORIGINAL ArchiveSection but NOT a verified
-    # EntryArchive.data root in the pinned upstream NOMAD runtime. Keep the
-    # complete physical-substrate preview, but never offer these as uploadable
-    # archives until a legitimate upstream EntryData workflow is established.
     from nomad.datamodel.data import EntryData
+    from nomad.datamodel.datamodel import EntryArchive
 
-    root_supported = issubclass(CrystallineSubstrate, EntryData)
+    from pdi_nomad_plugin.mbe.materials import SubstrateBatchMbe, SubstrateMbe
+
+    if not (
+        issubclass(SubstrateBatchMbe, SubstrateMbe)
+        and issubclass(SubstrateBatchMbe, EntryData)
+    ):
+        raise HTTPException(500, 'Existing PDI batch is not a SubstrateMbe EntryData.')
+    batch_data = {
+        **base_data,
+        'm_def': SubstrateBatchMbe.m_def.qualified_name(),
+        'name': lab_id,
+        'lab_id': lab_id,
+        'number_of_substrates': data.count,
+        'trigger_create_substrate': True,
+    }
+    batch_filename = safe_id_part(lab_id) + '.SubstrateBatch.archive.json'
+
+    # These names MUST agree exactly with the unmodified normalizer, which
+    # writes "{self.lab_id}_{index}.Substrate.archive.yaml" through create_archive.
+    expected_children = [
+        {
+            'lab_id': f'{lab_id}_{index}',
+            'filename': f'{lab_id}_{index}.Substrate.archive.yaml',
+        }
+        for index in range(1, data.count + 1)
+    ]
+
+    try:
+        allowed = (
+            set(SubstrateBatchMbe.m_def.all_quantities)
+            | set(SubstrateBatchMbe.m_def.all_sub_sections)
+            | {'m_def'}
+        )
+        extra = set(batch_data) - allowed
+        if extra:
+            raise ValueError(f'Unsupported batch fields: {sorted(extra)}')
+        section = SubstrateBatchMbe.m_from_dict(batch_data)
+        if not isinstance(EntryArchive(data=section).data, EntryData):
+            raise ValueError('Batch archive.data is not EntryData')
+        if section.number_of_substrates != data.count:
+            raise ValueError('Batch count was not preserved by original schema')
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=f'Existing SubstrateBatchMbe validation failed: {exc}',
+        ) from exc
+
     return {
         'batch_lab_id': lab_id,
-        'archives': archives,
-        'upload_supported': False,
-        'root_is_entrydata': root_supported,
-        'reason': 'Original CrystallineSubstrate is not a verified uploadable EntryArchive.data root. No upload was made.',
+        'archives': [{'filename': batch_filename, 'data': batch_data}],
+        'expected_children': expected_children,
+        'expected_substrate_count': data.count,
+        'upload_supported': True,
+        'root_is_entrydata': True,
+        'schema': SubstrateBatchMbe.m_def.qualified_name(),
+        'reason': 'Existing unchanged SubstrateBatchMbe normalizer creates children.',
+    }
+
+
+@app.get('/api/property-options')
+async def physical_property_options():
+    """Read actual original MEnum values, never hard-code nonexistent options."""
+    from nomad_material_processing.general import (
+        ElectronicProperties,
+        SubstrateCrystalProperties,
+    )
+
+    def values(section_cls, quantity_name):
+        quantity = section_cls.m_def.all_quantities[quantity_name]
+        enum = quantity.type
+        raw = getattr(enum, 'm_enum', None)
+        if raw is None:
+            raw = getattr(enum, 'm_values', None)
+        if raw is None:
+            try:
+                raw = list(enum)
+            except (TypeError, ValueError):
+                raw = []
+        return [str(item) for item in raw if str(item)]
+
+    return {
+        'bravais_lattices': values(SubstrateCrystalProperties, 'bravais_lattices'),
+        'conductivity_type': values(ElectronicProperties, 'conductivity_type'),
     }
 
 
@@ -493,6 +777,19 @@ async def index():
             .triplet { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
             .triplet input { min-width: 0; }
 
+            .reference-picker {
+                margin: 12px 0 16px;
+                padding: 12px;
+                background: #f8fafc;
+                border: 1px solid #d9dde3;
+                border-radius: 8px;
+            }
+            .reference-picker h3 { margin: 0 0 6px; font-size: 15px; }
+            .reference-picker label { margin-top: 8px; }
+            .reference-picker-row { display: flex; gap: 6px; align-items: stretch; }
+            .reference-picker-row select { flex: 1; min-width: 0; }
+            .reference-refresh { flex: 0 0 38px; padding: 6px; }
+
             #polishing {
                 width: 100%;
                 box-sizing: border-box;
@@ -518,10 +815,28 @@ async def index():
                 <div class="card">
                     <h2>1. Box label</h2>
 
+                    <div class="reference-picker" id="pdiReferencePicker">
+                        <h3>Sample Property Reference</h3>
+                        <p class="small">Optional: select a saved reference to fill substrate
+                            properties. Existing box-label and manually entered values take
+                            priority. The reference entry itself is never changed.</p>
+                        <label for="samplePropReference">Reference properties</label>
+                        <div class="reference-picker-row">
+                            <select id="samplePropReference" onchange="pdiIntakeApplyReference()">
+                                <option value="">Loading references...</option>
+                            </select>
+                            <button type="button" class="secondary reference-refresh"
+                                title="Reload available references" aria-label="Reload reference list"
+                                onclick="pdiIntakeLoadReferences()">↻</button>
+                        </div>
+                        <p id="samplePropStatus" class="small" role="status">References load automatically.</p>
+                    </div>
+
                     <div class="upload-box">
                         <p><strong>Substrate box image</strong></p>
                         <p class="small">
-                            Later this will be used for OCR-assisted prefilling.
+                            Image recognition is not active yet. Future label imports
+                            will override conflicting reference properties in Batch data.
                         </p>
                         <button class="secondary" type="button">
                             Load from image
@@ -576,6 +891,8 @@ async def index():
                         <option value="BaSnO3">BaSnO3</option>
                         <option value="LaInO3">LaInO3</option>
                         <option value="Al2O3">Al2O3</option>
+                        <option value="ZrO2">ZrO2</option>
+                        <option value="8ysz">8YSZ (ZrO2 + 8 mol-% Y2O3)</option>
                         <option value="MgO">MgO</option>
                         <option value="Si">Si</option>
                         <option value="other">Other (enter formula)</option>
@@ -628,6 +945,9 @@ async def index():
                         <option value="none">none</option>
                     </select>
 
+                    <label for="delivery_date">Delivery date</label>
+                    <input id="delivery_date" type="date">
+                    <p class="small">Date only; stored in NOMAD as 00:00 UTC.</p>
 
                     <label for="geometry_shape">Substrate geometry</label>
                     <select id="geometry_shape"
@@ -662,6 +982,10 @@ async def index():
                     <input id="thickness_mm" type="number" step="any" min="0"
                         placeholder="e.g. 0.5">
 
+                    <p class="small">To create a property reference, enter
+                      "reference" in the existing Charge / Batch ID. The batch
+                      then contains exactly one substrate.</p>
+
                     <label for="count">
                         <span class="field-number">5.</span> Number of substrates
                     </label>
@@ -675,6 +999,37 @@ async def index():
 
                     <label for="notes">Notes</label>
                     <textarea id="notes"></textarea>
+                        <div class="physical-properties" id="pdiPhysicalProperties">
+                            <h3>Original substrate properties</h3>
+                            <p class="small">Physical values are saved using the existing NOMAD
+                            quantities and their native units. Chemical composition is derived
+                            from the selected material formula; do not enter it again.</p>
+                            <h4>Crystal properties</h4>
+                            <label for="phys_bravais">Bravais lattice (original NOMAD enum)</label>
+                            <select id="phys_bravais"><option value="">Not specified</option></select>
+                            <p class="small">Surface orientation, miscut and geometry are edited above.</p>
+                            <h4>Electronic properties</h4>
+                            <label for="phys_conductivity">Conductivity type</label>
+                            <select id="phys_conductivity"><option value="">Not specified</option></select>
+                            <label for="phys_carrier_density">Carrier density [cm⁻³]</label>
+                            <input id="phys_carrier_density" type="number" min="0" step="any" placeholder="optional">
+                            <label for="phys_carrier_deviation">Carrier-density uncertainty [m⁻³]</label>
+                            <input id="phys_carrier_deviation" type="number" min="0" step="any" placeholder="optional">
+                            <label for="phys_resistivity">Electrical resistivity [Ω·m]</label>
+                            <input id="phys_resistivity" type="number" min="0" step="any" placeholder="optional">
+                            <h4>Dopants</h4>
+                            <div id="pdiDopantRows"></div>
+                            <button class="secondary" type="button" onclick="pdiIntakeAddDopant()">+ Add dopant</button>
+                            <p class="small">Dopant concentration is entered in cm⁻³; the original
+                            schema stores m⁻³. Conversion is automatic.</p>
+                            <p class="small"><strong>Schema limitation:</strong> Mass density and
+                            lattice parameters (a, b, c) are not quantities of the original
+                            SubstrateCrystalProperties schema in the current NOMAD environment.
+                            They cannot be stored here until an existing compatible original
+                            section or reference mapping is verified. No custom schema is added.</p>
+                        </div>
+
+
                 </div>
 
 
@@ -686,7 +1041,7 @@ async def index():
                         <option value="">Loading uploads...</option>
                     </select>
                     <p id="uploadStatus" class="small">
-                        Loading writable NOMAD uploads...
+                        Loading unpublished NOMAD uploads...
                     </p>
 
                     <div class="summary">
@@ -695,7 +1050,7 @@ async def index():
                     </div>
 
                     <div>
-                        <strong>Individual CrystallineSubstrate entries</strong>
+                        <strong>Individual SubstrateMbe archives (existing original PDI schema)</strong>
                     </div>
 
                     <div id="childPreview" class="preview"></div>
@@ -731,16 +1086,19 @@ async def index():
                         onclick="saveToNomad()"
                         disabled
                     >
-                        Upload unavailable (original archive root unverified)
+                        Upload a Substrate Batch and generate substrates
                     </button>
 
                     <p id="saveStatus" class="small">
-                        Preview only: no valid original EntryArchive.data root has been verified.
+                        Select an unpublished upload. Staging storage is checked before saving.
                     </p>
                 </div>
 
             </div>
         </div>
+        <script src="static/intake_reference.js?v=9"></script>
+        <script src="static/intake_upload_feedback.js?v=8"></script>
+        <script src="static/intake_duplicate_guard.js?v=10"></script>
         <script>
             function nomadApiBase() {
             if (window.NOMAD_API_BASE) { return window.NOMAD_API_BASE; }
@@ -790,6 +1148,9 @@ async def index():
                 const preview = document.getElementById('childPreview');
                 const batchPreview = document.getElementById('batchPreview');
 
+                const isSingle = /reference/i.test(document.getElementById('charge').value);
+                countInput.disabled = isSingle;
+                if (isSingle && countInput.value !== '1') countInput.value = '1';
                 let count = parseInt(countInput.value || '0', 10);
 
                 if (count < 0 || Number.isNaN(count)) {
@@ -833,13 +1194,17 @@ async def index():
                 return {
                     supplier: document.getElementById('supplier').value,
                     supplier_id: document.getElementById('supplier_id').value,
-                    material: document.getElementById('material').value === 'other'
-                        ? document.getElementById('other_material').value
-                        : document.getElementById('material').value,
+                    material: document.getElementById('material').value === '8ysz'
+                        ? 'ZrO2'
+                        : document.getElementById('material').value === 'other'
+                            ? document.getElementById('other_material').value
+                            : document.getElementById('material').value,
+                    material_preset: document.getElementById('material').value === '8ysz'
+                        ? '8ysz' : '',
                     crystal_id: document.getElementById('crystal_id').value,
                     charge: document.getElementById('charge').value,
-                    polishing:
-document.getElementById('polishing').value,
+                    polishing: document.getElementById('polishing').value,
+                    delivery_date: document.getElementById('delivery_date').value || null,
                     orientation: readIndices(['h_index', 'k_index', 'l_index']),
                     offcut_angle: document.getElementById('offcut_angle').value
                         ? parseFloat(document.getElementById('offcut_angle').value)
@@ -862,7 +1227,8 @@ document.getElementById('polishing').value,
                         document.getElementById('count').value || '1',
                         10
                     ),
-                    notes: document.getElementById('notes').value
+                    notes: document.getElementById('notes').value,
+                    subsections: window.pdiIntakeReadSubsections()
                 };
             }
 
@@ -887,6 +1253,7 @@ document.getElementById('polishing').value,
                 document.getElementById('crystal_id').value = '';
                 document.getElementById('charge').value = '';
                 document.getElementById('polishing').value = '';
+                document.getElementById('delivery_date').value = '';
                 ['h_index', 'k_index', 'l_index'].forEach(function(id) {
                     document.getElementById(id).value = '';
                 });
@@ -902,17 +1269,19 @@ document.getElementById('polishing').value,
                 document.getElementById('sector_angle_deg').value = '90';
                 updateGeometryFields();
                 document.getElementById('count').value = '10';
+                document.getElementById('count').disabled = false;
                 document.getElementById('notes').value = '';
+                window.pdiIntakeResetPhysicalProperties();
+                window.pdiIntakeResetImportOrigins();
                 updatePreview();
             }
 
             async function previewArchive() {
-                const payload = buildPayload();
-
                 const output = document.getElementById('archiveJson');
                 output.textContent = 'Loading...';
 
                 try {
+                    const payload = buildPayload();
                     const response = await fetch('api/preview', {
                         method: 'POST',
                         headers: {
@@ -950,7 +1319,13 @@ document.getElementById('polishing').value,
                 }
                 saveStatus.className = 'small';
 
-                const payload = buildPayload();
+                let payload;
+                try {
+                    payload = buildPayload();
+                } catch (error) {
+                    saveStatus.textContent = 'Error: ' + error.message;
+                    return;
+                }
 
                 const parts = [
                     cleanPart(payload.supplier_id),
@@ -972,6 +1347,9 @@ document.getElementById('polishing').value,
 
                 saveButton.disabled = true;
                 saveStatus.textContent = 'Preparing archive...';
+                let batchSubmitted = false;
+                let batchWriteAttempted = false;
+                let submittedUploadId = null;
 
                 try {
                     const previewResponse = await fetch('api/preview', {
@@ -998,83 +1376,141 @@ document.getElementById('polishing').value,
                      }
 
                      const archives = preview.archives;
-                     if (!Array.isArray(archives) || archives.length !== payload.count) {
-                         throw new Error('Preview returned an unexpected number of substrate archives.');
+                     const expectedChildren = preview.expected_children;
+                     if (!Array.isArray(archives) || archives.length !== 1 ||
+                         !Array.isArray(expectedChildren) ||
+                         expectedChildren.length !== payload.count ||
+                         preview.expected_substrate_count !== payload.count) {
+                         throw new Error('Preview must contain one original batch and the expected child IDs.');
                      }
-                     if (archives.some(function(entry) {
-                         return !entry || !entry.data ||
-                             entry.data.m_def !== 'nomad_material_processing.general.CrystallineSubstrate' ||
-                             !entry.filename || !entry.filename.endsWith('.archive.json');
-                     })) {
-                         throw new Error('Preview contains a non-original substrate schema.');
+                     const batch = archives[0];
+                     if (!batch || !batch.data ||
+                         batch.data.m_def !== 'pdi_nomad_plugin.mbe.materials.SubstrateBatchMbe' ||
+                         batch.data.trigger_create_substrate !== true ||
+                         batch.data.number_of_substrates !== payload.count ||
+                         !batch.filename.endsWith('.SubstrateBatch.archive.json')) {
+                         throw new Error('Invalid original SubstrateBatchMbe archive. No upload performed.');
                      }
-                     const unique = new Set(archives.map(function(item) { return item.filename; }));
-                     if (unique.size !== archives.length) {
-                         throw new Error('Preview contains duplicate substrate filenames.');
+                     const generatedNames = [batch.filename, ...expectedChildren.map(x => x.filename)];
+                     if (new Set(generatedNames).size !== generatedNames.length) {
+                         throw new Error('Batch or generated child filenames collide.');
                      }
 
-                     // Each physical substrate is a separate original NOMAD archive.
-                     // There is no custom batch-normalizer and no implicit child creation.
-                     // Do not retry automatically after a partial upload.
-                     let saved = 0;
-                     for (const archive of archives) {
-                         const params = new URLSearchParams();
-                         params.append('file_name', archive.filename);
-                         params.append('overwrite_if_exists', 'false');
-                         params.append('trigger_processing', 'true');
-                         params.append('wait_for_processing', 'true');
+                     // An indexed unpublished upload can exist even if its staging
+                     // filesystem was removed. Preflight the real raw directory
+                     // BEFORE the first PUT. This is read-only and prevents the
+                     // NOMAD StagingUploadFiles KeyError from being encountered
+                     // after starting a batch write.
+                     const base = nomadApiBase() + '/uploads/' +
+                         encodeURIComponent(uploadId);
+                     const infoResponse = await fetch(base);
+                     if (!infoResponse.ok) {
+                         throw new Error('Target upload is no longer accessible (' +
+                             infoResponse.status + '). Choose/create a valid development upload.');
+                     }
+                     const infoBody = await infoResponse.json();
+                     const info = infoBody.data || infoBody;
+                     if (info.upload_id !== uploadId || info.published ||
+                         info.process_running) {
+                         throw new Error('Target upload is published, currently processing, '
+                             + 'or has inconsistent metadata. Select another upload.');
+                     }
+                     const directoryResponse = await fetch(base + '/rawdir/');
+                     if (!directoryResponse.ok) {
+                         throw new Error('Upload staging directory is unavailable (HTTP ' +
+                             directoryResponse.status + '). No files were sent. '
+                             + 'The upload may be stale; create a fresh unpublished '
+                             + 'development upload and refresh the list.');
+                     }
+                     const directory = await directoryResponse.json();
+                     if (!directory.directory_metadata) {
+                         throw new Error('NOMAD did not confirm upload staging directory. '
+                             + 'No files were sent.');
+                     }
 
-                         saveStatus.textContent =
-                             'Uploading substrate ' + (saved + 1) + '/' + archives.length +
-                             ': ' + archive.filename;
+                     // The original batch normalizer creates child archives with
+                     // overwrite=True. Never require an empty target upload: instead
+                     // reject any already used generated batch/child ID or raw
+                     // archive filename BEFORE sending the batch to NOMAD.
+                     // This is a read-only, paginated check; the subsequent batch
+                     // PUT still uses overwrite_if_exists=false.
+                     saveStatus.textContent = 'Checking existing batch and substrate IDs...';
+                     await window.pdiIntakeDuplicateGuard.assertNoCollision({
+                         uploadId: uploadId,
+                         apiBase: nomadApiBase(),
+                         batchLabId: preview.batch_lab_id,
+                         batchFilename: batch.filename,
+                         expectedChildren: expectedChildren
+                     });
 
-                         const response = await fetch(
-                             nomadApiBase() + '/uploads/' +
-                             encodeURIComponent(uploadId) + '/raw/?' + params.toString(),
-                             {
-                                 method: 'PUT',
-                                 headers: {'Content-Type': 'application/json'},
-                                 body: JSON.stringify({data: archive.data}, null, 2)
-                             }
-                         );
-                         if (!response.ok) {
-                             let detail = '';
-                             try {
-                                 const errorData = await response.json();
-                                 detail = errorData.detail ? ': ' +
-                                     (typeof errorData.detail === 'string'
-                                         ? errorData.detail
-                                         : JSON.stringify(errorData.detail)) : '';
-                             } catch (_) { }
-                             throw new Error(
-                                 'Saved ' + saved + '/' + archives.length +
-                                 ' substrates. Upload failed for ' + archive.filename +
-                                 ' (' + response.status + ')' + detail +
-                                 '. Check the upload before retrying; do not create duplicates.'
-                             );
+                     const params = new URLSearchParams();
+                     params.append('file_name', batch.filename);
+                     params.append('overwrite_if_exists', 'false');
+                     params.append('trigger_processing', 'true');
+                     params.append('wait_for_processing', 'true');
+
+                     saveStatus.textContent = 'Uploading 1 batch archive; NOMAD will generate ' +
+                         expectedChildren.length + ' SubstrateMbe entries...';
+                     // Once PUT starts, a network failure may hide a successful
+                     // server-side write. Never offer an unsafe retry.
+                     batchWriteAttempted = true;
+                     submittedUploadId = uploadId;
+                     const response = await fetch(
+                         nomadApiBase() + '/uploads/' +
+                         encodeURIComponent(uploadId) + '/raw/?' + params.toString(),
+                         {
+                             method: 'PUT',
+                             headers: {'Content-Type': 'application/json'},
+                             body: JSON.stringify({data: batch.data}, null, 2)
                          }
-                         saved += 1;
+                     );
+                     if (!response.ok) {
+                         const errorBody = await response.json().catch(() => ({}));
+                         throw new Error('Batch upload HTTP ' + response.status + ': ' +
+                             JSON.stringify(errorBody).slice(0, 1200) +
+                             '. Inspect NOMAD before retrying to avoid overwriting children.');
                      }
 
-                    // Link to the upload so the user can jump straight to
-                    // it, then clear the form for the next batch.
-                    const uploadUrl =
-                        nomadApiBase().replace(new RegExp('/api/v1$'), '') +
-                        '/gui/user/uploads/upload/id/' +
-                        encodeURIComponent(uploadId);
-
-                    saveStatus.innerHTML =
-                        'Saved ' + archives.length + ' original substrate archives' +
-                        '. NOMAD processing has been triggered. ' +
-                        '<a href="' + uploadUrl + '" target="_blank">' +
-                        'View this upload &rarr;</a>';
+                    // A successful PUT is only transfer acknowledgement. The
+                    // original batch normalizer generates children asynchronously;
+                    // read back every expected entry before reporting success.
+                    batchSubmitted = true;
+                    await window.pdiIntakeUploadFeedback.waitForEntries({
+                        uploadId: uploadId,
+                        apiBase: nomadApiBase(),
+                        filenames: [batch.filename].concat(
+                            expectedChildren.map(function(child) {
+                                return child.filename;
+                            })
+                        ),
+                        statusElement: saveStatus
+                    });
 
                     resetForm();
+                    window.pdiIntakeUploadFeedback.showSuccessAndOpenUpload({
+                        statusElement: saveStatus,
+                        uploadId: submittedUploadId,
+                        batchFile: batch.filename,
+                        children: expectedChildren.length
+                    });
                 } catch (error) {
-                    saveStatus.textContent =
-                        'Error: ' + error.message;
+                    saveStatus.className = 'warning';
+                    saveStatus.textContent = batchWriteAttempted
+                        ? 'An upload write was attempted; processing or refresh ' +
+                          'could not be confirmed: ' + error.message +
+                          ' Do NOT upload again until you inspect NOMAD. '
+                        : 'Error before upload: ' + error.message;
+                    if (batchWriteAttempted && submittedUploadId) {
+                        saveStatus.appendChild(document.createTextNode(
+                            ' Upload ID: ' + submittedUploadId + '.'
+                        ));
+                    }
                 } finally {
-                    saveButton.disabled = true;
+                    // Never allow a second submission after the server accepted
+                    // the batch: the original normalizer may overwrite children.
+                    saveButton.disabled = batchWriteAttempted || !Boolean(
+                        document.getElementById('targetUpload').value
+                    );
                 }
             }
 
@@ -1085,7 +1521,7 @@ document.getElementById('polishing').value,
                 select.innerHTML =
                     '<option value="">Loading uploads...</option>';
                 status.textContent =
-                    'Loading writable NOMAD uploads...';
+                    'Loading unpublished NOMAD uploads...';
 
                 const params = new URLSearchParams();
                 params.append('roles', 'main_author');
@@ -1138,7 +1574,7 @@ document.getElementById('polishing').value,
 
                     status.textContent =
                         uploads.length +
-                        ' writable unpublished upload(s) available.';
+                        ' unpublished upload(s) listed; staging checked at save.';
                 } catch (error) {
                     select.innerHTML =
                         '<option value="">Could not load uploads</option>';
@@ -1151,11 +1587,12 @@ document.getElementById('polishing').value,
                 .getElementById('targetUpload')
                 .addEventListener('change', function() {
                     const hasUpload = Boolean(this.value);
-                    document.getElementById('saveButton').disabled = true;
+                    document.getElementById('saveButton').disabled = !hasUpload;
                     const status = document.getElementById('saveStatus');
                     status.className = hasUpload ? 'small' : 'warning';
                     status.textContent =
-                        'Preview only: original substrate EntryArchive.data root unverified.';
+                        hasUpload ? 'Ready: validated SubstrateMbe upload.'
+                            : 'Choose a writable upload before saving.';
                 });
 
             let intakeRefreshPromise = null;
@@ -1175,7 +1612,7 @@ document.getElementById('polishing').value,
                         select.value = oldUpload;
                     }
 
-                    document.getElementById('saveButton').disabled = true;
+                    document.getElementById('saveButton').disabled = !Boolean(select.value);
                 }).finally(function() {
                     intakeRefreshPromise = null;
                 });
@@ -1211,6 +1648,8 @@ document.getElementById('polishing').value,
                 }
             });
         </script>
+        <script src="static/intake_ysz_dopants.js?v=11"></script>
+        <script src="static/intake_ysz_preset.js?v=12"></script>
     </body>
     </html>
     """

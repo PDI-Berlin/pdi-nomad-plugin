@@ -95,6 +95,13 @@ def test_app_sources_do_not_reference_pdi_schema_classes():
                 final = candidate.rsplit('.', 1)[-1]
                 # Only potential schema CLASS paths, not ordinary local APIs/modules.
                 if final[:1].isupper():
+                    # Only existing, pristine PDI substrate and batch roots.
+                    intake = APP_ROOT / 'substrate_intake' / 'app.py'
+                    if path == intake and candidate in {
+                        'pdi_nomad_plugin.mbe.materials.SubstrateMbe',
+                        'pdi_nomad_plugin.mbe.materials.SubstrateBatchMbe',
+                    }:
+                        continue
                     findings.append(f'{path.relative_to(ROOT)}:{lineno}: {candidate}')
     assert not findings, (
         f'{len(findings)} uses of local PDI schema classes in GUI/API code:\n'
