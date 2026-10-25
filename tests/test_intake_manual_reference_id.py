@@ -37,7 +37,8 @@ def test_reference_via_charge_id_uses_regular_generated_sample_lab_id():
     )
     assert substrate['data']['charge_id'] == 'P43671_reference'
     assert (
-        substrate['filename'] == 'CTC_GSO_P43671_reference.SubstrateBatch.archive.json'
+        substrate['filename']
+        == 'CTC_GdScO3_110_GSO_P43671_reference.SubstrateBatch.archive.json'
     )
 
 
