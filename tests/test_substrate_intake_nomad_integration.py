@@ -74,8 +74,8 @@ def test_original_geometry_and_batch_roundtrip(client, cls, changes):
     assert type(roundtrip.geometry) is cls
     assert payload['expected_children'] == [
         {
-            'lab_id': f'TEST_001_A_{index}',
-            'filename': f'TEST_001_A_{index}.Substrate.archive.yaml',
+            'lab_id': f'TEST_SrTiO3_001_001_A_{index}',
+            'filename': f'TEST_SrTiO3_001_001_A_{index}.Substrate.archive.yaml',
         }
         for index in (1, 2, 3)
     ]
