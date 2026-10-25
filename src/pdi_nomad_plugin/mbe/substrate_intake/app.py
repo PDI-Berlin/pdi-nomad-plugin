@@ -117,10 +117,31 @@ def safe_id_part(value: str) -> str:
     return value.strip('-_.')
 
 
-def batch_lab_id(supplier_id: str, crystal_id: str, charge_id: str) -> str:
-    parts = [safe_id_part(x) for x in (supplier_id, crystal_id, charge_id)]
+def batch_lab_id(
+    supplier_id: str,
+    crystal_id: str,
+    charge_id: str,
+    material: str,
+    orientation: dict,
+) -> str:
+    indices = [orientation[k] for k in ('h_index', 'k_index', 'l_index')]
+    encode = lambda n: str(n)
+    hkl = (
+        ''.join(encode(n) for n in indices)
+        if all(abs(n) < 10 for n in indices)
+        else '_'.join(
+            f'{axis}{encode(n)}' for axis, n in zip('hkl', indices)
+        )
+    )
+    parts = [
+        safe_id_part(supplier_id),
+        safe_id_part(material),
+        hkl,
+        safe_id_part(crystal_id),
+        safe_id_part(charge_id),
+    ]
     if not all(parts):
-        raise ValueError('Supplier ID, Crystal ID and Charge ID are required.')
+        raise ValueError('Supplier, material, orientation, crystal and charge are required.')
     return '_'.join(parts)
 
 
@@ -439,7 +460,6 @@ async def preview_substrate_batch(data: SubstrateIntakePreview):
                 'A charge marked reference requires exactly one substrate. '
                 'Set Number of substrates to 1.'
             )
-        lab_id = batch_lab_id(data.supplier_id, data.crystal_id, data.charge)
         formula = validate_chemical_formula(data.material)
         if data.material_preset not in ('', '8ysz'):
             raise ValueError('Unknown material preset.')
@@ -448,6 +468,11 @@ async def preview_substrate_batch(data: SubstrateIntakePreview):
         orientation = parse_orientation(data.orientation)
         if orientation is None:
             raise ValueError('Surface orientation (h k l) is required.')
+        material_id = '8YSZ' if data.material_preset == '8ysz' else formula
+        lab_id = batch_lab_id(
+            data.supplier_id, data.crystal_id, data.charge,
+            material_id, orientation,
+        )
         offcut = parse_offcut_direction(data.offcut_direction)
         if data.offcut_angle is not None:
             if not math.isfinite(data.offcut_angle) or data.offcut_angle < 0:
@@ -1157,21 +1182,51 @@ async def index():
                     count = 0;
                 }
 
-                const parts = [supplierId, crystalId, charge];
-                if (parts.some(function(part) { return !part; })) {
-                    batchPreview.textContent = 'Enter Supplier ID, Crystal ID and Charge ID';
+                const materialValue = document.getElementById('material').value;
+                const material = cleanPart(
+                    materialValue === '8ysz' ? '8YSZ' :
+                    materialValue === 'other'
+                        ? document.getElementById('other_material').value
+                        : materialValue
+                );
+                const hkl = ['h_index', 'k_index', 'l_index'].map(
+                    id => document.getElementById(id).value.trim()
+                );
+                const validHkl = hkl.every(v => /^[+-]?\\d+$/.test(v)) &&
+                    hkl.some(v => Number(v) !== 0);
+
+                if (![supplierId, material, crystalId, charge].every(Boolean) ||
+                    !validHkl) {
+                    batchPreview.textContent =
+                        'Enter supplier, material, orientation, crystal and charge';
                     preview.innerHTML = '';
                     return;
                 }
-                const batchName = parts.join('_');
 
-                batchPreview.textContent = batchName;
+                const encodeIndex = n => String(n);
+                const indices = hkl.map(Number);
+                const orientationId = indices.every(n => Math.abs(n) < 10)
+                    ? indices.map(encodeIndex).join('')
+                    : indices.map(
+                        (n, i) => ['h', 'k', 'l'][i] + encodeIndex(n)
+                    ).join('_');
+
+                const shortName = [
+                    supplierId, material, orientationId, crystalId
+                ].join('_');
+                const batchName = [
+                    supplierId, material, orientationId, crystalId, charge
+                ].join('_');
+
+                batchPreview.textContent = shortName;
+                batchPreview.title = batchName;
                 preview.innerHTML = '';
 
                 for (let i = 1; i <= count; i++) {
                     const item = document.createElement('div');
                     item.className = 'preview-item';
-                    item.textContent = batchName + '_' + i;
+                    item.textContent = shortName + '_' + i;
+                    item.title = batchName + '_' + i;
                     preview.appendChild(item);
                 }
             }

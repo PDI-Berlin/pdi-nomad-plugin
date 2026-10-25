@@ -303,3 +303,85 @@ button:disabled {
         grid-template-columns: 1fr;
     }
 }
+
+/* PDI RESPONSIVE SUBSTRATE TABLE FIX */
+.result-grid {
+    grid-template-columns:
+        28px minmax(0,1.65fr) minmax(0,1fr)
+        minmax(0,.8fr) minmax(0,.8fr) minmax(0,.9fr);
+}
+
+.result-grid > * {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.layout > * {
+    min-width: 0;
+}
+
+@media (max-width: 1500px) {
+    .layout {
+        grid-template-columns: minmax(0,1fr);
+    }
+}
+
+/* PDI PROCESSING SIDE-BY-SIDE V2 */
+.layout {
+    grid-template-columns: minmax(540px,1fr) minmax(540px,1fr) !important;
+    min-width: 1120px;
+    align-items: start;
+}
+.layout > * {
+    min-width: 0;
+}
+.substrate-table-scroll {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+}
+.substrate-table-scroll .result-grid {
+    min-width: 720px;
+    grid-template-columns:
+        30px minmax(175px,1.5fr) minmax(90px,.85fr)
+        minmax(85px,.8fr) minmax(90px,.8fr)
+        minmax(110px,1fr) !important;
+}
+#cutValidateButton {
+    display: none !important;
+}
+
+/* PDI COMPACT SUBSTRATE TABLE AND CUT HISTORY */
+.substrate-table-scroll .result-grid {
+    min-width: 0 !important;
+    grid-template-columns:
+        22px
+        minmax(95px, 1.6fr)
+        minmax(58px, .85fr)
+        minmax(38px, .5fr)
+        minmax(55px, .65fr)
+        minmax(88px, 1.1fr) !important;
+    gap: 4px;
+    padding-left: 6px;
+    padding-right: 6px;
+    font-size: 11px;
+}
+.substrate-table-scroll .result-grid > * {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.substrate-table-scroll .result-status-cell {
+    gap: 3px;
+}
+.substrate-table-scroll .history-toggle {
+    font-size: 10px;
+    padding: 3px 5px;
+    white-space: normal;
+}
+.cut-history-record {
+    padding: 7px 9px;
+    border-left: 3px solid #a774c3;
+    margin: 5px 0;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}

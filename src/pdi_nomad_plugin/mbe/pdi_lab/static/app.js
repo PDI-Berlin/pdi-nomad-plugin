@@ -71,29 +71,45 @@ const modeButton = document.getElementById('workspaceModeButton');
 
 let currentApp = null;
 
-const fullPageUrl =
-    base + '/dashboards/pdi-lab/';
+// Fullscreen stays in the current browser tab.
+const embeddedInNomad = window.self !== window.top;
 
-const nomadDashboardUrl =
-    base + '/gui/v2/dashboard/pdi-lab';
+async function toggleWorkspaceFullscreen() {
+    const outerFrame = embeddedInNomad ? window.frameElement : null;
+    const target = outerFrame ||
+        document.querySelector('.workspace-shell');
+    const ownerDocument = target.ownerDocument;
 
-const embeddedInNomad =
-    window.self !== window.top;
+    try {
+        if (ownerDocument.fullscreenElement) {
+            await ownerDocument.exitFullscreen();
+        } else {
+            await target.requestFullscreen();
+        }
+    } catch (error) {
+        console.error('Fullscreen unavailable:', error);
+        modeButton.textContent = 'Fullscreen unavailable';
+        modeButton.title =
+            'The embedding page may not permit browser fullscreen.';
+    }
+}
 
-if (embeddedInNomad) {
-    modeButton.textContent = '↗ Full page';
-    modeButton.title = 'Open PDI Lab full page';
+modeButton.textContent = '⛶ Fullscreen';
+modeButton.title = 'Toggle fullscreen in this browser tab';
+modeButton.addEventListener('click', toggleWorkspaceFullscreen);
 
-    modeButton.addEventListener('click', function() {
-        window.top.location.href = fullPageUrl;
-    });
-} else {
-    modeButton.textContent = '← Back to NOMAD';
-    modeButton.title = 'Return to NOMAD';
+function updateFullscreenLabel() {
+    const doc = window.frameElement
+        ? window.frameElement.ownerDocument : document;
+    modeButton.textContent = doc.fullscreenElement
+        ? 'Exit fullscreen' : '⛶ Fullscreen';
+}
 
-    modeButton.addEventListener('click', function() {
-        window.location.href = nomadDashboardUrl;
-    });
+document.addEventListener('fullscreenchange', updateFullscreenLabel);
+if (window.frameElement) {
+    window.frameElement.ownerDocument.addEventListener(
+        'fullscreenchange', updateFullscreenLabel
+    );
 }
 
 function applicationUrl(key) {

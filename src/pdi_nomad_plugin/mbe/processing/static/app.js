@@ -32,10 +32,6 @@ const ORIGINAL_PROCESS_TYPES = Object.freeze({
         schema: 'nomad_material_processing.general.AnnealingRecipe',
         processSchema: 'nomad_material_processing.general.Annealing'
     }),
-    etching: Object.freeze({
-        schema: 'nomad_material_processing.general.EtchingRecipe',
-        processSchema: 'nomad_material_processing.general.Etching'
-    })
 });
 
 
@@ -146,14 +142,35 @@ async function queryEntries(schema, pageSize, include) {
     });
 }
 
+const processingCutParentIds = new Set();
+const processingVerifiedCutChildren = new Map();
+const processingCutHistoryByEntry = new Map();
+
+function recordProcessingCutHistory(entryId, record) {
+    if (!entryId) return;
+    if (!processingCutHistoryByEntry.has(entryId)) {
+        processingCutHistoryByEntry.set(entryId, []);
+    }
+    processingCutHistoryByEntry.get(entryId).push(record);
+}
+
+function processingCutUnavailable(substrate) {
+    return processingCutParentIds.has(substrate.entryId) ||
+        processingCutAttemptedParents.has(substrate.entryId);
+}
+
 function substrateStatus(substrate) {
     if (!substrate || !substrate.entryId) return '';
-    // Never invent as_delivered/processed/grown NOMAD quantities.
-    // A substrate with an original Cleaning/Annealing/Etching process
-    // referencing it is processed; otherwise it is unprocessed.
-    return treatmentHistoryState.some(function(treatment) {
-        return treatmentReferencesSubstrate(treatment, substrate.entryId);
-    }) ? 'processed' : 'unprocessed';
+
+    const processed = substrate.processed === true ||
+        processingCutParentIds.has(substrate.entryId) ||
+        treatmentHistoryState.some(function(treatment) {
+            return treatmentReferencesSubstrate(
+                treatment, substrate.entryId
+            );
+        });
+
+    return processed ? 'processed' : 'unprocessed';
 }
 
 function referenceEntryId(reference) {
@@ -285,34 +302,263 @@ function originalSubstrateFields(data) {
 }
 
 async function loadSubstrates() {
-    const schema = 'nomad_material_processing.general.CrystallineSubstrate';
-    const entries = await queryEntries(schema, 1000, [
-        'entry_id', 'upload_id', 'entry_name', 'data'
-    ]);
-    return entries.filter(function(entry) {
-        return entry.data && entry.data.m_def === schema;
-    }).map(function(entry) {
-        const data = entry.data;
-        const fields = originalSubstrateFields(data);
-        return {
-            entryId: entry.entry_id,
-            uploadId: entry.upload_id,
-            labId: data.lab_id || data.name || entry.entry_name || entry.entry_id,
-            material: fields.material,
-            formula: fields.formula,
-            crystalId: fields.crystalId,
-            chargeId: fields.chargeId,
-            orientation: fields.orientation,
-            geometry: data.geometry || null,
-            // Status is derived from original processing references.
-            selected: false
-        };
-    }).sort(function(a, b) {
-        return String(a.labId).localeCompare(
-            String(b.labId), undefined,
-            {numeric: true, sensitivity: 'base'}
-        );
-    });
+    const schema = 'pdi_nomad_plugin.mbe.materials.SubstrateMbe';
+    const status = document.getElementById('substrateStatus');
+    const indexed = [];
+    const seen = new Set();
+    let cursor = null;
+    let complete = false;
+
+    for (let page = 0; page < 50; page++) {
+        const pagination = {page_size: 200};
+        if (cursor) pagination.page_after_value = cursor;
+
+        const response = await fetch(nomadApiBase() + '/entries/query', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                owner: 'visible',
+                query: {'section_defs.definition_qualified_name': schema},
+                pagination,
+                required: {
+                    include: ['entry_id', 'upload_id', 'entry_name']
+                }
+            })
+        });
+
+        if (!response.ok)
+            throw new Error('Substrate index: HTTP ' + response.status);
+
+        const result = await response.json();
+
+        for (const entry of result.data || []) {
+            if (entry.entry_id && entry.upload_id &&
+                !seen.has(entry.entry_id)) {
+                indexed.push(entry);
+                seen.add(entry.entry_id);
+            }
+        }
+
+        const next = result.pagination?.next_page_after_value;
+        if (!next) {
+            complete = true;
+            break;
+        }
+        if (next === cursor)
+            throw new Error('Substrate pagination did not advance.');
+        cursor = next;
+    }
+
+    if (!complete)
+        throw new Error('Substrate index pagination incomplete.');
+
+    const accepted = [];
+    let position = 0;
+    let finished = 0;
+    let unavailable = 0;
+
+    async function worker() {
+        while (true) {
+            const i = position++;
+            if (i >= indexed.length) return;
+            const entry = indexed[i];
+
+            try {
+                const response = await fetch(
+                    nomadApiBase() + '/entries/' +
+                    encodeURIComponent(entry.entry_id) + '/archive'
+                );
+
+                if (response.status === 401 || response.status === 403)
+                    throw new Error('ACCESS_ERROR HTTP ' + response.status);
+
+                if (!response.ok) {
+                    unavailable++;
+                    continue;
+                }
+
+                const payload = await response.json();
+                const wrapper = payload.data || payload.archive || payload;
+                const archive = wrapper.archive || wrapper;
+                const data = archive.data || archive;
+
+                if (data.m_def !== schema) continue;
+
+                const fields = originalSubstrateFields(data);
+                accepted.push({
+                    entryId: entry.entry_id,
+                    uploadId: entry.upload_id,
+                    labId: data.lab_id || data.name ||
+                           entry.entry_name || entry.entry_id,
+                    material: fields.material,
+                    formula: fields.formula,
+                    crystalId: fields.crystalId,
+                    chargeId: fields.chargeId,
+                    orientation: fields.orientation,
+                    geometry: data.geometry || null,
+                    processed: data.processed === true,
+                    selected: false
+                });
+            } catch (error) {
+                if (error.message.startsWith('ACCESS_ERROR'))
+                    throw error;
+                unavailable++;
+                console.warn('Substrate unavailable:', entry.entry_id, error);
+            } finally {
+                finished++;
+                if (finished % 20 === 0 || finished === indexed.length)
+                    status.textContent =
+                        'Loading substrates: ' + finished +
+                        '/' + indexed.length;
+            }
+        }
+    }
+
+    await Promise.all(
+        Array.from(
+            {length: Math.min(10, indexed.length)},
+            () => worker()
+        )
+    );
+
+    window.processingUnavailableSubstrates = unavailable;
+
+    const childLinks = new Map();
+    const parentIds = new Set();
+
+    for (const [childId, link] of processingVerifiedCutChildren) {
+        childLinks.set(childId, link);
+        parentIds.add(link.parentId);
+    }
+
+    try {
+        const cuts = await cutExistingEntries();
+        window.processingCutHistoryError = '';
+        processingCutHistoryByEntry.clear();
+
+        for (const item of cuts) {
+            const data = item.data || {};
+            const parentId = cutReferenceEntryId(
+                data.parent_sample?.reference
+            );
+            if (!parentId) continue;
+
+            // Even an incomplete cut must block a blind second attempt.
+            parentIds.add(parentId);
+
+            const childIds = (data.children_samples || [])
+                .map(child => cutReferenceEntryId(child.reference))
+                .filter(Boolean);
+
+            const record = {
+                name: data.name || 'Sample Cut',
+                datetime: data.datetime || '',
+                count: data.number_of_samples || childIds.length
+            };
+
+            recordProcessingCutHistory(parentId, {
+                ...record, role: 'parent'
+            });
+
+            childIds.forEach((childId, index) => {
+                recordProcessingCutHistory(childId, {
+                    ...record, role: 'child', childIndex: index + 1
+                });
+            });
+
+            for (const child of data.children_samples || []) {
+                const childId = cutReferenceEntryId(child.reference);
+                if (childId) childLinks.set(childId, {
+                    parentId,
+                    uploadId: item.upload_id
+                });
+            }
+        }
+    } catch (error) {
+        window.processingCutHistoryError = error.message;
+        console.error('Cannot load complete Sample Cut history:', error);
+        // The Execute action itself independently fails closed.
+    }
+
+    processingCutParentIds.clear();
+    for (const parentId of parentIds) {
+        processingCutParentIds.add(parentId);
+    }
+
+    const byId = new Map(accepted.map(item => [item.entryId, item]));
+    const missingChildren = [];
+
+    for (const [childId, link] of childLinks) {
+        if (byId.has(childId)) {
+            byId.get(childId).processed = true;
+        } else {
+            missingChildren.push({childId, ...link});
+        }
+    }
+
+    let childPosition = 0;
+    let childErrors = 0;
+
+    async function loadChildWorker() {
+        while (true) {
+            const index = childPosition++;
+            if (index >= missingChildren.length) return;
+
+            const {childId, parentId, uploadId} = missingChildren[index];
+
+            try {
+                const data = await cutReadArchive(childId);
+
+                if (!data.lab_id || !data.geometry ||
+                    cutReferenceEntryId(
+                        data.parent_sample?.reference
+                    ) !== parentId) {
+                    throw new Error('Child archive/parent reference mismatch');
+                }
+
+                const fields = originalSubstrateFields(data);
+
+                accepted.push({
+                    entryId: childId,
+                    uploadId: uploadId,
+                    labId: data.lab_id,
+                    material: fields.material,
+                    formula: fields.formula,
+                    crystalId: fields.crystalId,
+                    chargeId: fields.chargeId,
+                    orientation: fields.orientation,
+                    geometry: data.geometry,
+                    processed: true,
+                    selected: false
+                });
+            } catch (error) {
+                childErrors++;
+                console.warn(
+                    'Could not load cut child:', childId, error
+                );
+            }
+        }
+    }
+
+    await Promise.all(Array.from(
+        {length: Math.min(8, missingChildren.length)},
+        () => loadChildWorker()
+    ));
+
+    for (const item of accepted) {
+        if (parentIds.has(item.entryId)) {
+            item.processed = true;
+            item.selected = false;
+        }
+    }
+
+    window.processingCutChildLoadErrors = childErrors;
+
+    return accepted.sort((a, b) =>
+        String(a.labId).localeCompare(String(b.labId), undefined, {
+            numeric: true, sensitivity: 'base'
+        })
+    );
 }
 
 // Adapt *existing* legacy library-template geometry for display/validation only.
@@ -340,85 +586,45 @@ async function loadRecipes() {
 async function loadUploads() {
     const select = document.getElementById('targetUpload');
     const status = document.getElementById('uploadStatus');
-    const params = new URLSearchParams();
 
-    params.append('is_published', 'false');
-    params.append('is_processing', 'false');
-    params.append('page_size', '100');
+    select.replaceChildren(new Option('Loading uploads...', ''));
 
     try {
-        const [userResponse, uploadsResponse] = await Promise.all([
-            fetch(nomadApiBase() + '/users/me'),
-            fetch(
-                nomadApiBase() +
-                '/uploads?' +
-                params.toString()
-            )
-        ]);
+        const params = new URLSearchParams();
+        params.append('roles', 'main_author');
+        params.append('roles', 'coauthor');
+        params.append('page_size', '100');
 
-        if (!userResponse.ok) {
-            throw new Error(
-                'User request failed: ' +
-                userResponse.status
-            );
-        }
-
-        if (!uploadsResponse.ok) {
-            throw new Error(
-                'Upload request failed: ' +
-                uploadsResponse.status
-            );
-        }
-
-        const user = await userResponse.json();
-        const result = await uploadsResponse.json();
-        const userId = user.user_id;
-
-        if (!userId) {
-            throw new Error(
-                'Authenticated NOMAD user has no user_id.'
-            );
-        }
-
-        const uploads = (result.data || []).filter(
-            function(upload) {
-                const writers = Array.isArray(upload.writers)
-                    ? upload.writers
-                    : [];
-
-                return (
-                    upload.main_author === userId ||
-                    writers.includes(userId)
-                );
-            }
+        const response = await fetch(
+            nomadApiBase() + '/uploads?' + params.toString()
         );
 
-        select.innerHTML =
-            '<option value="">Select target upload...</option>';
+        if (!response.ok)
+            throw new Error('Upload request failed: HTTP ' + response.status);
+
+        const result = await response.json();
+        const uploads = (result.data || []).filter(upload =>
+            !upload.published && !upload.is_processing
+        );
+
+        select.replaceChildren(new Option('Select target upload...', ''));
 
         uploads.forEach(function(upload) {
-            const option =
-                document.createElement('option');
-
-            option.value = upload.upload_id;
-            option.textContent =
+            select.add(new Option(
                 (upload.upload_name || 'Unnamed upload') +
-                ' ? ' +
-                upload.upload_id;
-
-            select.appendChild(option);
+                ' — ' + upload.upload_id,
+                upload.upload_id
+            ));
         });
 
         status.textContent =
-            uploads.length +
-            ' directly writable unpublished upload(s).';
+            uploads.length + ' writable unpublished upload(s) available.';
+        status.style.color = '';
 
     } catch (error) {
-        select.innerHTML =
-            '<option value="">Could not load uploads</option>';
-
-        status.textContent =
-            'Error: ' + error.message;
+        select.replaceChildren(new Option('Could not load uploads', ''));
+        status.textContent = 'Error: ' + error.message;
+        status.style.color = '#c62828';
     }
 }
 
@@ -463,12 +669,22 @@ function renderSubstrates() {
 
     visible.forEach(function(substrate) {
         const history = treatmentHistoryForSubstrate(substrate);
+        const cutHistory =
+            processingCutHistoryByEntry.get(substrate.entryId) || [];
+        const historyCount = history.length + cutHistory.length;
         const row = document.createElement('div');
         row.className = 'result-grid result-row';
 
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.checked = substrate.selected;
+        checkbox.disabled = processingCutUnavailable(substrate);
+        if (checkbox.disabled) {
+            checkbox.checked = false;
+            substrate.selected = false;
+            checkbox.title =
+                'Already cut: parent retained for process history.';
+        }
         checkbox.addEventListener('change', function() {
             substrate.selected = checkbox.checked;
             updateSaveSummary();
@@ -476,13 +692,16 @@ function renderSubstrates() {
         row.appendChild(checkbox);
 
         [
-            substrate.labId,
+            processingCutShortId(substrate),
             substrate.material || '-',
             substrate.crystalId || substrate.chargeId || '-',
             substrate.orientation || '-'
-        ].forEach(function(value) {
+        ].forEach(function(value, index) {
             const cell = document.createElement('div');
             cell.textContent = value;
+            cell.title = index === 0
+                ? String(substrate.labId || '')
+                : String(value);
             row.appendChild(cell);
         });
 
@@ -492,11 +711,11 @@ function renderSubstrates() {
         statusText.textContent = substrateStatus(substrate) || '-';
         statusCell.appendChild(statusText);
 
-        if (history.length) {
+        if (historyCount) {
             const historyButton = document.createElement('button');
             historyButton.type = 'button';
             historyButton.className = 'history-toggle';
-            historyButton.textContent = history.length + ' process' + (history.length === 1 ? '' : 'es') + (substrate.historyOpen ? ' ▴' : ' ▾');
+            historyButton.textContent = historyCount + ' process' + (historyCount === 1 ? '' : 'es') + (substrate.historyOpen ? ' ▴' : ' ▾');
             historyButton.addEventListener('click', function() {
                 substrate.historyOpen = !substrate.historyOpen;
                 renderSubstrates();
@@ -506,10 +725,35 @@ function renderSubstrates() {
         row.appendChild(statusCell);
         container.appendChild(row);
 
-        if (substrate.historyOpen && history.length) {
+        if (substrate.historyOpen && historyCount) {
             const historyRow = document.createElement('div');
             historyRow.className = 'history-row';
-            renderHistoryDetails(historyRow, substrate, history);
+            if (history.length) {
+                renderHistoryDetails(historyRow, substrate, history);
+            }
+
+            for (const cut of cutHistory) {
+                const detail = document.createElement('div');
+                detail.className = 'cut-history-record';
+
+                const role = cut.role === 'parent'
+                    ? 'Parent → ' + cut.count + ' children'
+                    : 'Child ' + cut.childIndex + '/' + cut.count;
+
+                const date = cut.datetime
+                    ? new Date(cut.datetime).toLocaleString('de-DE')
+                    : '';
+
+                detail.textContent = [
+                    'Sample Cut',
+                    role,
+                    date
+                ].filter(Boolean).join(' · ');
+
+                detail.title = cut.name;
+                historyRow.appendChild(detail);
+            }
+
             container.appendChild(historyRow);
         }
     });
@@ -560,6 +804,34 @@ function localDateTimeValue() {
     return local.toISOString().slice(0, 19);
 }
 
+function processDateTimeValue(card) {
+    const date = card.querySelector('.process-date').value;
+    const hour = card.querySelector('.process-hour').value;
+    const minute = card.querySelector('.process-minute').value;
+
+    if (!date || !hour || !minute) return '';
+
+    const value = new Date(date + 'T' + hour + ':' + minute + ':00');
+    if (!Number.isFinite(value.getTime())) {
+        throw new Error('Invalid process start date/time.');
+    }
+
+    const pad = n => String(n).padStart(2, '0');
+    const actualDate = [
+        value.getFullYear(),
+        pad(value.getMonth() + 1),
+        pad(value.getDate())
+    ].join('-');
+
+    if (actualDate !== date ||
+        pad(value.getHours()) !== hour ||
+        pad(value.getMinutes()) !== minute) {
+        throw new Error('Invalid or nonexistent local process start time.');
+    }
+
+    return date + 'T' + hour + ':' + minute + ':00';
+}
+
 function addProcess() {
     processCounter += 1;
     const card = document.createElement('div');
@@ -573,7 +845,34 @@ function addProcess() {
         <div class="process-body">
             <div class="process-fields">
                 <div><label>Process type</label><select class="process-type">${options}</select></div>
-                <div><label>Date / Time</label><input class="process-datetime" type="datetime-local" step="1" value="${localDateTimeValue()}"></div>
+                <div>
+                    <label>Process start date *</label>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <input class="process-date" type="date" required
+                            aria-label="Process start date">
+                        <button class="process-open-calendar" type="button">Calendar</button>
+                    </div>
+                </div>
+                <div>
+                    <label>Process start time *</label>
+                    <div style="display:flex;gap:8px;align-items:center;">
+                        <select class="process-hour" required aria-label="Hour">
+                            <option value="">Hour</option>
+                            ${Array.from({length:24}, (_, i) => {
+                                const v = String(i).padStart(2, '0');
+                                return '<option value="' + v + '">' + v + '</option>';
+                            }).join('')}
+                        </select>
+                        <span>:</span>
+                        <select class="process-minute" required aria-label="Minute">
+                            <option value="">Minute</option>
+                            ${Array.from({length:60}, (_, i) => {
+                                const v = String(i).padStart(2, '0');
+                                return '<option value="' + v + '">' + v + '</option>';
+                            }).join('')}
+                        </select>
+                    </div>
+                </div>
             </div>
             <label class="recipe-label">Recipe</label><select class="recipe-select"></select>
             <label>Comments</label><textarea class="process-comments" placeholder="Optional"></textarea>
@@ -591,6 +890,34 @@ function addProcess() {
         updateRecipeSelect(card);
         updateSaveSummary();
     });
+    const dateInput = card.querySelector('.process-date');
+    dateInput.addEventListener('keydown', function(event) {
+        if (event.key.length === 1 ||
+            ['Backspace', 'Delete'].includes(event.key)) {
+            event.preventDefault();
+        }
+    });
+    dateInput.addEventListener('paste', event => event.preventDefault());
+    dateInput.addEventListener('drop', event => event.preventDefault());
+
+    card.querySelector('.process-open-calendar').addEventListener(
+        'click', function() {
+            try {
+                if (typeof dateInput.showPicker === 'function') {
+                    dateInput.showPicker();
+                } else {
+                    dateInput.focus();
+                }
+            } catch (_) {
+                dateInput.focus();
+            }
+        }
+    );
+
+    card.querySelectorAll(
+        '.process-date, .process-hour, .process-minute'
+    ).forEach(input => input.addEventListener('change', updateSaveSummary));
+
     card.querySelector('.recipe-select').addEventListener('change', updateSaveSummary);
     card.querySelector('.collapse-button').addEventListener('click', function() { card.classList.remove('open'); });
     card.querySelector('.remove-button').addEventListener('click', function() { card.remove(); renumberProcesses(); });
@@ -611,7 +938,7 @@ function processDefinitions() {
         return {
             type: type,
             recipe: recipe,
-            datetime: card.querySelector('.process-datetime').value,
+            datetime: processDateTimeValue(card),
             comments: card.querySelector('.process-comments').value.trim()
         };
     });
@@ -731,6 +1058,48 @@ async function uploadArchive(uploadId, filename, data) {
     return result;
 }
 
+function resetProcessingAfterSuccess(entryIds) {
+    const completed = new Set(entryIds);
+
+    substrates.forEach(function(substrate) {
+        if (completed.has(substrate.entryId)) {
+            substrate.selected = false;
+            substrate.historyOpen = false;
+        }
+    });
+
+    const list = document.getElementById('processList');
+    const bar = document.getElementById('processChoiceBar');
+    const panel = document.getElementById('sampleCutPanel');
+
+    list.replaceChildren();
+    processCounter = 0;
+
+    panel.style.display = 'none';
+
+    // Restore the initial process-choice position.
+    list.before(bar);
+    bar.style.display = 'flex';
+
+    const cutFields = [
+        'cutDate', 'cutHour', 'cutMinute',
+        'cutCount', 'cutWidth', 'cutLength',
+        'cutRadius', 'cutAngle', 'cutHeight',
+        'cutNotes', 'cutOtherLocation'
+    ];
+
+    cutFields.forEach(function(id) {
+        const input = document.getElementById(id);
+        if (input) input.value = '';
+    });
+
+    processingCutSyncSelection();
+    renderSubstrates();
+    updateSaveSummary();
+
+    // Intentionally preserve targetUpload and success messages.
+}
+
 async function saveProcesses() {
     const button = document.getElementById('saveProcessesButton');
     const status = document.getElementById('processStatus');
@@ -797,6 +1166,12 @@ async function saveProcesses() {
                 });
             }
         }
+        if (indexed) {
+            resetProcessingAfterSuccess(
+                selected.map(function(item) { return item.entryId; })
+            );
+        }
+
         status.textContent = indexed
             ? saved + ' process entries saved and visible in NOMAD.'
             : saved + ' process entries saved but not yet all visible in NOMAD. Do not re-upload blindly.' +
@@ -984,7 +1359,8 @@ function refreshProcessingData(options) {
         );
 
         freshSubstrates.forEach(function(item) {
-            item.selected = selectedEntryIds.has(item.entryId);
+            item.selected = selectedEntryIds.has(item.entryId) &&
+                !processingCutUnavailable(item);
             item.historyOpen = openHistoryIds.has(item.entryId);
         });
 
@@ -1080,23 +1456,51 @@ async function initialise() {
     try {
         document.getElementById('substrateStatus').textContent = 'Loading substrates...';
 
+        // Load uploads independently, even if a catalog request fails.
+        await loadUploads();
         recipeSchemas = await loadProcessTypes();
 
-        [substrates, recipes, treatmentHistoryState] = await Promise.all([
+        const catalogResults = await Promise.allSettled([
             loadSubstrates(),
             loadRecipes(),
             loadTreatmentHistoryEntries()
         ]);
 
-        await loadUploads();
+        const catalogNames = ['Substrates', 'Recipes', 'Process history'];
+        const catalogErrors = [];
+
+        catalogResults.forEach(function(result, index) {
+            if (result.status === 'rejected') {
+                catalogErrors.push(
+                    catalogNames[index] + ': ' +
+                    (result.reason?.message || String(result.reason))
+                );
+            }
+        });
+
+        substrates = catalogResults[0].status === 'fulfilled'
+            ? catalogResults[0].value : [];
+        recipes = catalogResults[1].status === 'fulfilled'
+            ? catalogResults[1].value : [];
+        treatmentHistoryState = catalogResults[2].status === 'fulfilled'
+            ? catalogResults[2].value : [];
+
+        window.processingCatalogErrors = catalogErrors;
         populateFilter('materialFilter', substrates.map(function(s) { return s.material; }));
         populateFilter('batchFilter', substrates.flatMap(function(s) { return [s.crystalId, s.chargeId]; }));
         populateFilter('orientationFilter', substrates.map(function(s) { return s.orientation; }));
         applyIncomingSelection();
         renderSubstrates();
-        addProcess();
+        // A process is added only after selecting its type.
         document.getElementById('saveProcessesButton').disabled = false;
         updateSaveSummary();
+
+        if (catalogErrors.length) {
+            const status = document.getElementById('processStatus');
+            status.textContent = 'Loading errors: ' + catalogErrors.join(' | ');
+            status.style.color = '#c62828';
+            document.getElementById('saveProcessesButton').disabled = true;
+        }
 
         const pageParams =
             new URLSearchParams(window.location.search);
@@ -1115,15 +1519,22 @@ async function initialise() {
         }
     } catch (error) {
         console.error(error);
-        document.getElementById('substrateStatus').textContent = 'Failed to load NOMAD data.';
-        document.getElementById('processStatus').textContent = String(error);
+        document.getElementById('substrateStatus').textContent =
+            'Failed to initialize Processing: ' + error.message;
+        document.getElementById('processStatus').textContent =
+            'Error: ' + error.message;
+        document.getElementById('processStatus').style.color = '#c62828';
     }
 }
 
 ['substrateSearch'].forEach(function(id) { document.getElementById(id).addEventListener('input', renderSubstrates); });
 ['materialFilter', 'batchFilter', 'orientationFilter', 'statusFilter'].forEach(function(id) { document.getElementById(id).addEventListener('change', renderSubstrates); });
 document.getElementById('selectAllButton').addEventListener('click', function() {
-    filteredSubstrates().forEach(function(substrate) { substrate.selected = true; });
+    filteredSubstrates().forEach(function(substrate) {
+        if (!processingCutUnavailable(substrate)) {
+            substrate.selected = true;
+        }
+    });
     renderSubstrates(); updateSaveSummary();
 });
 document.getElementById('clearSelectionButton').addEventListener('click', function() {
@@ -1134,3 +1545,947 @@ document.getElementById('addProcessButton').addEventListener('click', addProcess
 document.getElementById('saveProcessesButton').addEventListener('click', saveProcesses);
 
 initialise();
+
+
+// PDI_PROCESS_SAMPLE_CUT_V1
+let processingCutParent = null;
+
+function processingCutElement(id) {
+    return document.getElementById(id);
+}
+
+function processingCutShortId(sample) {
+    const full = String(sample.labId || '');
+    const charge = String(sample.chargeId || '')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^A-Za-z0-9._-]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^[-_.]+|[-_.]+$/g, '');
+
+    const segment = '_' + charge + '_';
+    const at = charge ? full.lastIndexOf(segment) : -1;
+
+    return at < 0
+        ? full
+        : full.slice(0, at) + '_' + full.slice(at + segment.length);
+}
+
+function processingCutPositive(id) {
+    const value = Number(processingCutElement(id).value);
+    if (!Number.isFinite(value) || value <= 0) {
+        throw new Error(id + ': enter a positive number.');
+    }
+    return value;
+}
+
+function processingCutValidate(parentOverride) {
+    const parent = parentOverride || processingCutParent;
+    if (!parent || !parent.entryId || !parent.uploadId) {
+        throw new Error('Select one valid parent substrate.');
+    }
+
+    const count = Number(processingCutElement('cutCount').value);
+    if (!Number.isSafeInteger(count) || count < 1 || count > 100) {
+        throw new Error('Child count must be an integer between 1 and 100.');
+    }
+
+    const date = processingCutElement('cutDate').value;
+    const hour = processingCutElement('cutHour').value;
+    const minute = processingCutElement('cutMinute').value;
+
+    if (!date || !hour || !minute) {
+        throw new Error('Enter the cut date, hour and minute.');
+    }
+
+    const timestamp = new Date(date + 'T' + hour + ':' + minute + ':00');
+    if (!Number.isFinite(timestamp.getTime())) {
+        throw new Error('Invalid process date or time.');
+    }
+
+    const g = parent.geometry || {};
+    const w = Number(g.width) * 1000;
+    const l = Number(g.length ?? g.width) * 1000;
+    const r = Number(g.radius) * 1000;
+    const h = Number(g.height) * 1000;
+
+    let parentArea;
+    if (w > 0 && l > 0) {
+        parentArea = w * l;
+    } else if (r > 0) {
+        const angle = g.central_angle == null ? 360 : Number(g.central_angle);
+        if (!(angle > 0 && angle <= 360)) {
+            throw new Error('Invalid parent sector angle.');
+        }
+        parentArea = Math.PI * r * r * angle / 360;
+    } else {
+        throw new Error('Parent geometry is missing or unsupported.');
+    }
+
+    const height = processingCutPositive('cutHeight');
+
+    if (h > 0 && height > h + 1e-8) {
+        throw new Error('Child thickness exceeds parent thickness.');
+    }
+
+    const shape = processingCutElement('cutShape').value;
+    let area;
+    let geometry;
+
+    if (shape === 'rectangle') {
+        const cw = processingCutPositive('cutWidth');
+        const cl = processingCutPositive('cutLength');
+
+        area = cw * cl;
+        geometry = Math.abs(cw - cl) < 1e-8
+            ? {
+                m_def: 'nomad_material_processing.general.SquareCuboid',
+                width: cw / 1000,
+                height: height / 1000
+            }
+            : {
+                m_def: 'nomad_material_processing.general.RectangleCuboid',
+                width: cw / 1000,
+                length: cl / 1000,
+                height: height / 1000
+            };
+
+        if (w > 0 && l > 0) {
+            const grid = (a, b) =>
+                Math.floor((w + 1e-8) / a) *
+                Math.floor((l + 1e-8) / b);
+
+            if (Math.max(grid(cw, cl), grid(cl, cw)) < count) {
+                throw new Error('Children cannot fit in a rectangular grid.');
+            }
+        }
+    } else {
+        const cr = processingCutPositive('cutRadius');
+        const angle = shape === 'circle'
+            ? 360 : processingCutPositive('cutAngle');
+
+        if (angle > 360) throw new Error('Angle exceeds 360 degrees.');
+
+        area = Math.PI * cr * cr * angle / 360;
+        geometry = {
+            m_def: shape === 'circle'
+                ? 'nomad_material_processing.general.Cylinder'
+                : 'nomad_material_processing.general.CylinderSector',
+            radius: cr / 1000,
+            height: height / 1000
+        };
+
+        if (shape === 'sector') geometry.central_angle = angle;
+
+        if (r > 0 && cr > r + 1e-8) {
+            throw new Error('Child radius exceeds parent radius.');
+        }
+    }
+
+    if (count * area > parentArea * (1 + 1e-8)) {
+        throw new Error(
+            'Total child area exceeds parent area: ' +
+            (count * area).toFixed(2) + ' > ' +
+            parentArea.toFixed(2) + ' mm².'
+        );
+    }
+
+    const locationChoice = processingCutElement('cutLocation').value;
+    const location = locationChoice === 'Elsewhere'
+        ? processingCutElement('cutOtherLocation').value.trim()
+        : locationChoice;
+
+    if (locationChoice === 'Elsewhere' && !location) {
+        throw new Error('Specify the Elsewhere location.');
+    }
+
+    return {
+        parent: parent,
+        count: count,
+        geometry: geometry,
+        datetime: timestamp.toISOString(),
+        location: location,
+        name: processingCutElement('cutProcessName').value.trim(),
+        description: processingCutElement('cutNotes').value.trim()
+    };
+}
+
+function processingCutFeedback(message, error) {
+    const status = processingCutElement('cutValidationStatus');
+    status.textContent = message;
+    status.style.color = error ? '#c62828' : '#173b22';
+    status.style.fontWeight = error ? '600' : 'normal';
+}
+
+function processingCutSyncSelection() {
+    const parents = substrates.filter(x => x.selected);
+    const info = processingCutElement('cutParentInfo');
+    const name = processingCutElement('cutProcessName');
+
+    processingCutParent = parents.length === 1 ? parents[0] : null;
+
+    if (!parents.length) {
+        info.textContent = 'No parent substrate selected.';
+        name.value = '';
+        return;
+    }
+
+    if (parents.length === 1) {
+        name.value = 'cut_' + processingCutShortId(parents[0]);
+    } else {
+        name.value = parents.length + ' individual Sample Cut processes';
+    }
+
+    info.textContent =
+        parents.length + ' parent substrate(s) selected: ' +
+        parents.map(processingCutShortId).join(', ');
+
+    const heights = parents.map(x => Number(x.geometry?.height) * 1000);
+    const sameHeight = heights.every(x =>
+        Number.isFinite(x) && x > 0 &&
+        Math.abs(x - heights[0]) < 1e-8
+    );
+
+    processingCutElement('cutHeight').value =
+        sameHeight ? String(heights[0]) : '';
+
+    processingCutFeedback(
+        parents.length + ' parent substrate(s) ready for validation.',
+        false
+    );
+}
+
+function processingCutInitialize() {
+    const panel = processingCutElement('sampleCutPanel');
+    const open = processingCutElement('addSampleCutButton');
+
+    open.addEventListener('click', function() {
+        panel.style.display = panel.style.display === 'none' ? '' : 'none';
+    });
+
+    for (let i = 0; i < 24; i++) {
+        const n = String(i).padStart(2, '0');
+        processingCutElement('cutHour').add(new Option(n, n));
+    }
+    for (let i = 0; i < 60; i++) {
+        const n = String(i).padStart(2, '0');
+        processingCutElement('cutMinute').add(new Option(n, n));
+    }
+
+    processingCutElement('cutShape').addEventListener('change', function() {
+        const shape = this.value;
+        document.querySelectorAll('.cutRect').forEach(x =>
+            x.style.display = shape === 'rectangle' ? '' : 'none');
+        document.querySelectorAll('.cutRound').forEach(x =>
+            x.style.display = shape === 'rectangle' ? 'none' : '');
+        document.querySelectorAll('.cutSector').forEach(x =>
+            x.style.display = shape === 'sector' ? '' : 'none');
+    });
+
+    processingCutElement('cutLocation').addEventListener('change', function() {
+        processingCutElement('cutOtherLocation').style.display =
+            this.value === 'Elsewhere' ? '' : 'none';
+    });
+
+    // The left-hand substrate selection is the Sample Cut parent selection.
+
+
+    const sync = () => queueMicrotask(processingCutSyncSelection);
+
+    document.getElementById('substrateResults')
+        .addEventListener('change', sync);
+
+    ['selectAllButton', 'clearSelectionButton'].forEach(id => {
+        document.getElementById(id).addEventListener('click', sync);
+    });
+
+    processingCutSyncSelection();
+
+    processingCutElement('cutValidateButton').addEventListener(
+        'click', function() {
+            try {
+                const parents = substrates.filter(x => x.selected);
+                if (!parents.length) {
+                    throw new Error('Select at least one parent substrate.');
+                }
+
+                for (const parent of parents) {
+                    const cut = processingCutValidate(parent);
+                    cutCheckPacking(cut);
+                }
+
+                const count = processingCutPositive('cutCount');
+                processingCutFeedback(
+                    'Geometry valid for ' + parents.length +
+                    ' parent substrate(s), ' +
+                    (parents.length * count) +
+                    ' children in total. No archive was written.',
+                    false
+                );
+            } catch (error) {
+                processingCutFeedback('Error: ' + error.message, true);
+            }
+        }
+    );
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener(
+        'DOMContentLoaded', processingCutInitialize, {once: true}
+    );
+} else {
+    processingCutInitialize();
+}
+
+
+// PDI_PROCESS_SAMPLE_CUT_SAVE_V1
+const CUT_SCHEMA = 'pdi_nomad_plugin.general.schema.SampleCutPDI';
+const SUBSTRATE_SCHEMA = 'pdi_nomad_plugin.mbe.materials.SubstrateMbe';
+
+async function cutReadArchive(entryId) {
+    const response = await fetch(
+        nomadApiBase() + '/entries/' +
+        encodeURIComponent(entryId) + '/archive'
+    );
+    if (!response.ok) {
+        throw new Error('Cannot read NOMAD archive: HTTP ' + response.status);
+    }
+    const result = await response.json();
+    const wrapper = result.data || result.archive || result;
+    const archive = wrapper.archive || wrapper;
+    return archive.data || archive;
+}
+
+async function cutExistingEntries() {
+    const indexed = [];
+    const seen = new Set();
+    let cursor = null;
+    let complete = false;
+
+    for (let page = 0; page < 50; page++) {
+        const pagination = {page_size: 200};
+        if (cursor) pagination.page_after_value = cursor;
+
+        const response = await fetch(nomadApiBase() + '/entries/query', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                owner: 'visible',
+                query: {
+                    'section_defs.definition_qualified_name': CUT_SCHEMA
+                },
+                pagination,
+                required: {
+                    include: ['entry_id', 'upload_id', 'entry_name']
+                }
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(
+                'Sample Cut index query failed: HTTP ' + response.status
+            );
+        }
+
+        const result = await response.json();
+
+        for (const entry of result.data || []) {
+            if (entry.entry_id && entry.upload_id &&
+                !seen.has(entry.entry_id)) {
+                seen.add(entry.entry_id);
+                indexed.push(entry);
+            }
+        }
+
+        const next = result.pagination?.next_page_after_value;
+        if (!next) {
+            complete = true;
+            break;
+        }
+        if (next === cursor) {
+            throw new Error('Sample Cut pagination did not advance.');
+        }
+        cursor = next;
+    }
+
+    if (!complete) {
+        throw new Error('Sample Cut index pagination incomplete.');
+    }
+
+    const found = [];
+    let position = 0;
+
+    async function worker() {
+        while (true) {
+            const index = position++;
+            if (index >= indexed.length) return;
+
+            const entry = indexed[index];
+            let data;
+
+            try {
+                data = await cutReadArchive(entry.entry_id);
+            } catch (error) {
+                // Fail closed: never ignore a potentially existing cut.
+                throw new Error(
+                    'Cannot verify existing Sample Cut ' +
+                    entry.entry_id + ': ' + error.message
+                );
+            }
+
+            if (data.m_def === CUT_SCHEMA) {
+                found.push({
+                    entry_id: entry.entry_id,
+                    upload_id: entry.upload_id,
+                    data: data
+                });
+            }
+        }
+    }
+
+    await Promise.all(
+        Array.from(
+            {length: Math.min(8, indexed.length)},
+            () => worker()
+        )
+    );
+
+    return found;
+}
+
+function cutReferenceEntryId(reference) {
+    return (String(reference || '').split('/archive/')[1] || '')
+        .split('#')[0].split('?')[0].split('/')[0];
+}
+
+function cutCheckPacking(cut) {
+    const pg = cut.parent.geometry || {};
+    const cg = cut.geometry;
+    const count = cut.count;
+
+    const pw = Number(pg.width) * 1000;
+    const pl = Number(pg.length ?? pg.width) * 1000;
+    const pr = Number(pg.radius) * 1000;
+    const parentAngle = pg.central_angle == null
+        ? 360 : Number(pg.central_angle);
+
+    const cw = Number(cg.width) * 1000;
+    const cl = Number(cg.length ?? cg.width) * 1000;
+    const cr = Number(cg.radius) * 1000;
+    const childAngle = cg.central_angle == null
+        ? 360 : Number(cg.central_angle);
+
+    const rectangularParent = pw > 0 && pl > 0;
+    const rectangularChild = cw > 0 && cl > 0;
+
+    if (rectangularParent && rectangularChild) {
+        const capacity = (w, l) =>
+            Math.floor((pw + 1e-8) / w) *
+            Math.floor((pl + 1e-8) / l);
+        if (Math.max(capacity(cw, cl), capacity(cl, cw)) >= count)
+            return;
+    } else if (rectangularParent && cr > 0) {
+        const diameter = 2 * cr;
+        if (Math.floor((pw + 1e-8) / diameter) *
+            Math.floor((pl + 1e-8) / diameter) >= count)
+            return;
+    } else if (pr > 0 && !rectangularChild && cr > 0) {
+        if (cg.m_def.endsWith('.CylinderSector') &&
+            cr <= pr + 1e-8 &&
+            count * childAngle <= parentAngle + 1e-8)
+            return;
+
+        if (count === 1 &&
+            parentAngle === 360 &&
+            cr <= pr + 1e-8)
+            return;
+    } else if (pr > 0 && rectangularChild &&
+               parentAngle === 360 && count === 1) {
+        if (Math.hypot(cw, cl) <= 2 * pr + 1e-8)
+            return;
+    }
+
+    throw new Error(
+        'The child geometry cannot be verified to fit within the parent. ' +
+        'No archive was written.'
+    );
+}
+
+async function cutUpload(uploadId, filename, data) {
+    const params = new URLSearchParams({
+        file_name: filename,
+        overwrite_if_exists: 'false',
+        trigger_processing: 'true',
+        wait_for_processing: 'true',
+        include_archive: 'true'
+    });
+
+    const response = await fetch(
+        nomadApiBase() + '/uploads/' +
+        encodeURIComponent(uploadId) + '/raw/?' + params,
+        {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({data}, null, 2)
+        }
+    );
+
+    if (!response.ok) {
+        throw new Error('NOMAD upload failed: HTTP ' + response.status);
+    }
+
+    const result = await response.json();
+    const errors = result?.processing?.entry?.errors || [];
+
+    if (errors.length) {
+        throw new Error('NOMAD processing: ' + errors.join('; '));
+    }
+
+    return result;
+}
+
+async function cutVerifyChildren(uploadId, entryId, original) {
+    const processed = await cutReadArchive(entryId);
+
+    if (processed.m_def !== CUT_SCHEMA ||
+        processed.lab_id !== original.lab_id ||
+        processed.number_of_samples !== original.number_of_samples ||
+        processed.trigger_cut_sample === true) {
+        throw new Error('Sample Cut archive is inconsistent.');
+    }
+
+    const children = processed.children_samples || [];
+    if (children.length !== original.number_of_samples) {
+        throw new Error(
+            'Found ' + children.length + ' of ' +
+            original.number_of_samples + ' child references.'
+        );
+    }
+
+    const fullParentId = original._parentLabId;
+    const parentEntryId = cutReferenceEntryId(
+        original.parent_sample.reference
+    );
+    const expectedIds = new Set(
+        Array.from(
+            {length: original.number_of_samples},
+            (_, i) => fullParentId + '.' + (i + 1)
+        )
+    );
+    const seen = new Set();
+
+    for (const child of children) {
+        const ref = String(child.reference || '');
+        const childEntryId = cutReferenceEntryId(ref);
+
+        if (!childEntryId ||
+            seen.has(childEntryId) ||
+            !ref.includes('/uploads/' + uploadId + '/archive/')) {
+            throw new Error('Invalid or duplicate child reference.');
+        }
+
+        seen.add(childEntryId);
+        const data = await cutReadArchive(childEntryId);
+
+        if (!expectedIds.delete(data.lab_id) ||
+            data.name !== data.lab_id) {
+            throw new Error('Unexpected child substrate ID: ' + data.lab_id);
+        }
+
+        if (!String(data.parent_sample?.reference || '')
+            .includes('/archive/' + parentEntryId)) {
+            throw new Error(
+                'Missing parent reference for ' + data.lab_id
+            );
+        }
+
+        if (data.geometry?.m_def !== original.children_geometry.m_def) {
+            throw new Error('Child geometry type mismatch.');
+        }
+
+        for (const key of [
+            'width', 'length', 'height', 'radius', 'central_angle'
+        ]) {
+            const expected = original.children_geometry[key];
+            if (expected === undefined) continue;
+
+            const actual = Number(data.geometry[key]);
+            if (!Number.isFinite(actual) ||
+                Math.abs(actual - expected) > 1e-8) {
+                throw new Error(
+                    'Child geometry mismatch for ' +
+                    data.lab_id + ': ' + key
+                );
+            }
+        }
+    }
+
+    if (expectedIds.size) {
+        throw new Error('Not all expected child IDs were found.');
+    }
+
+    for (const child of children) {
+        processingVerifiedCutChildren.set(
+            cutReferenceEntryId(child.reference),
+            {
+                parentId: parentEntryId,
+                uploadId: uploadId
+            }
+        );
+    }
+
+    return children.length;
+}
+
+function cutSuccessBanner(count) {
+    document.getElementById('processingCutSuccess')?.remove();
+
+    const banner = document.createElement('div');
+    banner.id = 'processingCutSuccess';
+    banner.setAttribute('role', 'status');
+    banner.textContent =
+        '✓ Sample Cut successful — ' +
+        count + ' child samples created and verified.';
+
+    Object.assign(banner.style, {
+        position: 'sticky',
+        top: '0',
+        zIndex: '1000',
+        padding: '12px 16px',
+        margin: '0 0 12px',
+        background: '#eaf6eb',
+        color: '#173b22',
+        border: '1px solid #6da778',
+        borderRadius: '8px'
+    });
+
+    document.body.insertBefore(banner, document.body.firstChild);
+
+    document.addEventListener('click', () => banner.remove(), {
+        capture: true,
+        once: true
+    });
+}
+
+// Prevent repeated uploads of parents already attempted in this session.
+const processingCutAttemptedParents = new Set();
+
+async function processingCutSave() {
+    const button = processingCutElement('cutSaveButton');
+    const uploadId = processingCutElement('targetUpload').value;
+    const selected = substrates.filter(x => x.selected);
+    let attempted = 0;
+    let completed = 0;
+    let totalChildren = 0;
+
+    button.disabled = true;
+
+    try {
+        if (!uploadId) throw new Error('Select a target upload.');
+        if (!selected.length) {
+            throw new Error('Select at least one parent substrate.');
+        }
+
+        // Same timestamp and process parameters for every parent.
+        const stamp = new Date().toISOString().replace(/\D/g, '');
+        const existing = await cutExistingEntries();
+        const existingParentIds = new Set(
+            existing.map(item =>
+                cutReferenceEntryId(item.data?.parent_sample?.reference)
+            ).filter(Boolean)
+        );
+
+        const jobs = [];
+        const filenames = new Set();
+
+        // Validate ALL parents before creating the first archive.
+        for (const parent of selected) {
+            if (processingCutAttemptedParents.has(parent.entryId)) {
+                throw new Error(
+                    'A cut was already attempted for ' +
+                    parent.labId + ' in this session. ' +
+                    'Inspect NOMAD before attempting it again.'
+                );
+            }
+
+            if (existingParentIds.has(parent.entryId)) {
+                throw new Error(
+                    'A Sample Cut already exists for ' + parent.labId +
+                    '. Inspect NOMAD before cutting it again.'
+                );
+            }
+
+            const cut = processingCutValidate(parent);
+            cutCheckPacking(cut);
+
+            const parentData = await cutReadArchive(parent.entryId);
+
+            if (parentData.m_def !== SUBSTRATE_SCHEMA ||
+                !parentData.lab_id ||
+                parentData.lab_id !== parent.labId) {
+                throw new Error(
+                    'Invalid individual SubstrateMbe: ' + parent.labId
+                );
+            }
+
+            if (JSON.stringify(parentData.geometry || {}) !==
+                JSON.stringify(parent.geometry || {})) {
+                throw new Error(
+                    'Parent geometry changed for ' + parent.labId +
+                    '. Refresh the substrate list.'
+                );
+            }
+
+            const labId =
+                'CUT_' + safePart(parentData.lab_id) + '_' + stamp;
+
+            const data = {
+                m_def: CUT_SCHEMA,
+                name: selected.length === 1
+                    ? (cut.name || 'cut_' + processingCutShortId(parent))
+                    : 'cut_' + processingCutShortId(parent),
+                lab_id: labId,
+                datetime: cut.datetime,
+                number_of_samples: cut.count,
+                parent_sample: {
+                    reference: nomadArchiveReference(
+                        parent.uploadId, parent.entryId
+                    )
+                },
+                children_geometry: cut.geometry,
+                trigger_cut_sample: true
+            };
+
+            if (cut.location) data.location = cut.location;
+            if (cut.description) data.description = cut.description;
+
+            const filename = safePart(labId) + '.archive.json';
+
+            if (filenames.has(filename)) {
+                throw new Error(
+                    'Duplicate cut filename for parent ' + parent.labId
+                );
+            }
+
+            filenames.add(filename);
+            jobs.push({parent, parentData, data, filename, labId});
+        }
+
+        // Each SampleCutPDI invokes the ORIGINAL normalizer independently.
+        for (let i = 0; i < jobs.length; i++) {
+            const job = jobs[i];
+
+            processingCutFeedback(
+                'Cutting substrate ' + (i + 1) + '/' + jobs.length +
+                ': ' + job.parent.labId,
+                false
+            );
+
+            // Mark before upload: an uncertain response must not be retried.
+            processingCutAttemptedParents.add(job.parent.entryId);
+            attempted++;
+
+            const uploadResult = await cutUpload(
+                uploadId, job.filename, job.data
+            );
+
+            let entryId =
+                uploadResult?.processing?.entry?.entry_id || null;
+
+            let verified = null;
+            let lastError = null;
+
+            for (let attempt = 0; attempt < 8; attempt++) {
+                try {
+                    if (!entryId) {
+                        const entries = await cutExistingEntries();
+                        const found = entries.find(item =>
+                            item.upload_id === uploadId &&
+                            item.data?.lab_id === job.labId
+                        );
+                        entryId = found?.entry_id || null;
+                    }
+
+                    if (!entryId) {
+                        throw new Error('Cut archive not indexed yet.');
+                    }
+
+                    verified = await cutVerifyChildren(
+                        uploadId,
+                        entryId,
+                        {
+                            ...job.data,
+                            _parentLabId: job.parentData.lab_id
+                        }
+                    );
+                    break;
+                } catch (error) {
+                    lastError = error;
+                    if (attempt < 7) {
+                        await new Promise(resolve =>
+                            setTimeout(resolve, 1000)
+                        );
+                    }
+                }
+            }
+
+            if (verified === null) {
+                throw lastError || new Error(
+                    'Child verification failed for ' + job.parent.labId
+                );
+            }
+
+            completed++;
+            totalChildren += verified;
+        }
+
+        processingCutFeedback(
+            'Sample Cut successful — ' + completed +
+            ' parent substrates cut; ' + totalChildren +
+            ' child samples created and verified.',
+            false
+        );
+
+        cutSuccessBanner(totalChildren);
+        resetProcessingAfterSuccess(
+            jobs.map(function(job) { return job.parent.entryId; })
+        );
+
+        try {
+            await refreshProcessingData({catalogs: false});
+        } catch (refreshError) {
+            console.error('Post-cut refresh failed:', refreshError);
+            processingCutFeedback(
+                'All cuts verified successfully, but refreshing ' +
+                'the substrate list failed: ' + refreshError.message,
+                true
+            );
+        }
+
+    } catch (error) {
+        processingCutFeedback(
+            completed + ' of ' + selected.length +
+            ' cuts completed. ' +
+            (attempted > completed
+                ? 'A further upload was attempted; do not retry it blindly. '
+                : '') +
+            'Error: ' + error.message,
+            true
+        );
+    } finally {
+        // An attempted upload is never blindly repeated.
+        button.disabled = attempted > completed;
+    }
+}
+
+function processingCutEnableSave() {
+    const button = processingCutElement('cutSaveButton');
+    button.disabled = false;
+    button.addEventListener('click', processingCutSave);
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener(
+        'DOMContentLoaded', processingCutEnableSave, {once: true}
+    );
+} else {
+    processingCutEnableSave();
+}
+
+
+// PDI_PROCESS_CHOICE_BUTTONS_V1
+function initializeProcessChoiceButtons() {
+    const bar = document.getElementById('processChoiceBar');
+    const list = document.getElementById('processList');
+    const oldAdd = document.getElementById('addProcessButton');
+    const cutPanel = document.getElementById('sampleCutPanel');
+    const oldCut = document.getElementById('addSampleCutButton');
+
+    if (!bar || !list || !oldAdd || !cutPanel || !oldCut) {
+        throw new Error('Process selection controls are missing.');
+    }
+
+    // Remove the old "add Cleaning immediately" click handler.
+    const add = oldAdd.cloneNode(true);
+    add.textContent = '+ Add new step';
+    oldAdd.replaceWith(add);
+
+    // Keep the existing Sample Cut initialization and validation.
+    oldCut.style.display = 'none';
+
+    const saveAll = document.getElementById('saveProcessesButton');
+    const syncExecutionButtons = function() {
+        const cutActive = getComputedStyle(cutPanel).display !== 'none';
+        saveAll.style.display = cutActive ? 'none' : '';
+    };
+    new MutationObserver(syncExecutionButtons).observe(
+        cutPanel, {attributes: true, attributeFilter: ['style']}
+    );
+    syncExecutionButtons();
+
+
+    // Show Sample Cut above the "Add another process" button.
+    add.parentNode.insertBefore(cutPanel, add);
+
+    bar.querySelectorAll('[data-process-choice]').forEach(function(button) {
+        button.addEventListener('click', function() {
+            const type = button.dataset.processChoice;
+
+            if (type === 'sample_cut') {
+                if (cutPanel.style.display === 'none') {
+                    oldCut.click();
+                }
+                cutPanel.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'nearest'
+                });
+            } else if (type === 'cleaning' || type === 'annealing') {
+                addProcess();
+
+                const cards = list.querySelectorAll('.process-card');
+                const card = cards[cards.length - 1];
+                const select = card?.querySelector('.process-type');
+
+                if (!select) {
+                    throw new Error('New process card was not created.');
+                }
+
+                select.value = type;
+                select.dispatchEvent(new Event('change', {
+                    bubbles: true
+                }));
+
+                card.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'nearest'
+                });
+            } else {
+                throw new Error('Unsupported process type: ' + type);
+            }
+
+            bar.style.display = 'none';
+        });
+    });
+
+    add.addEventListener('click', function() {
+        add.insertAdjacentElement('afterend', bar);
+        bar.style.display = 'flex';
+        bar.scrollIntoView({
+            behavior: 'smooth',
+            block: 'nearest'
+        });
+    });
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener(
+        'DOMContentLoaded',
+        initializeProcessChoiceButtons,
+        {once: true}
+    );
+} else {
+    initializeProcessChoiceButtons();
+}

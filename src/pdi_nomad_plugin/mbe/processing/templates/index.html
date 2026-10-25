@@ -39,14 +39,108 @@
                 <button id="clearSelectionButton" type="button">Clear selection</button>
             </div>
             <div id="substrateStatus" class="status"></div>
-            <div class="result-grid result-header"><div></div><div>ID</div><div>Material</div><div>Batch</div><div>Orientation</div><div>Status</div></div>
+            <div class="substrate-table-scroll">
+                <div class="result-grid result-header"><div></div><div>ID</div><div>Material</div><div>Batch</div><div>Orientation</div><div>Status</div></div>
             <div id="substrateResults"></div>
+            </div>
         </section>
 
         <section class="panel">
             <h2>Processes</h2>
+            <div id="processChoiceBar"
+                 style="display:flex;gap:10px;flex-wrap:wrap;margin:14px 0">
+                <button type="button" class="add-process"
+                        data-process-choice="cleaning"
+                        style="flex:1 1 130px">Cleaning</button>
+                <button type="button" class="add-process"
+                        data-process-choice="annealing"
+                        style="flex:1 1 130px">Annealing</button>
+                <button type="button" class="add-process"
+                        data-process-choice="sample_cut"
+                        style="flex:1 1 130px">Sample Cut</button>
+            </div>
             <div id="processList" class="process-list"></div>
             <button id="addProcessButton" class="add-process" type="button">+ Add another process</button>
+            <button id="addSampleCutButton" class="add-process" type="button">
+                + Sample Cut
+            </button>
+
+            <div id="sampleCutPanel" class="panel" style="display:none;margin-top:16px;">
+                <h3>Sample Cut</h3>
+                <p>Cut all selected parent substrates sequentially using the same cutting parameters. A separate Sample Cut archive is created for each parent.</p>
+
+
+                <div id="cutParentInfo" class="status">No parent selected.</div>
+
+                <label for="cutProcessName">Process name (automatic)</label>
+                <input id="cutProcessName" type="text" readonly>
+
+                <div class="process-fields">
+                    <div>
+                        <label for="cutDate">Cut date *</label>
+                        <input id="cutDate" type="date">
+                    </div>
+                    <div>
+                        <label>Start time *</label>
+                        <select id="cutHour"><option value="">Hour</option></select>
+                        <select id="cutMinute"><option value="">Minute</option></select>
+                    </div>
+                    <div>
+                        <label for="cutCount">Number of child samples *</label>
+                        <input id="cutCount" type="number" min="1" step="1" value="4">
+                    </div>
+                    <div>
+                        <label for="cutShape">Child geometry</label>
+                        <select id="cutShape">
+                            <option value="rectangle">Rectangle / square</option>
+                            <option value="circle">Circle</option>
+                            <option value="sector">Circular sector</option>
+                        </select>
+                    </div>
+                    <div class="cutRect">
+                        <label for="cutWidth">Width (mm)</label>
+                        <input id="cutWidth" type="number" min="0" step="any" value="5">
+                    </div>
+                    <div class="cutRect">
+                        <label for="cutLength">Length (mm)</label>
+                        <input id="cutLength" type="number" min="0" step="any" value="5">
+                    </div>
+                    <div class="cutRound" style="display:none">
+                        <label for="cutRadius">Radius (mm)</label>
+                        <input id="cutRadius" type="number" min="0" step="any">
+                    </div>
+                    <div class="cutSector" style="display:none">
+                        <label for="cutAngle">Central angle (degrees)</label>
+                        <input id="cutAngle" type="number" min="0" max="360" step="any">
+                    </div>
+                    <div>
+                        <label for="cutHeight">Thickness (mm)</label>
+                        <input id="cutHeight" type="number" min="0" step="any">
+                    </div>
+                    <div>
+                        <label for="cutLocation">Location</label>
+                        <select id="cutLocation">
+                            <option value="">Select location...</option>
+                            <option value="Drawer">Drawer</option>
+                            <option value="Vac storage">Vac storage</option>
+                            <option value="Elsewhere">Elsewhere</option>
+                        </select>
+                        <input id="cutOtherLocation" type="text"
+                               placeholder="Specify location"
+                               style="display:none;margin-top:8px;">
+                    </div>
+                </div>
+
+                <label for="cutNotes">Description / cutting notes</label>
+                <textarea id="cutNotes"
+                    placeholder="Cutting details, purpose, SamplySIUM ID..."></textarea>
+                <p>Please include the SamplySIUM ID, if available.</p>
+
+                <div id="cutValidationStatus" class="status"></div>
+                <button id="cutValidateButton" type="button">Validate Sample Cut</button>
+                <button id="cutSaveButton" type="button" disabled>Execute Sample Cut</button>
+            </div>
+
 
             <div class="save-panel">
                 <label for="targetUpload">Target upload</label>

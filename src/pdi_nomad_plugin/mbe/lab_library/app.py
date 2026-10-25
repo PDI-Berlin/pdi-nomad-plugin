@@ -35,39 +35,31 @@ LIBRARY_TYPES = {
                     'nomad_material_processing.general.Annealing',
                 ],
             },
-            'etching': {
-                'label': 'Etching',
-                'schema': 'nomad_material_processing.general.EtchingRecipe',
-                'id_prefix': 'ETCH',
-                'write_supported': True,
-                'usage_schemas': [
-                    'nomad_material_processing.general.Etching',
-                ],
-            },
         },
+    },
+    'sample_cut': {
+        'label': 'Sample Cut',
+        'schema': 'pdi_nomad_plugin.general.schema.SampleCutPDI',
+        'kind': 'sample_cut',
+        'write_supported': True,
+        'usage_schemas': [],
     },
     'holder': {
         'label': 'Holders',
-        'schema': 'nomad_material_processing.vapor_deposition.general.SubstrateHolder',
+        'schema': 'pdi_nomad_plugin.mbe.instrument.SubstrateHolderPDI',
         'kind': 'holder',
-        'write_supported': False,
-        'write_block_reason': (
-            'Original SubstrateHolder has no verified '
-            'EntryArchive.data root; no upload was made.'
-        ),
+        'write_supported': True,
+        'write_block_reason': '',
         'usage_schemas': [
             'nomad_material_processing.vapor_deposition.general.FilledSubstrateHolder',
         ],
     },
     'insert': {
         'label': 'Inserts',
-        'schema': 'nomad_material_processing.vapor_deposition.general.InsertReduction',
+        'schema': 'pdi_nomad_plugin.mbe.instrument.InsertReductionPDI',
         'kind': 'insert',
-        'write_supported': False,
-        'write_block_reason': (
-            'Original InsertReduction has no verified '
-            'EntryArchive.data root; no upload was made.'
-        ),
+        'write_supported': True,
+        'write_block_reason': '',
         'usage_schemas': [
             'nomad_material_processing.vapor_deposition.general.FilledSubstrateHolder',
         ],

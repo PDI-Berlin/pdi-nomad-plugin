@@ -120,7 +120,7 @@ async function queryEntriesBySchema(schema) {
             })
         }
     );
-    if (!response.ok) throw new Error('NOMAD query failed (' + response.status + ')');
+    if (!response.ok) throw new Error('NOMAD query failed for ' + schema + ' (' + response.status + ')');
     const result = await response.json();
     return (result.data || []).map(function(entry) {
         const archive = entry.archive || {};
@@ -137,6 +137,236 @@ async function queryEntriesBySchema(schema) {
             data: archive.data || {}
         };
     });
+}
+
+
+let sampleCutParents = [];
+
+let skippedSampleCutParentArchives = 0;
+
+async function querySampleCutParentArchives() {
+    const schema = 'pdi_nomad_plugin.mbe.materials.SubstrateMbe';
+    const entries = [];
+    let after = null;
+    let richFields = true;
+
+    while (true) {
+        const pagination = {page_size: 500};
+        if (after) pagination.page_after_value = after;
+
+        const required = {include: [
+            'entry_id', 'upload_id', 'entry_name',
+            ...(richFields ? [
+                'entry_type', 'mainfile',
+                'results.material.chemical_formula_reduced',
+                'results.material.chemical_formula_descriptive'
+            ] : [])
+        ]};
+
+        let response = await fetch(nomadApiBase() + '/entries/query', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                owner: 'visible',
+                query: {'section_defs.definition_qualified_name': schema},
+                pagination, required
+            })
+        });
+
+        if (response.status === 422 && richFields) {
+            richFields = false;
+            continue;
+        }
+        if (!response.ok) {
+            throw new Error('Substrate index query failed (' + response.status + ')');
+        }
+
+        const result = await response.json();
+        entries.push(...(result.data || []));
+        const next = result.pagination?.next_page_after_value;
+        if (!next || next === after) break;
+        after = next;
+    }
+
+    return entries.filter(function(entry) {
+        const type = String(entry.entry_type || '');
+        const file = String(entry.mainfile || '');
+        return entry.entry_id && entry.upload_id &&
+            !/SubstrateBatchMbe/i.test(type) &&
+            !/SubstrateBatch\.archive/i.test(file);
+    }).map(function(entry) {
+        const material = entry.results?.material || {};
+        return {
+            entryId: entry.entry_id,
+            uploadId: entry.upload_id,
+            entryName: entry.entry_name || entry.entry_id,
+            material: material.chemical_formula_descriptive ||
+                      material.chemical_formula_reduced || '',
+            data: null
+        };
+    });
+}
+
+async function loadSampleCutParents() {
+    const select = document.getElementById('cutParentSample');
+    const details = document.getElementById('cutParentDetails');
+    const heightInput = document.getElementById('cutChildHeight');
+    const locationSelect = document.getElementById('cutLocation');
+    const otherLocationWrapper = document.getElementById('cutLocationOtherWrapper');
+
+    locationSelect.onchange = function() {
+        otherLocationWrapper.classList.toggle(
+            'hidden', locationSelect.value !== 'Elsewhere'
+        );
+    };
+
+    const nameInput = document.getElementById('cutProcessName');
+    nameInput.readOnly = true;
+
+    let materialFilter = document.getElementById('cutMaterialFilter');
+    if (!materialFilter) {
+        const wrapper = document.createElement('div');
+        const label = document.createElement('label');
+        label.htmlFor = 'cutMaterialFilter';
+        label.textContent = 'Filter by material';
+        materialFilter = document.createElement('select');
+        materialFilter.id = 'cutMaterialFilter';
+        wrapper.append(label, materialFilter);
+        select.parentElement.parentElement.prepend(wrapper);
+    }
+
+    select.replaceChildren(new Option('Loading substrate index...', ''));
+    select.disabled = true;
+
+    const [substrates, cuts] = await Promise.all([
+        querySampleCutParentArchives(),
+        queryEntriesBySchema('pdi_nomad_plugin.general.schema.SampleCutPDI')
+    ]);
+
+    const alreadyCut = new Set();
+    cuts.forEach(function(item) {
+        const d = item.data || {};
+        if (!Array.isArray(d.children_samples) || !d.children_samples.length) return;
+        const ref = String(d.parent_sample?.reference || '');
+        const part = ref.split('/archive/')[1] || '';
+        const parentId = part.split('#')[0].split('?')[0].split('/')[0];
+        if (parentId) alreadyCut.add(parentId);
+    });
+
+    const collator = new Intl.Collator(undefined, {
+        numeric: true, sensitivity: 'base'
+    });
+
+    sampleCutParents = substrates.filter(item =>
+        !alreadyCut.has(item.entryId)
+    ).sort((a, b) => collator.compare(a.entryName, b.entryName));
+
+    const materialName = item => item.material || 'Material not indexed';
+    const materials = [...new Set(sampleCutParents.map(materialName))]
+        .sort(collator.compare);
+
+    materialFilter.replaceChildren(new Option('All materials', ''));
+    materials.forEach(material =>
+        materialFilter.add(new Option(material, material))
+    );
+
+    function refreshOptions() {
+        select.replaceChildren(new Option('Select parent sample...', ''));
+        sampleCutParents.filter(item =>
+            !materialFilter.value ||
+            materialName(item) === materialFilter.value
+        ).forEach(item => {
+            select.add(new Option(
+                item.entryName + ' | ' + materialName(item),
+                item.entryId
+            ));
+        });
+        details.textContent = 'Select a parent sample to load its geometry.';
+        heightInput.value = '';
+        nameInput.value = '';
+    }
+
+    materialFilter.onchange = refreshOptions;
+    refreshOptions();
+    select.disabled = false;
+
+    select.onchange = async function() {
+        const item = sampleCutParents.find(x => x.entryId === select.value);
+        if (!item) return;
+
+        details.textContent = 'Loading selected parent archive...';
+        heightInput.value = '';
+        nameInput.value = '';
+
+        try {
+            if (!item.data) {
+                const response = await fetch(
+                    nomadApiBase() + '/entries/' +
+                    encodeURIComponent(item.entryId) + '/archive'
+                );
+                if (!response.ok) throw new Error('HTTP ' + response.status);
+
+                const payload = await response.json();
+                const wrapper = payload.data || payload.archive || payload;
+                const archive = wrapper.archive || wrapper;
+                const data = archive.data || archive;
+
+                if (data.m_def !== 'pdi_nomad_plugin.mbe.materials.SubstrateMbe') {
+                    throw new Error('Selected entry is not an individual SubstrateMbe.');
+                }
+                item.data = data;
+            }
+
+            if (select.value !== item.entryId) return;
+
+            const d = item.data;
+            const fullId = String(d.lab_id || item.entryName).trim();
+            const charge = String(d.charge_id || '').trim()
+                .normalize('NFKD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/[^A-Za-z0-9._-]+/g, '-')
+                .replace(/-+/g, '-')
+                .replace(/^[-_.]+|[-_.]+$/g, '');
+            const segment = '_' + charge + '_';
+            const index = charge ? fullId.lastIndexOf(segment) : -1;
+            const shortId = index < 0 ? fullId :
+                fullId.slice(0, index) + '_' +
+                fullId.slice(index + segment.length);
+            nameInput.value = 'cut_' + shortId;
+
+            const g = d.geometry || {};
+            const width = mm(g.width);
+            const length = mm(g.length) ?? width;
+            const radius = mm(g.radius);
+            const height = mm(g.height);
+            const formula = d.components?.[0]?.pure_substance?.molecular_formula;
+            const material = formula || item.material || 'not specified';
+
+            const size = Number.isFinite(width)
+                ? formatNumber(width) + ' × ' + formatNumber(length) + ' mm'
+                : Number.isFinite(radius)
+                    ? 'Radius ' + formatNumber(radius) + ' mm'
+                    : 'Geometry not specified';
+
+            const hkl = d.crystal_properties?.surface_orientation?.hkl_reciprocal || {};
+            const indices = ['h_index', 'k_index', 'l_index'].map(k => hkl[k]);
+            const orientation = indices.every(x => x !== undefined)
+                ? '(' + indices.join('') + ')' : 'not specified';
+
+            details.textContent =
+                'Parent: ' + (d.lab_id || d.name || item.entryName) +
+                ' | Material: ' + material +
+                ' | Geometry: ' + size +
+                ' | Thickness: ' +
+                (Number.isFinite(height) ? formatNumber(height) + ' mm' : 'unknown') +
+                ' | Orientation: ' + orientation;
+
+            heightInput.value = Number.isFinite(height) && height > 0
+                ? String(height) : '';
+        } catch (error) {
+            details.textContent = 'Parent archive unavailable: ' + error.message;
+        }
+    };
 }
 
 async function loadLibraryTypes() {
@@ -367,18 +597,21 @@ function createRowLabel() {
     if (currentType === 'processing_recipe') return '+ Create new ' + currentDefinition().label.toLowerCase() + ' recipe';
     if (currentType === 'holder') return '+ Create new holder';
     if (currentType === 'insert') return '+ Create new insert';
+    if (currentType === 'sample_cut') return '+ Create new Sample Cut';
     return '+ Create new item';
 }
 
 function renderLibrary() {
     const list = document.getElementById('libraryList');
     const status = document.getElementById('libraryStatus');
-    const items = filteredItems();
+    const items = currentType === 'sample_cut' ? [] : filteredItems();
 
-    status.textContent = items.length + ' of ' + currentItems.length + ' ' + currentLabel().toLowerCase() + ' shown.';
+    status.textContent = currentType === 'sample_cut'
+        ? 'Create a new Sample Cut. Previous cuts remain stored in NOMAD.'
+        : items.length + ' of ' + currentItems.length + ' ' + currentLabel().toLowerCase() + ' shown.';
     list.innerHTML = '';
 
-    if (!items.length) {
+    if (!items.length && currentType !== 'sample_cut') {
         const empty = document.createElement('div');
         empty.className = 'empty-state';
         empty.textContent = 'No matching library items.';
@@ -434,7 +667,11 @@ function renderLibrary() {
         duplicate.textContent = 'Duplicate';
         duplicate.addEventListener('click', function() { openEditor('duplicate', item); });
 
-        actions.append(view, edit, duplicate);
+        if (currentType === 'sample_cut') {
+            actions.append(view);
+        } else {
+            actions.append(view, edit, duplicate);
+        }
         row.append(identity, type, detail, actions);
         list.appendChild(row);
     });
@@ -453,7 +690,9 @@ function isPhysicalHolderLibraryItem(item) {
     const data = item.data || {};
     const mDef = String(data.m_def || '');
     return !data.substrate_holder &&
-        (!mDef || mDef === 'nomad_material_processing.vapor_deposition.general.SubstrateHolder');
+        (!mDef ||
+         mDef === 'pdi_nomad_plugin.mbe.instrument.SubstrateHolderPDI' ||
+         mDef === 'nomad_material_processing.vapor_deposition.general.SubstrateHolder');
 }
 
 function physicalHolderKey(item) {
@@ -532,7 +771,75 @@ async function loadCurrentType() {
     }
 }
 
-function openModal() { document.getElementById('modalBackdrop').classList.remove('hidden'); }
+function openModal() {
+    const backdrop = document.getElementById('modalBackdrop');
+    const list = document.getElementById('libraryList');
+
+    if (!backdrop || !list) {
+        throw new Error('Lab Library inline editor container missing.');
+    }
+
+    if (!document.getElementById('labLibraryInlineStyles')) {
+        const style = document.createElement('style');
+        style.id = 'labLibraryInlineStyles';
+        style.textContent = `
+            #modalBackdrop.lab-library-inline:not(.hidden) {
+                position: static !important;
+                inset: auto !important;
+                display: block !important;
+                width: 100% !important;
+                height: auto !important;
+                min-height: 0 !important;
+                padding: 0 !important;
+                margin: 20px 0 32px !important;
+                background: transparent !important;
+                backdrop-filter: none !important;
+                overflow: visible !important;
+                z-index: auto !important;
+            }
+            #modalBackdrop.lab-library-inline .modal {
+                position: static !important;
+                transform: none !important;
+                display: block !important;
+                width: 100% !important;
+                max-width: none !important;
+                height: auto !important;
+                max-height: none !important;
+                margin: 0 !important;
+                overflow: visible !important;
+                box-shadow: none !important;
+            }
+            #modalBackdrop.lab-library-inline .modal-body {
+                height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    list.insertAdjacentElement('afterend', backdrop);
+    backdrop.classList.add('lab-library-inline');
+
+    const panel = backdrop.querySelector('.modal');
+    if (panel) {
+        panel.setAttribute('role', 'region');
+        panel.removeAttribute('aria-modal');
+    }
+
+    ['typeTabs', 'subtypeTabs'].forEach(function(id) {
+        const tabs = document.getElementById(id);
+        if (tabs && !tabs.dataset.labLibraryCloseOnTabSwitch) {
+            tabs.dataset.labLibraryCloseOnTabSwitch = '1';
+            tabs.addEventListener('click', function() {
+                closeModal();
+            }, true);
+        }
+    });
+
+    backdrop.classList.remove('hidden');
+    backdrop.scrollIntoView({block: 'start', behavior: 'smooth'});
+}
 
 function closeModal() {
     document.getElementById('modalBackdrop').classList.add('hidden');
@@ -644,12 +951,16 @@ function cleaningReadonlyView(data) {
             : [];
 
     const stepsHtml = steps.map(function(step, index) {
-        const reagent = cleaningReagentName(step) || step.name || '—';
+        const reagent = step.name || cleaningReagentName(step) || '—';
 
-        const duration =
-            step.duration !== undefined && step.duration !== null
-                ? formatNumber(Number(step.duration) / 60)
-                : '—';
+        const seconds = step.duration == null ? NaN : Number(step.duration);
+        const unit = Number.isFinite(seconds) && seconds >= 3600 &&
+            seconds % 3600 === 0 ? 'h' :
+            Number.isFinite(seconds) && seconds >= 60 &&
+            seconds % 60 === 0 ? 'min' : 's';
+        const duration = Number.isFinite(seconds)
+            ? formatNumber(seconds / {s: 1, min: 60, h: 3600}[unit])
+            : '—';
 
         const temperature =
             step.temperature !== undefined && step.temperature !== null
@@ -665,11 +976,22 @@ function cleaningReadonlyView(data) {
 
                 <div class="cleaning-step-primary">
                     ${readonlyViewField('Reagent / medium', reagent)}
-                    ${readonlyViewField('Duration (min)', duration)}
+                    ${readonlyViewField('Duration (' + unit + ')', duration)}
                     ${readonlyViewField('Temperature (°C)', temperature)}
                 </div>
 
                 <div class="cleaning-step-secondary">
+                    ${readonlyViewField('Agitation',
+                        step.agitation === 'Sonication'
+                            ? 'Ultrasonic bath' : (step.agitation || '—'))}
+                    ${step.cleaning_reagents
+                        ? readonlyViewTextarea(
+                            'Cleaning reagent reference',
+                            JSON.stringify(step.cleaning_reagents, null, 2)
+                        ) : ''}
+                    ${step.start_time
+                        ? readonlyViewField('Start time', step.start_time)
+                        : ''}
                     ${readonlyViewField('Comment', step.comment || '—')}
                 </div>
             </div>
@@ -688,7 +1010,7 @@ function cleaningReadonlyView(data) {
 
             <div class="cleaning-right-column">
                 <div class="cleaning-steps-heading">
-                    <h3>Process steps</h3>
+                    <h3>Cleaning steps</h3>
                 </div>
 
                 ${
@@ -1103,37 +1425,27 @@ function recipeIdNumber(value) {
 
 function cleaningReagentAbbreviation(name) {
     const value = String(name || '').trim();
-
     const known = {
-        'Isobutyl alcohol': 'But',
         'Acetone': 'Ace',
-        'Isopropanol': 'prop',
-        'DI water': 'DI_H2O',
+        'Isopropanol': 'Iso-Prop',
+        'n-Buthyl': 'nButh',
+        'n-Butanol': 'nButh',
+        'DI water': 'DI-H2O',
+        'DI-H2O': 'DI-H2O',
+        'VE-H2O': 'VE-H2O',
+        'VE water': 'VE-H2O',
         'HF': 'HF',
-        "King's water": 'KiWa',
-        'Kingswater': 'KiWa'
+        'NH4F': 'NH4F',
+        'Kingswater': 'Kingswater',
+        "King's water": 'Kingswater',
+        'Nitrogen gun drying': 'N2-Dry',
+        'N2 gun drying': 'N2-Dry',
+        'N2-Dry': 'N2-Dry',
+        'Isobutyl alcohol': 'iBuOH'
     };
-
-    if (known[value]) {
-        return known[value];
-    }
-
-    const cleaned = value
-        .replace(/[^A-Za-z0-9]+/g, '')
-        .trim();
-
-    if (!cleaned) {
-        return '';
-    }
-
-    if (cleaned.length <= 3) {
-        return cleaned;
-    }
-
-    return (
-        cleaned.charAt(0).toUpperCase() +
-        cleaned.slice(1, 3).toLowerCase()
-    );
+    return known[value] || value
+        .replace(/[^A-Za-z0-9-]+/g, '-')
+        .replace(/^-+|-+$/g, '');
 }
 
 
@@ -1204,125 +1516,65 @@ function cleaningTemperatureId(values) {
 
 
 function generatedCleaningRecipeId() {
+    if (editorMode === 'edit' && editorItem &&
+        (editorItem.data || {}).lab_id) {
+        return editorItem.data.lab_id;
+    }
+
     const rows = Array.from(
-        document.querySelectorAll(
-            '#cleaningSteps .cleaning-step-row'
-        )
+        document.querySelectorAll('#cleaningSteps .cleaning-step-row')
     );
-
-    const reagents = [];
-    const durations = [];
-    const temperatures = [];
-
-    rows.forEach(function(row) {
-        const reagentSelect =
-            row.querySelector(
-                '.cleaning-reagent'
-            );
-
-        let reagent =
-            reagentSelect
-                ? reagentSelect.value
-                : '';
-
-        if (reagent === '__custom__') {
-            const custom =
-                row.querySelector(
-                    '.cleaning-reagent-custom'
-                );
-
-            reagent =
-                custom
-                    ? custom.value.trim()
-                    : '';
-        }
-
-        const reagentId =
-            cleaningReagentAbbreviation(
-                reagent
-            );
-
-        if (reagentId) {
-            reagents.push(reagentId);
-        }
-
-
-        const durationInput =
-            row.querySelector(
-                '.cleaning-duration'
-            );
-
-        if (
-            durationInput &&
-            durationInput.value !== ''
-        ) {
-            const duration =
-                Number(durationInput.value);
-
-            if (Number.isFinite(duration)) {
-                durations.push(duration);
-            }
-        }
-
-
-        const temperatureInput =
-            row.querySelector(
-                '.cleaning-temperature'
-            );
-
-        if (
-            temperatureInput &&
-            temperatureInput.value !== ''
-        ) {
-            const temperature =
-                Number(
-                    temperatureInput.value
-                );
-
-            if (
-                Number.isFinite(temperature) &&
-                temperature > 50
-            ) {
-                temperatures.push(
-                    temperature
-                );
-            }
-        }
-
-
-    });
-
-
     const parts = ['Clean'];
 
-    if (reagents.length) {
-        parts.push(
-            reagents.join('_')
-        );
-    }
+    rows.forEach(function(row) {
+        const select = row.querySelector('.cleaning-reagent');
+        if (!select) return;
 
-    const durationPart =
-        cleaningDurationId(
-            durations
-        );
+        const reagent = select.value === '__custom__'
+            ? (row.querySelector('.cleaning-reagent-custom')?.value || '').trim()
+            : select.value;
+        const medium = cleaningReagentAbbreviation(reagent);
+        if (!medium) return;
 
-    if (durationPart) {
-        parts.push(durationPart);
-    }
+        const stepParts = [medium];
+        const durationInput = row.querySelector('.cleaning-duration');
+        const unitInput = row.querySelector('.cleaning-duration-unit');
 
-    const temperaturePart =
-        cleaningTemperatureId(
-            temperatures
-        );
+        if (durationInput && durationInput.value !== '') {
+            const duration = Number(durationInput.value);
+            if (Number.isFinite(duration) && duration > 0) {
+                const unit = unitInput ? unitInput.value : 'min';
+                if (['s', 'min', 'h'].includes(unit)) {
+                    stepParts.push(recipeIdNumber(duration) + unit);
+                }
+            }
+        }
 
-    if (temperaturePart) {
-        parts.push(temperaturePart);
-    }
+        const temperatureInput = row.querySelector('.cleaning-temperature');
+        if (temperatureInput && temperatureInput.value !== '') {
+            const temperature = Number(temperatureInput.value);
+            if (Number.isFinite(temperature) && temperature !== 23) {
+                stepParts.push(recipeIdNumber(temperature) + 'C');
+            }
+        }
 
+        const agitation = row.querySelector('.cleaning-agitation')?.value;
+        if (agitation === 'Sonication') {
+            stepParts.push('US');
+        } else if (agitation === 'HP') {
+            stepParts.push('HP');
+        }
+
+        const device = row.querySelector('.cleaning-device')?.value;
+        if (device && !(device === 'US' && agitation === 'Sonication')) {
+            stepParts.push(device);
+        }
+
+        parts.push(stepParts.join('_'));
+    });
 
     return parts.join('_');
 }
-
 
 
 function annealingInstrumentAbbreviation(name) {
@@ -1358,35 +1610,99 @@ function annealingTemperatureId(values) {
 
 
 function generatedAnnealingRecipeId() {
-    const instrument = document.getElementById('annealingInstrument');
-    const rows = Array.from(document.querySelectorAll('#annealingSteps .annealing-step-row'));
-    const temperatures = [];
-    const durations = [];
+    const rows = Array.from(
+        document.querySelectorAll('#annealingSteps .annealing-step-row')
+    ).filter(row =>
+        row.querySelector('.annealing-step-type')?.value === 'Holding'
+    );
+
+    const parts = ['Ann'];
+
     rows.forEach(function(row) {
-        const temperature = row.querySelector('.annealing-ending-temperature');
-        const duration = row.querySelector('.annealing-duration');
-        if (temperature && temperature.value !== '') {
-            const value = Number(temperature.value);
-            if (Number.isFinite(value)) temperatures.push(value);
+        const temperature = row.querySelector(
+            '.annealing-ending-temperature'
+        )?.value.trim() || '';
+
+        const duration = row.querySelector(
+            '.annealing-duration'
+        )?.value.trim() || '';
+
+        if (temperature && Number.isFinite(Number(temperature))) {
+            parts.push(recipeIdNumber(Number(temperature)) + 'C');
         }
-        if (duration && duration.value !== '') {
-            const value = Number(duration.value);
-            if (Number.isFinite(value)) durations.push(value);
+
+        if (duration && Number.isFinite(Number(duration)) &&
+            Number(duration) > 0) {
+            parts.push(recipeIdNumber(Number(duration)) + 'min');
         }
+
+        const stepAtmosphere = row.querySelector(
+            '.annealing-step-atmosphere'
+        )?.value || '';
+
+        const globalAtmosphere = document.getElementById(
+            'annealingAtmosphere'
+        )?.value || '';
+
+        const selected = stepAtmosphere || globalAtmosphere;
+        const customInput = stepAtmosphere
+            ? row.querySelector('.annealing-step-atmosphere-custom')
+            : document.getElementById('annealingAtmosphereCustom');
+
+        const atmosphere = selected === '__custom__'
+            ? (customInput?.value.trim() || '')
+            : selected === 'Vacuum' ? 'Vac' : selected;
+
+        const gasId = atmosphere.replace(/[^A-Za-z0-9]+/g, '');
+        if (gasId) parts.push(gasId);
     });
-    const parts = ['Ann', annealingInstrumentAbbreviation(instrument ? instrument.value : '')];
-    const temperaturePart = annealingTemperatureId(temperatures);
-    if (temperaturePart) parts.push(temperaturePart);
-    const durationPart = cleaningDurationId(durations);
-    if (durationPart) parts.push(durationPart);
+
     return parts.join('_');
 }
 
 function updateGeneratedId() {
+    const display = document.getElementById('generatedIdValue');
+
     try {
-        document.getElementById('generatedIdValue').textContent = generatedId();
+        const id = generatedId();
+        display.textContent = id;
+
+        if (currentType === 'processing_recipe' &&
+            currentSubtype === 'cleaning' &&
+            editorMode !== 'edit' &&
+            id.startsWith('Clean_')) {
+
+            const input = document.getElementById('chemicalTreatmentName');
+
+            if (input) {
+                const previous = input.dataset.cleaningAutoName || '';
+
+                if (!input.value.trim() ||
+                    (previous && input.value === previous)) {
+                    input.value = id;
+                    input.dataset.cleaningAutoName = id;
+                }
+            }
+        }
+        if (currentType === 'processing_recipe' &&
+            currentSubtype === 'annealing' &&
+            editorMode !== 'edit' &&
+            id.startsWith('Ann_')) {
+
+            const input = document.getElementById('annealingRecipeName');
+
+            if (input) {
+                const previous = input.dataset.annealingAutoName || '';
+
+                if (!input.value.trim() ||
+                    (previous && input.value === previous)) {
+                    input.value = id;
+                    input.dataset.annealingAutoName = id;
+                }
+            }
+        }
     } catch (_) {
-        document.getElementById('generatedIdValue').textContent = '—';
+        display.textContent = '—';
     }
 }
 
@@ -2029,25 +2345,123 @@ function cleaningReagentName(step) {
     return reagent.name || '';
 }
 
+const CLEANING_INSTRUMENTS = {
+    HP: 'Hot Plate',
+    US: 'Ultrasonic Bath'
+};
+
+function cleaningInstrumentCode(name) {
+    return Object.keys(CLEANING_INSTRUMENTS).find(function(code) {
+        return name === code || name === CLEANING_INSTRUMENTS[code];
+    }) || '';
+}
+
+function cleaningReferenceFromRow(row) {
+    const fields = [
+        ['name', '.cleaning-ref-name'],
+        ['lab_id', '.cleaning-ref-lab-id'],
+        ['reference', '.cleaning-ref-reference']
+    ];
+    const result = {};
+    fields.forEach(function([name, selector]) {
+        const input = row.querySelector(selector);
+        if (!input) throw new Error('Cleaning reference field missing: ' + name);
+        const value = input.value.trim();
+        if (value) result[name] = value;
+    });
+    return Object.keys(result).length ? result : null;
+}
+
+function clearCleaningReferenceFields(row) {
+    row.querySelectorAll(
+        '.cleaning-ref-name, .cleaning-ref-lab-id, .cleaning-ref-reference'
+    ).forEach(function(input) {
+        input.value = '';
+    });
+}
+
+function cleaningStartParts(value) {
+    const date = value ? new Date(value) : null;
+    const pad = n => String(n).padStart(2, '0');
+    if (!date || !Number.isFinite(date.getTime())) {
+        return {date: '', hour: '00', minute: '00'};
+    }
+    return {
+        date: [date.getFullYear(), pad(date.getMonth() + 1),
+            pad(date.getDate())].join('-'),
+        hour: pad(date.getHours()),
+        minute: pad(date.getMinutes())
+    };
+}
+
+function updateCleaningStartTime(row) {
+    const date = row.querySelector('.cleaning-start-date').value;
+    const hour = row.querySelector('.cleaning-start-hour').value;
+    const minute = row.querySelector('.cleaning-start-minute').value;
+    const hidden = row.querySelector('.cleaning-start-time');
+
+    if (!date) {
+        hidden.value = '';
+        return;
+    }
+
+    const original = row.__recipeSourceStep?.start_time || '';
+    const previous = cleaningStartParts(original);
+
+    if (date === previous.date &&
+        hour === previous.hour && minute === previous.minute) {
+        hidden.value = original;
+        return;
+    }
+
+    const value = new Date(`${date}T${hour}:${minute}:00`);
+    if (!Number.isFinite(value.getTime()) ||
+        cleaningStartParts(value.toISOString()).date !== date ||
+        cleaningStartParts(value.toISOString()).hour !== hour ||
+        cleaningStartParts(value.toISOString()).minute !== minute) {
+        hidden.value = '';
+        throw new Error('Invalid local start date/time.');
+    }
+    hidden.value = value.toISOString();
+}
+
 function cleaningStepHtml(step, index) {
     step = step || {};
     // An original CleaningStep can store the medium in `name` without a
     // CompositeSystemReference. Never create a fictitious reference.
-    const reagent = cleaningReagentName(step) || String(step.name || '');
-    const durationMin = step.duration != null ? Number(step.duration) / 60 : '';
-    const temperature = step.temperature != null ? step.temperature : '';
+    const reagent = String(step.name || cleaningReagentName(step) || '');
+    const seconds = step.duration == null ? null : Number(step.duration);
+    const durationUnit = seconds === null ? 'min' :
+        seconds >= 3600 && seconds % 3600 === 0 ? 'h' :
+        seconds >= 60 && seconds % 60 === 0 ? 'min' : 's';
+    const durationValue = seconds === null ? '' :
+        seconds / ({s: 1, min: 60, h: 3600}[durationUnit]);
+    const blankStep = Object.keys(step).length === 0;
+    const temperature = step.temperature != null ? step.temperature :
+        (blankStep ? 23 : '');
     const comment = step.comment || '';
+    const ref = step.cleaning_reagents &&
+        typeof step.cleaning_reagents === 'object' &&
+        !Array.isArray(step.cleaning_reagents)
+            ? step.cleaning_reagents : {};
 
-    const knownReagents = [
-        'Isobutyl alcohol',
-        'Acetone',
-        'Isopropanol',
-        'DI water',
-        'HF',
-        "King's water"
-    ];
+    const method =
+        document.getElementById('chemicalTreatmentType')?.value ||
+        'Solvent cleaning';
+    const agitationValue = step.agitation ||
+        (blankStep && method === 'Solvent cleaning' ? 'Sonication' : '');
 
-    const customReagent = reagent && !knownReagents.includes(reagent);
+    const common = ['DI-H2O', 'VE-H2O', 'N2 gun drying'];
+
+    const reagents = method === 'Acid treatment'
+        ? ['HF', 'Kingswater', 'NH4F', ...common]
+        : ['Acetone', 'Isopropanol', 'n-Buthyl', ...common];
+
+    const customReagent = Boolean(reagent) && !reagents.includes(reagent);
+
+    const mediumOptions = reagents.map(function(name) {
+        return `<option value="${escapeHtml(name)}" ${reagent === name ? 'selected' : ''}>${escapeHtml(name)}</option>`;
+    }).join('');
 
     return `
         <div class="cleaning-step-row">
@@ -2061,11 +2475,7 @@ function cleaningStepHtml(step, index) {
                     <label>Reagent / medium *</label>
                     <select class="cleaning-reagent" required>
                         <option value="">Select...</option>
-                        <option value="Isobutyl alcohol" ${reagent === 'Isobutyl alcohol' ? 'selected' : ''}>Isobutyl alcohol</option>
-                        <option value="Acetone" ${reagent === 'Acetone' ? 'selected' : ''}>Acetone</option>
-                        <option value="Isopropanol" ${reagent === 'Isopropanol' ? 'selected' : ''}>Isopropanol</option>
-                        <option value="DI water" ${reagent === 'DI water' ? 'selected' : ''}>DI water</option>
-                        <option value="HF" ${reagent === 'HF' ? 'selected' : ''}>HF</option>
+                        ${mediumOptions}
                         <option value="__custom__" ${customReagent ? 'selected' : ''}>Custom...</option>
                     </select>
 
@@ -2077,29 +2487,55 @@ function cleaningStepHtml(step, index) {
                 </div>
 
                 <div>
-                    <label>Duration (min) *</label>
+                    <label>Duration *</label>
                     <input
                         class="cleaning-duration"
                         type="number"
                         required
                         step="0.1"
                         min="0"
-                        value="${durationMin}">
+                        value="${durationValue}">
+                    <select class="cleaning-duration-unit">
+                        <option value="s" ${durationUnit === 's' ? 'selected' : ''}>s</option>
+                        <option value="min" ${durationUnit === 'min' ? 'selected' : ''}>min</option>
+                        <option value="h" ${durationUnit === 'h' ? 'selected' : ''}>h</option>
+                    </select>
                 </div>
 
                 <div>
-                    <label>Temperature (°C) *</label>
+                    <label>Temperature (°C)</label>
                     <input
                         class="cleaning-temperature"
                         type="number"
-                        required
-                        step="0.1"
+                        step="any"
                         value="${temperature}">
                 </div>
             </div>
 
             <div class="cleaning-step-secondary">
 
+                                <div>
+                    <label>Agitation / equipment</label>
+                    <select class="cleaning-agitation">
+                        <option value="">None</option>
+                        <option value="Sonication" ${agitationValue === 'Sonication' ? 'selected' : ''}>Ultrasonic bath (US)</option>
+                        <option value="HP">Hot plate (HP)</option>
+                        ${step.agitation === 'Magnetic Stirring'
+                            ? '<option value="Magnetic Stirring" selected>Magnetic Stirring (existing)</option>'
+                            : ''}
+                    </select>
+                </div>
+
+
+                <div hidden class="cleaning-reagent-metadata">
+                    <input class="cleaning-ref-name"
+                        value="${escapeHtml(ref.name || '')}">
+                    <input class="cleaning-ref-lab-id"
+                        value="${escapeHtml(ref.lab_id || '')}">
+                    <input class="cleaning-ref-reference"
+                        value="${escapeHtml(ref.reference || '')}">
+                </div>
+                <input type="hidden" class="cleaning-start-time" value="">
                 <div>
                     <label>Comment</label>
                     <input
@@ -2166,6 +2602,8 @@ function renderCleaningFields(seedData) {
 
     const method = String((seedData || {}).method || '');
 
+    const storedInstruments = Array.isArray((seedData || {}).instruments)
+        ? seedData.instruments : [];
     container.classList.add('cleaning-editor');
 
     container.innerHTML = `
@@ -2207,9 +2645,12 @@ function renderCleaningFields(seedData) {
 
         <div class="cleaning-right-column">
             <div class="cleaning-steps-heading">
-                <h3>Process steps</h3>
+                <h3>Cleaning steps</h3>
             </div>
 
+            <textarea id="cleaningInstrumentReferences" hidden>${escapeHtml(
+                JSON.stringify(storedInstruments)
+            )}</textarea>
             <div id="cleaningSteps"></div>
             <button type="button" id="addCleaningStep">+ Add step</button>
         </div>
@@ -2229,7 +2670,10 @@ function renderCleaningFields(seedData) {
 
     const recipeNameInput = document.getElementById('chemicalTreatmentName');
     if (recipeNameInput) {
-        recipeNameInput.addEventListener('input', updateGeneratedId);
+        recipeNameInput.addEventListener('input', function() {
+            delete recipeNameInput.dataset.cleaningAutoName;
+            updateGeneratedId();
+        });
     }
     updateGeneratedId();
 
@@ -2275,15 +2719,29 @@ function renderCleaningFields(seedData) {
                 step.name = reagent;
             }
 
+            const reagentReference = cleaningReferenceFromRow(row);
+            if (reagentReference) step.cleaning_reagents = reagentReference;
+            else delete step.cleaning_reagents;
+
             if (durationRaw !== '') {
-                step.duration = Number(durationRaw) * 60;
+                const unit = row.querySelector('.cleaning-duration-unit').value;
+                step.duration = Number(durationRaw) * ({s: 1, min: 60, h: 3600}[unit]);
             }
 
             if (temperatureRaw !== '') {
                 step.temperature = Number(temperatureRaw);
+            } else {
+                delete step.temperature;
             }
 
-            delete step.agitation; // Drop obsolete PDI-only quantity.
+            const startTime = row.querySelector('.cleaning-start-time').value.trim();
+            if (startTime) step.start_time = startTime;
+            else delete step.start_time;
+
+            const agitation = row.querySelector(".cleaning-agitation").value;
+            if (agitation === 'Sonication' ||
+                agitation === 'Magnetic Stirring') step.agitation = agitation;
+            else delete step.agitation;
             if (comment) step.comment = comment;
             else delete step.comment;
 
@@ -2300,11 +2758,59 @@ function renderCleaningFields(seedData) {
                 ));
             });
 
+        stepContainer.querySelectorAll('.cleaning-start-picker').forEach(function(picker) {
+            const row = picker.closest('.cleaning-step-row');
+            const date = picker.querySelector('.cleaning-start-date');
+
+            date.addEventListener('keydown', function(event) {
+                if (/^[a-zA-Z0-9]$/.test(event.key) ||
+                    ['Backspace', 'Delete'].includes(event.key)) {
+                    event.preventDefault();
+                }
+            });
+            date.addEventListener('paste', event => event.preventDefault());
+            date.addEventListener('drop', event => event.preventDefault());
+
+            picker.querySelectorAll(
+                '.cleaning-start-date, .cleaning-start-hour, .cleaning-start-minute'
+            ).forEach(input => input.addEventListener('change', function() {
+                updateCleaningStartTime(row);
+            }));
+
+            picker.querySelector('.cleaning-clear-start').addEventListener(
+                'click', function() {
+                    date.value = '';
+                    updateCleaningStartTime(row);
+                }
+            );
+        });
+
         stepContainer.querySelectorAll('.cleaning-reagent').forEach(function(select) {
             select.addEventListener('change', function() {
                 const custom =
                     select.parentElement.querySelector('.cleaning-reagent-custom');
                 custom.classList.toggle('hidden', select.value !== '__custom__');
+                clearCleaningReferenceFields(
+                    select.closest('.cleaning-step-row')
+                );
+                const row = select.closest('.cleaning-step-row');
+                const temp = row.querySelector('.cleaning-temperature');
+                const agitation = row.querySelector('.cleaning-agitation');
+                if (select.value === 'N2 gun drying') {
+                    temp.value = '';
+                    agitation.value = '';
+                } else if (select.value && select.value !== '__custom__'
+                    && temp.value === '') {
+                    temp.value = '23';
+                }
+            });
+        });
+
+        stepContainer.querySelectorAll('.cleaning-reagent-custom').forEach(function(input) {
+            input.addEventListener('input', function() {
+                clearCleaningReferenceFields(
+                    input.closest('.cleaning-step-row')
+                );
             });
         });
 
@@ -2319,6 +2825,33 @@ function renderCleaningFields(seedData) {
         });
     }
 
+    document.getElementById('chemicalTreatmentType').addEventListener('change', function() {
+        syncCleaningStepsFromDom();
+
+        const method = this.value;
+        const shared = ['DI-H2O', 'VE-H2O', 'N2 gun drying'];
+        const solvent = ['Acetone', 'Isopropanol', 'n-Butanol'];
+        const acid = ['HF', 'Kingswater', 'NH4F'];
+        const allowed = method === 'Acid treatment'
+            ? [...acid, ...shared]
+            : [...solvent, ...shared];
+        const restricted = new Set([...solvent, ...acid]);
+
+        steps.forEach(function(step) {
+            const medium = String(
+                cleaningReagentName(step) || step.name || ''
+            );
+
+            if (restricted.has(medium) && !allowed.includes(medium)) {
+                step.name = '';
+                delete step.cleaning_reagents;
+            }
+        });
+
+        redraw();
+        updateGeneratedId();
+    });
+
     document.getElementById('addCleaningStep').addEventListener('click', function() {
         syncCleaningStepsFromDom();
         steps.push({});
@@ -2326,6 +2859,7 @@ function renderCleaningFields(seedData) {
     });
 
     redraw();
+    updateGeneratedId();
 }
 
 
@@ -2338,43 +2872,239 @@ function annealingInstrumentName(seedData) {
     return 'Tube furnace – MBE lab';
 }
 
+
+// GUI-only text formatting; no NOMAD parser or normalizer.
+function annealingAtmosphereNote(select, custom, flowInput, strict, label) {
+    const selected = select.value;
+    const atmosphere = selected === '__custom__'
+        ? custom.value.trim() : selected;
+    const flowRaw = flowInput.value.trim();
+
+    if (strict && selected === '__custom__' && !atmosphere) {
+        throw new Error(label + ': enter the custom atmosphere.');
+    }
+    if (flowRaw && (!Number.isFinite(Number(flowRaw)) ||
+        Number(flowRaw) < 0)) {
+        if (strict) throw new Error(label + ': invalid gas flow.');
+        return '';
+    }
+
+    const parts = [];
+    if (atmosphere) parts.push('Atmosphere: ' + atmosphere);
+    if (flowRaw) parts.push('Gas flow: ' + flowRaw + ' sccm');
+    return parts.join('; ');
+}
+
+function appendAnnealingNote(existing, note) {
+    const text = String(existing || '').trim();
+    if (!note || text === note || text.endsWith('\n' + note)) {
+        return text;
+    }
+    return text ? text + '\n' + note : note;
+}
+
 function annealingStepHtml(step, index) {
     step = step || {};
-    const duration = step.duration != null ? Number(step.duration) / 60 : '';
-    const starting = step.starting_temperature == null ? '' : step.starting_temperature;
-    const ending = step.ending_temperature == null ? '' : step.ending_temperature;
+    const names = ['Heating', 'Holding', 'Cooling'];
+    const phase = step.name || (index === 0 ? 'Heating' : 'Holding');
+    const start = step.starting_temperature ?? '';
+    const end = step.ending_temperature ?? '';
+    const minutes = step.duration == null ? '' : Number(step.duration) / 60;
+    const rate = start !== '' && end !== '' && Number(minutes) > 0
+        ? Math.abs(Number(end) - Number(start)) / Number(minutes) : '';
+
     return `
-        <div class="annealing-step-row">
-            <div class="annealing-step-header">
-                <strong>Step ${index + 1}</strong>
-                <button type="button" class="annealing-remove-step">Remove step</button>
-            </div>
-            <div class="annealing-step-primary">
-                <div>
-                    <label>Starting temperature (°C)</label>
-                    <input class="annealing-starting-temperature" type="number" step="0.1"
-                        value="${escapeHtml(String(starting))}">
-                </div>
-                <div>
-                    <label>Ending temperature (°C) *</label>
-                    <input class="annealing-ending-temperature" type="number" step="0.1"
-                        required value="${escapeHtml(String(ending))}">
-                </div>
-                <div>
-                    <label>Duration (min) *</label>
-                    <input class="annealing-duration" type="number" step="0.01"
-                        min="0.01" required value="${escapeHtml(String(duration))}">
-                </div>
-            </div>
-            <div class="annealing-step-secondary">
-                <div>
-                    <label>Comment</label>
-                    <input class="annealing-comment" type="text"
-                        value="${escapeHtml(step.comment || '')}">
-                </div>
-            </div>
+      <div class="annealing-step-row">
+        <div class="annealing-step-header">
+          <strong>Step ${index + 1}</strong>
+          <button type="button" class="annealing-remove-step">Remove step</button>
         </div>
-    `;
+        <div class="annealing-step-primary">
+          <div>
+            <label>Step type</label>
+            <select class="annealing-step-type">
+              ${names.map(name => `<option value="${name}"
+                ${phase === name ? 'selected' : ''}>${name}</option>`).join('')}
+              ${!names.includes(phase)
+                ? `<option value="${escapeHtml(phase)}" selected>${escapeHtml(phase)} (existing)</option>`
+                : ''}
+            </select>
+          </div>
+          <div class="annealing-start-wrapper">
+            <label>Starting temperature (°C) *</label>
+            <input class="annealing-starting-temperature"
+              type="number" step="any"
+              value="${escapeHtml(String(start))}">
+          </div>
+          <div>
+            <label class="annealing-end-label">Ending temperature (°C) *</label>
+            <input class="annealing-ending-temperature"
+              type="number" step="any"
+              value="${escapeHtml(String(end))}">
+          </div>
+          <div class="annealing-mode-wrapper">
+            <label>Specify by</label>
+            <select class="annealing-specification">
+              <option value="duration">Duration</option>
+              <option value="rate">Ramp rate</option>
+            </select>
+          </div>
+          <div class="annealing-rate-wrapper">
+            <label>Ramp rate (°C/min) *</label>
+            <input class="annealing-rate" type="number"
+              min="0.000001" step="any"
+              value="${escapeHtml(String(rate))}">
+          </div>
+          <div>
+            <label class="annealing-duration-label">Duration (min) *</label>
+            <input class="annealing-duration" type="number"
+              min="0.000001" step="any"
+              value="${escapeHtml(String(minutes))}">
+          </div>
+        </div>
+        <div class="annealing-step-secondary">
+                <div class="annealing-step-gas" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;">
+                    <div>
+                        <label>Atmosphere override</label>
+                        <select class="annealing-step-atmosphere">
+                            <option value="">Use recipe atmosphere</option>
+                            <option value="O2">O₂</option>
+                            <option value="Air">Air</option>
+                            <option value="Ar">Ar</option>
+                            <option value="N2">N₂</option>
+                            <option value="Vacuum">Vacuum</option>
+                            <option value="__custom__">Custom</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>Custom atmosphere</label>
+                        <input class="annealing-step-atmosphere-custom"
+                            type="text" placeholder="Only for Custom">
+                    </div>
+                    <div>
+                        <label>Step gas flow (sccm)</label>
+                        <input class="annealing-step-gas-flow"
+                            type="number" step="any" min="0"
+                            placeholder="Optional">
+                    </div>
+                </div>
+
+          <div>
+            <label>Comment</label>
+            <textarea class="annealing-comment" rows="2">${escapeHtml(step.comment || '')}</textarea>
+          </div>
+        </div>
+      </div>`;
+}
+
+function updateAnnealingRow(row) {
+    const holding = row.querySelector('.annealing-step-type').value === 'Holding';
+    const mode = row.querySelector('.annealing-specification');
+    if (holding) mode.value = 'duration';
+
+    const rateMode = !holding && mode.value === 'rate';
+    const start = row.querySelector('.annealing-starting-temperature');
+    const end = row.querySelector('.annealing-ending-temperature');
+    const rate = row.querySelector('.annealing-rate');
+    const duration = row.querySelector('.annealing-duration');
+
+    row.querySelector('.annealing-start-wrapper').style.display =
+        holding ? 'none' : '';
+    row.querySelector('.annealing-mode-wrapper').style.display =
+        holding ? 'none' : '';
+    row.querySelector('.annealing-rate-wrapper').style.display =
+        rateMode ? '' : 'none';
+
+    row.querySelector('.annealing-end-label').textContent = holding
+        ? 'Annealing temperature (°C) *'
+        : 'Ending temperature (°C) *';
+
+    row.querySelector('.annealing-duration-label').textContent = rateMode
+        ? 'Calculated duration (min)'
+        : 'Duration (min) *';
+
+    duration.readOnly = rateMode;
+    if (holding) start.value = end.value;
+
+    if (rateMode) {
+        const a = Number(start.value);
+        const b = Number(end.value);
+        const r = Number(rate.value);
+
+        duration.value = start.value && end.value && rate.value &&
+            Number.isFinite(a) && Number.isFinite(b) &&
+            Number.isFinite(r) && r > 0 && a !== b
+            ? String(Math.abs(b - a) / r) : '';
+    }
+}
+
+function annealingStepPayload(row, index, strict) {
+    const phase = row.querySelector('.annealing-step-type').value;
+    const holding = phase === 'Holding';
+
+    const endRaw = row.querySelector(
+        '.annealing-ending-temperature'
+    ).value.trim();
+
+    const startRaw = holding ? endRaw : row.querySelector(
+        '.annealing-starting-temperature'
+    ).value.trim();
+
+    const mode = row.querySelector('.annealing-specification').value;
+    let minutes = Number(row.querySelector('.annealing-duration').value);
+
+    if (!holding && mode === 'rate') {
+        const raw = row.querySelector('.annealing-rate').value.trim();
+        const r = Number(raw);
+
+        minutes = startRaw && endRaw && raw &&
+            Number.isFinite(r) && r > 0 &&
+            Number(startRaw) !== Number(endRaw)
+            ? Math.abs(Number(endRaw) - Number(startRaw)) / r
+            : NaN;
+    }
+
+    if (strict && (
+        !startRaw || !endRaw ||
+        !Number.isFinite(Number(startRaw)) ||
+        !Number.isFinite(Number(endRaw)) ||
+        !Number.isFinite(minutes) || minutes <= 0
+    )) {
+        throw new Error(
+            'Annealing step ' + (index + 1) +
+            ': enter valid temperatures and duration or ramp rate.'
+        );
+    }
+
+    const result = originalAnnealingStep(row.__recipeSourceStep || {});
+    result.name = phase;
+
+    if (startRaw && Number.isFinite(Number(startRaw)))
+        result.starting_temperature = Number(startRaw);
+    else delete result.starting_temperature;
+
+    if (endRaw && Number.isFinite(Number(endRaw)))
+        result.ending_temperature = Number(endRaw);
+    else delete result.ending_temperature;
+
+    if (Number.isFinite(minutes) && minutes > 0)
+        result.duration = minutes * 60;
+    else delete result.duration;
+
+    const comment = row.querySelector('.annealing-comment').value.trim();
+    const atmosphereNote = annealingAtmosphereNote(
+        row.querySelector('.annealing-step-atmosphere'),
+        row.querySelector('.annealing-step-atmosphere-custom'),
+        row.querySelector('.annealing-step-gas-flow'),
+        strict,
+        'Annealing step ' + (index + 1)
+    );
+    const combinedComment = appendAnnealingNote(comment, atmosphereNote);
+    if (combinedComment) result.comment = combinedComment;
+    else delete result.comment;
+
+    delete result.start_time;
+    return result;
 }
 
 // Keep only the quantities defined by original AnnealingStep.m_def.
@@ -2409,8 +3139,9 @@ function renderAnnealingFields(seedData) {
             </div>
             <div>
                 <label for="annealingDescription">Description</label>
-                <input id="annealingDescription" type="text"
-                    value="${escapeHtml((seedData || {}).description || '')}">
+                <textarea id="annealingDescription" rows="3">${escapeHtml(
+                    (seedData || {}).description || ''
+                )}</textarea>
             </div>
         </div>
         <div class="annealing-right-column">
@@ -2422,12 +3153,52 @@ function renderAnnealingFields(seedData) {
                         <option ${instrument === 'Tube furnace – 6th floor' ? 'selected' : ''}>Tube furnace – 6th floor</option>
                         <option ${instrument === 'Oven Chemlab' ? 'selected' : ''}>Oven Chemlab</option>
                         <option ${instrument === 'Rapid Thermal Annealing' ? 'selected' : ''}>Rapid Thermal Annealing</option>
-                        <option ${instrument === 'MBE growth chamber' ? 'selected' : ''}>MBE growth chamber</option>
-                        <option ${instrument === 'MBE 2nd transfer chamber' ? 'selected' : ''}>MBE 2nd transfer chamber</option>
+                        <option ${instrument === 'MBE_GC' ? 'selected' : ''}>MBE_GC</option>
+                        <option ${instrument === 'MBE_MC' ? 'selected' : ''}>MBE_MC</option>
                     </select>
                 </div>
             </div>
-            <div class="annealing-steps-heading"><h3>Process steps</h3></div>
+
+
+            <div id="annealingPlasmaPowerWrapper" style="display:none;">
+                <label for="annealingPlasmaPower">Plasma power (W)</label>
+                <input id="annealingPlasmaPower" type="number"
+                    min="0.001" step="any" placeholder="Optional">
+                <p class="helper">Only for MBE_GC. Stored in the original recipe description.</p>
+            </div>
+            <div class="annealing-atmosphere">
+                <h3>Annealing atmosphere</h3>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;">
+                    <div>
+                        <label>Atmosphere</label>
+                        <select id="annealingAtmosphere">
+                            <option value="">No new atmosphere note</option>
+                            <option value="O2">O₂</option>
+                            <option value="Air">Air</option>
+                            <option value="Ar">Ar</option>
+                            <option value="N2">N₂</option>
+                            <option value="Vacuum">Vacuum</option>
+                            <option value="__custom__">Custom</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>Custom atmosphere</label>
+                        <input id="annealingAtmosphereCustom"
+                            type="text" placeholder="Only for Custom">
+                    </div>
+                    <div>
+                        <label>Gas flow (sccm)</label>
+                        <input id="annealingGasFlow" type="number"
+                            min="0" step="any" placeholder="Optional">
+                    </div>
+                </div>
+                <p class="helper">
+                    Saved as text in the original recipe description.
+                    For existing recipes, edit the description to change
+                    previously saved atmosphere information.
+                </p>
+            </div>
+            <div class="annealing-steps-heading"><h3>Annealing steps</h3></div>
             <div id="annealingSteps"></div>
             <button type="button" id="addAnnealingStep">+ Add step</button>
         </div>
@@ -2451,11 +3222,75 @@ function renderAnnealingFields(seedData) {
         existing.selected = true;
         instrumentSelect.appendChild(existing);
     }
-    instrumentSelect.addEventListener('change', updateGeneratedId);
+    instrumentSelect.addEventListener('change', function() {
+        updateAnnealingInstrumentControls();
+        updateGeneratedId();
+    });
 
     const steps = Array.isArray(seedData.steps) && seedData.steps.length
         ? seedData.steps.map(originalAnnealingStep) : [{}];
     const stepContainer = document.getElementById('annealingSteps');
+
+    function updateAnnealingInstrumentControls() {
+        const instrument = instrumentSelect.value;
+        const mbe = instrument === 'MBE_GC' || instrument === 'MBE_MC';
+        const gc = instrument === 'MBE_GC';
+
+        const plasma = document.getElementById(
+            'annealingPlasmaPowerWrapper'
+        );
+        plasma.style.display = gc ? '' : 'none';
+
+        const allowed = new Set(['', 'Vacuum', 'O2', 'Ar']);
+        const selects = [
+            document.getElementById('annealingAtmosphere'),
+            ...stepContainer.querySelectorAll('.annealing-step-atmosphere')
+        ];
+
+        selects.forEach(function(select) {
+            if (!select) return;
+            Array.from(select.options).forEach(function(option) {
+                const restricted = mbe && !allowed.has(option.value);
+                option.disabled = restricted;
+                option.hidden = restricted;
+            });
+            if (select.selectedOptions[0]?.disabled) select.value = '';
+        });
+
+        const customInputs = [
+            document.getElementById('annealingAtmosphereCustom'),
+            ...stepContainer.querySelectorAll(
+                '.annealing-step-atmosphere-custom'
+            )
+        ];
+        customInputs.forEach(function(input) {
+            if (input) input.parentElement.style.display =
+                mbe ? 'none' : '';
+        });
+    }
+
+
+    const annealingModes = steps.map(() => 'duration');
+
+    const refreshAnnealing = function(event) {
+        const row = event.target.closest('.annealing-step-row');
+        if (!row) return;
+
+        const index = Array.from(
+            stepContainer.querySelectorAll('.annealing-step-row')
+        ).indexOf(row);
+
+        if (index < 0) return;
+
+        updateAnnealingRow(row);
+        annealingModes[index] =
+            row.querySelector('.annealing-specification').value;
+        updateGeneratedId();
+    };
+
+    stepContainer.addEventListener('input', refreshAnnealing);
+    stepContainer.addEventListener('change', refreshAnnealing);
+
     if (container.dataset.annealingIdHook !== '1') {
         container.dataset.annealingIdHook = '1';
         container.addEventListener('input', updateGeneratedId);
@@ -2463,23 +3298,11 @@ function renderAnnealingFields(seedData) {
     }
 
     function syncAnnealingStepsFromDom() {
-        Array.from(stepContainer.querySelectorAll('.annealing-step-row'))
-            .forEach(function(row, index) {
-                const starting = row.querySelector('.annealing-starting-temperature').value.trim();
-                const ending = row.querySelector('.annealing-ending-temperature').value.trim();
-                const duration = row.querySelector('.annealing-duration').value.trim();
-                const comment = row.querySelector('.annealing-comment').value.trim();
-                const step = originalAnnealingStep(row.__recipeSourceStep || steps[index] || {});
-                if (starting !== '') step.starting_temperature = Number(starting);
-                else delete step.starting_temperature;
-                if (ending !== '') step.ending_temperature = Number(ending);
-                else delete step.ending_temperature;
-                if (duration !== '') step.duration = Number(duration) * 60;
-                else delete step.duration;
-                if (comment) step.comment = comment;
-                else delete step.comment;
-                steps[index] = step;
-            });
+        const updated = Array.from(
+            stepContainer.querySelectorAll('.annealing-step-row')
+        ).map((row, index) => annealingStepPayload(row, index, false));
+
+        steps.splice(0, steps.length, ...updated);
     }
 
     function redraw() {
@@ -2487,7 +3310,11 @@ function renderAnnealingFields(seedData) {
         Array.from(stepContainer.querySelectorAll('.annealing-step-row'))
             .forEach(function(row, index) {
                 row.__recipeSourceStep = originalAnnealingStep(steps[index]);
+                row.querySelector('.annealing-specification').value =
+                    annealingModes[index] || 'duration';
+                updateAnnealingRow(row);
             });
+        updateAnnealingInstrumentControls();
         updateGeneratedId();
         stepContainer.querySelectorAll('.annealing-remove-step')
             .forEach(function(button, index) {
@@ -2495,6 +3322,7 @@ function renderAnnealingFields(seedData) {
                 button.addEventListener('click', function() {
                     syncAnnealingStepsFromDom();
                     steps.splice(index, 1);
+                    annealingModes.splice(index, 1);
                     redraw();
                 });
             });
@@ -2502,6 +3330,7 @@ function renderAnnealingFields(seedData) {
     document.getElementById('addAnnealingStep').addEventListener('click', function() {
         syncAnnealingStepsFromDom();
         steps.push({});
+        annealingModes.push('duration');
         redraw();
     });
     redraw();
@@ -2813,13 +3642,205 @@ function populateProcessingTemplate(seedData) {
     renderProcessingDynamicFields(seedData || {});
 }
 
+
+function installInsertGeometryUi() {
+    ['Outer', 'Inner'].forEach(function(side) {
+        const base = document.getElementById('insert' + side + 'Size');
+        const id = 'insert' + side + 'GeometryType';
+        if (!base || document.getElementById(id)) return;
+
+        base.parentElement.insertAdjacentHTML('beforebegin', `
+            <div>
+                <label for="${id}">${side} geometry</label>
+                <select id="${id}">
+                    <option value="">Select geometry</option>
+                    <option value="RectangleCuboid">Rectangle</option>
+                    <option value="SquareCuboid">Square</option>
+                    <option value="Cylinder">Circle</option>
+                    <option value="CylinderSector">Circular sector</option>
+                    <option value="keep">Keep existing original geometry</option>
+                </select>
+            </div>
+        `);
+
+        document.getElementById('insert' + side + 'CustomWrap')
+            .insertAdjacentHTML('afterend', `
+            <div id="insert${side}GeometryExtras">
+                <div data-kind="radius">
+                    <label>Radius (mm)</label>
+                    <input class="insert-radius" type="number" min="0.001"
+                        step="any" placeholder="25.4 for 2-inch wafer">
+                </div>
+                <div data-kind="length">
+                    <label>Length (mm)</label>
+                    <input class="insert-length" type="number"
+                        min="0.001" step="any">
+                </div>
+                <div data-kind="angle">
+                    <label>Central angle (°)</label>
+                    <input class="insert-angle" type="number"
+                        min="0.001" max="360" step="any"
+                        placeholder="90 for quarter wafer">
+                </div>
+                <div data-kind="height">
+                    <label>Height / thickness (mm)</label>
+                    <input class="insert-height" type="number"
+                        min="0.001" step="any" placeholder="Optional">
+                </div>
+            </div>
+        `);
+
+        document.getElementById(id).addEventListener('change', function() {
+            updateInsertGeometryUi(side);
+            updateGeneratedId();
+        });
+
+        document.getElementById('insert' + side + 'GeometryExtras')
+            .addEventListener('input', updateGeneratedId);
+    });
+}
+
+function updateInsertGeometryUi(side) {
+    const type = document.getElementById(
+        'insert' + side + 'GeometryType'
+    ).value;
+    const extras = document.getElementById(
+        'insert' + side + 'GeometryExtras'
+    );
+    const rectangular = type === 'RectangleCuboid' ||
+        type === 'SquareCuboid';
+    const round = type === 'Cylinder' || type === 'CylinderSector';
+
+    document.getElementById('insert' + side + 'Size')
+        .parentElement.classList.toggle('hidden', !rectangular);
+
+    if (!rectangular) {
+        document.getElementById('insert' + side + 'CustomWrap')
+            .classList.add('hidden');
+    }
+
+    const visible = {
+        radius: round,
+        length: type === 'RectangleCuboid',
+        angle: type === 'CylinderSector',
+        height: rectangular || round
+    };
+
+    Object.entries(visible).forEach(function([kind, show]) {
+        extras.querySelector('[data-kind="' + kind + '"]')
+            .style.display = show ? '' : 'none';
+    });
+}
+
+function loadInsertGeometryUi(side, geometry) {
+    const def = String(geometry?.m_def || '').split('.').pop();
+    const known = [
+        'RectangleCuboid', 'SquareCuboid',
+        'Cylinder', 'CylinderSector'
+    ];
+
+    document.getElementById('insert' + side + 'GeometryType').value =
+        known.includes(def) ? def :
+        geometry && Object.keys(geometry).length ? 'keep' : '';
+
+    const extras = document.getElementById(
+        'insert' + side + 'GeometryExtras'
+    );
+
+    for (const [field, quantity] of [
+        ['radius', 'radius'],
+        ['length', 'length'],
+        ['angle', 'central_angle'],
+        ['height', 'height']
+    ]) {
+        const input = extras.querySelector('.insert-' + field);
+        const value = geometry?.[quantity];
+        input.value = value == null ? '' :
+            String(field === 'angle' ? value : Number(value) * 1000);
+    }
+
+    updateInsertGeometryUi(side);
+}
+
+function readInsertGeometryUi(side, previous) {
+    const type = document.getElementById(
+        'insert' + side + 'GeometryType'
+    ).value;
+
+    if (type === 'keep' && previous) return previous;
+    if (!type || type === 'keep') {
+        throw new Error(side + ' geometry must be selected.');
+    }
+
+    const mDef = 'nomad_material_processing.general.' + type;
+
+    if (previous?.m_def && previous.m_def !== mDef) {
+        throw new Error(
+            side + ' geometry has an existing original subtype. ' +
+            'Changing its class could discard fields; create a new insert.'
+        );
+    }
+
+    const extras = document.getElementById(
+        'insert' + side + 'GeometryExtras'
+    );
+
+    function value(field, required) {
+        const raw = extras.querySelector('.insert-' + field).value.trim();
+        if (!raw && !required) return null;
+        const n = Number(raw);
+        if (!raw || !Number.isFinite(n) || n <= 0) {
+            throw new Error(side + ': invalid ' + field + '.');
+        }
+        return n;
+    }
+
+    const result = {...(previous || {}), m_def: mDef};
+
+    if (type === 'Cylinder' || type === 'CylinderSector') {
+        result.radius = value('radius', true) / 1000;
+        if (type === 'CylinderSector') {
+            const angle = value('angle', true);
+            if (angle > 360) throw new Error('Angle must be <= 360°.');
+            result.central_angle = angle;
+        }
+    } else {
+        const width = selectedSquareSize(
+            'insert' + side + 'Size',
+            'insert' + side + 'Custom'
+        );
+        if (!Number.isFinite(width) || width <= 0) {
+            throw new Error(side + ': invalid width.');
+        }
+        result.width = width / 1000;
+        result.length = type === 'SquareCuboid'
+            ? width / 1000
+            : (value('length', false) || width) / 1000;
+    }
+
+    const height = value('height', false);
+    if (height !== null) result.height = height / 1000;
+    else delete result.height;
+
+    return result;
+}
+
 function populateEditor(data) {
     restoreTargetUploadFields();
     restoreProcessingTemplateBlock();
     data = data || {};
-    ['processingFields','holderFields','insertFields'].forEach(function(id) {
+    ['processingFields','sampleCutFields','holderFields','insertFields'].forEach(function(id) {
         document.getElementById(id).classList.add('hidden');
     });
+
+    if (currentType === 'sample_cut') {
+        document.getElementById('sampleCutFields').classList.remove('hidden');
+        document.getElementById('cutProcessName').value = '';
+        document.getElementById('cutLocation').value = '';
+        document.getElementById('cutLocationOther').value = '';
+        document.getElementById('cutLocationOtherWrapper').classList.add('hidden');
+        document.getElementById('cutDescription').value = '';
+    }
 
     if (currentType === 'processing_recipe') {
         document.getElementById('processingFields').classList.remove('hidden');
@@ -2832,12 +3853,38 @@ function populateEditor(data) {
         const parsed = parseHolderId(data.lab_id);
         document.getElementById('holderMaterial').value = parsed ? parsed.material : 'H';
         document.getElementById('holderNumber').value = parsed ? parsed.number : 1;
+        const thickness = geometryNumber(data.thickness);
+        document.getElementById('holderThickness').value =
+            Number.isFinite(thickness) && thickness > 0
+                ? String(thickness * 1000) : '1';
         const size = parsed ? parsed.size : (inferHolderSizeMm(data) || 10);
         setSizeSelect('holderSize','holderCustomSizeWrap','holderCustomSize',size);
 
         clearHolderPositions();
         const positions = Array.isArray(data.positions) ? data.positions : [];
-        positions.forEach(addHolderPosition);
+        positions.forEach(function(position) {
+            let current = position;
+
+            if ((position.x_position == null ||
+                 position.y_position == null) &&
+                position.rho != null &&
+                position.theta != null) {
+
+                const radius = Number(position.rho);
+                const angle = Number(position.theta);
+
+                if (Number.isFinite(radius) && Number.isFinite(angle)) {
+                    const radians = angle * Math.PI / 180;
+                    current = {
+                        ...position,
+                        x_position: radius * Math.cos(radians),
+                        y_position: -radius * Math.sin(radians)
+                    };
+                }
+            }
+
+            addHolderPosition(current);
+        });
         if (!positions.length) {
             // 10x10 mm cross: A center, B right, C below, D left, E above.
             [
@@ -2863,6 +3910,9 @@ function populateEditor(data) {
         const inner = geometryXY(data.inner_geometry);
         setSizeSelect('insertOuterSize','insertOuterCustomWrap','insertOuterCustom',outer ? outer.width * 1000 : 10);
         setSizeSelect('insertInnerSize','insertInnerCustomWrap','insertInnerCustom',inner ? inner.width * 1000 : 5);
+        installInsertGeometryUi();
+        loadInsertGeometryUi('Outer', data.outer_geometry);
+        loadInsertGeometryUi('Inner', data.inner_geometry);
     }
 
     updateGeneratedId();
@@ -2872,10 +3922,16 @@ function entityNoun() {
     if (currentType === 'processing_recipe') return 'recipe';
     if (currentType === 'holder') return 'holder';
     if (currentType === 'insert') return 'insert';
+    if (currentType === 'sample_cut') return 'Sample Cut';
     return 'item';
 }
 
 async function openEditor(mode, item) {
+    if (currentType === 'sample_cut' && mode !== 'create') {
+        window.alert('Editing existing Sample Cuts is not yet enabled.');
+        return;
+    }
+
     if (mode === 'edit' && item) {
         const usage = itemUsage(item);
         if (usage.locked) {
@@ -2894,6 +3950,15 @@ async function openEditor(mode, item) {
     document.getElementById('editorStatus').textContent = '';
 
     populateEditor(item ? JSON.parse(JSON.stringify(item.data || {})) : {});
+
+    if (currentType === 'sample_cut') {
+        try {
+            await loadSampleCutParents();
+        } catch (error) {
+            document.getElementById('cutParentDetails').textContent =
+                'Could not load substrates: ' + error.message;
+        }
+    }
 
     const target = document.getElementById('targetUploadFields');
     target.classList.toggle('hidden', mode === 'edit');
@@ -2917,6 +3982,7 @@ async function openEditor(mode, item) {
             ? 'Existing ID is preserved while editing.'
             : 'The ID is generated from the structured fields and cannot be typed freely.';
 
+    document.getElementById('saveEditorButton').disabled = false;
     openModal();
 }
 
@@ -2992,6 +4058,10 @@ function readEtchingFields(data) {
 }
 
 function readCleaningFields(data) {
+    // Execution timestamps belong to Substrate Processing, not recipes.
+    delete data.datetime;
+    delete data.end_time;
+
     const recipeName =
         document.getElementById('chemicalTreatmentName').value.trim();
 
@@ -3008,6 +4078,8 @@ function readCleaningFields(data) {
     if (description) data.description = description;
     else delete data.description;
 
+    // Preserve existing NOMAD tags; not edited in the Cleaning GUI.
+
     const rows =
         Array.from(document.querySelectorAll('.cleaning-step-row'));
 
@@ -3015,6 +4087,19 @@ function readCleaningFields(data) {
         throw new Error(
             'Chemical treatment requires at least one process step.'
         );
+    }
+
+    // Store only generic instrument names in the original NOMAD schema.
+    const equipmentNames = [...new Set(rows.map(function(row) {
+        const value = row.querySelector('.cleaning-agitation').value;
+        return value === 'Sonication' ? CLEANING_INSTRUMENTS.US :
+            value === 'HP' ? CLEANING_INSTRUMENTS.HP : '';
+    }).filter(Boolean))];
+
+    if (equipmentNames.length) {
+        data.instruments = equipmentNames.map(name => ({name}));
+    } else {
+        delete data.instruments;
     }
 
     let totalDuration = 0;
@@ -3039,26 +4124,31 @@ function readCleaningFields(data) {
             );
         }
 
-        const durationMinutes =
-            Number(row.querySelector('.cleaning-duration').value);
+        const durationRaw =
+            row.querySelector('.cleaning-duration').value.trim();
+        const duration = Number(durationRaw);
 
-        if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
-            throw new Error(
-                'Step ' + number +
-                ': duration must be greater than zero.'
-            );
+        if (!durationRaw || !Number.isFinite(duration) || duration <= 0) {
+            throw new Error('Step ' + number +
+                ': duration must be greater than zero.');
         }
 
-        const temperature =
-            Number(row.querySelector('.cleaning-temperature').value);
+        const unit = row.querySelector('.cleaning-duration-unit').value;
+        const factors = {s: 1, min: 60, h: 3600};
+        if (!Object.prototype.hasOwnProperty.call(factors, unit)) {
+            throw new Error('Step ' + number + ': invalid duration unit.');
+        }
+        const durationSeconds = duration * factors[unit];
 
-        if (!Number.isFinite(temperature)) {
-            throw new Error(
-                'Step ' + number + ': temperature is required.'
-            );
+        const temperatureRaw =
+            row.querySelector('.cleaning-temperature').value.trim();
+        const temperature = temperatureRaw === '' ?
+            null : Number(temperatureRaw);
+
+        if (temperatureRaw && !Number.isFinite(temperature)) {
+            throw new Error('Step ' + number + ': invalid temperature.');
         }
 
-        const durationSeconds = durationMinutes * 60;
         totalDuration += durationSeconds;
 
         const sourceStep = row.__recipeSourceStep || {};
@@ -3072,7 +4162,7 @@ function readCleaningFields(data) {
         });
         step.name = reagent;
         step.duration = durationSeconds;
-        step.temperature = temperature;
+        if (temperature !== null) step.temperature = temperature;
 
         // NOMAD 1.0.6 CleaningStep.cleaning_reagents is a SINGLE
         // CompositeSystemReference (repeats=false), not a list.
@@ -3096,7 +4186,19 @@ function readCleaningFields(data) {
             step.cleaning_reagents = copy;
         }
         
-        // Original CleaningStep has no PDI-only agitation field.
+        const reagentReference = cleaningReferenceFromRow(row);
+        if (reagentReference) step.cleaning_reagents = reagentReference;
+        else delete step.cleaning_reagents;
+
+        const startTime = row.querySelector('.cleaning-start-time').value.trim();
+        if (startTime) step.start_time = startTime;
+        else delete step.start_time;
+
+        const agitation = row.querySelector(".cleaning-agitation").value;
+        if (agitation === 'Sonication' ||
+            agitation === 'Magnetic Stirring') {
+            step.agitation = agitation;
+        }
 
         const comment =
             row.querySelector('.cleaning-comment').value.trim();
@@ -3112,6 +4214,10 @@ function readCleaningFields(data) {
 
 
 function readAnnealingFields(data) {
+    // Execution timestamps belong to Substrate Processing, not recipes.
+    delete data.datetime;
+    delete data.end_time;
+
     // Exclude stale non-original fields from templates or previous PDI payloads.
     // Allowed root fields are taken from original AnnealingRecipe.m_def (1.0.6).
     const allowed = new Set([
@@ -3125,58 +4231,374 @@ function readAnnealingFields(data) {
     if (!recipeName) throw new Error('Recipe name is required.');
     data.name = recipeName;
     const description = document.getElementById('annealingDescription').value.trim();
-    if (description) data.description = description;
+    const atmosphereNote = annealingAtmosphereNote(
+        document.getElementById('annealingAtmosphere'),
+        document.getElementById('annealingAtmosphereCustom'),
+        document.getElementById('annealingGasFlow'),
+        true,
+        'Annealing atmosphere'
+    );
+    let combinedDescription = appendAnnealingNote(
+        description, atmosphereNote
+    );
+
+    if (document.getElementById('annealingInstrument').value === 'MBE_GC') {
+        const raw = document.getElementById(
+            'annealingPlasmaPower'
+        ).value.trim();
+
+        if (raw) {
+            const power = Number(raw);
+            if (!Number.isFinite(power) || power <= 0) {
+                throw new Error('Plasma power must be greater than 0 W.');
+            }
+            combinedDescription = appendAnnealingNote(
+                combinedDescription,
+                'Plasma power: ' + power + ' W'
+            );
+        }
+    }
+    if (combinedDescription) data.description = combinedDescription;
     else delete data.description;
 
     const instrument = document.getElementById('annealingInstrument').value;
     if (!instrument) throw new Error('Annealing instrument / location is required.');
-    const previousLocation = data.location;
-    const sameInstrument = annealingInstrumentName(data) === instrument;
-    if (sameInstrument && Array.isArray(data.instruments)) {
-        const references = data.instruments.filter(function(ref) {
-            return ref && typeof ref.reference === 'string' && ref.reference.trim() &&
-                (ref.name === instrument || (!ref.name && previousLocation === instrument));
-        });
-        if (references.length) data.instruments = references;
-        else delete data.instruments;
-    } else {
-        delete data.instruments;
-    }
+    // Original NOMAD InstrumentReference: generic name only.
+    const instrumentNames = {
+        MBE_GC: 'MBE8 growth chamber',
+        MBE_MC: 'MBE8 middle chamber',
+        'MBE growth chamber': 'MBE8 growth chamber',
+        'MBE 2nd transfer chamber': 'MBE8 middle chamber'
+    };
+    data.instruments = [{name: instrumentNames[instrument] || instrument}];
     data.location = instrument;
+    if (instrument === 'MBE_GC' || instrument === 'MBE_MC') {
+        const allowed = new Set(['', 'Vacuum', 'O2', 'Ar']);
+        const atmosphere = document.getElementById(
+            'annealingAtmosphere'
+        ).value;
+        if (!allowed.has(atmosphere)) {
+            throw new Error('MBE atmosphere must be Vacuum, O2 or Ar.');
+        }
+        document.querySelectorAll('.annealing-step-atmosphere')
+            .forEach(function(select) {
+                if (!allowed.has(select.value)) {
+                    throw new Error(
+                        'MBE step atmosphere must be Vacuum, O2 or Ar.'
+                    );
+                }
+            });
+    }
+
     const rows = Array.from(document.querySelectorAll('.annealing-step-row'));
     if (!rows.length) throw new Error('Annealing requires at least one process step.');
     let totalDuration = 0;
     data.steps = rows.map(function(row, index) {
-        const number = index + 1;
-        const startRaw = row.querySelector('.annealing-starting-temperature').value.trim();
-        const endRaw = row.querySelector('.annealing-ending-temperature').value.trim();
-        const durationRaw = row.querySelector('.annealing-duration').value.trim();
-        if (!endRaw || !Number.isFinite(Number(endRaw))) {
-            throw new Error('Step ' + number + ': ending temperature is required.');
-        }
-        if (startRaw && !Number.isFinite(Number(startRaw))) {
-            throw new Error('Step ' + number + ': invalid starting temperature.');
-        }
-        if (!durationRaw || !Number.isFinite(Number(durationRaw)) ||
-            Number(durationRaw) <= 0) {
-            throw new Error('Step ' + number + ': duration must be greater than zero.');
-        }
-        const step = originalAnnealingStep(row.__recipeSourceStep || {});
-        step.name = step.name || 'Step ' + number;
-        if (startRaw) step.starting_temperature = Number(startRaw);
-        else delete step.starting_temperature;
-        step.ending_temperature = Number(endRaw);
-        step.duration = Number(durationRaw) * 60;
+        const step = annealingStepPayload(row, index, true);
         totalDuration += step.duration;
-        const comment = row.querySelector('.annealing-comment').value.trim();
-        if (comment) step.comment = comment;
-        else delete step.comment;
         return step;
     });
     data.duration = totalDuration;
 }
 
+
+function sampleCutArchiveData() {
+    if (editorMode !== 'create')
+        throw new Error('Sample Cut editing is disabled.');
+
+    const select = document.getElementById('cutParentSample');
+    const parent = sampleCutParents.find(x => x.entryId === select.value);
+
+    if (!parent || !parent.data || !parent.uploadId || !parent.entryId ||
+        parent.data.m_def !== 'pdi_nomad_plugin.mbe.materials.SubstrateMbe') {
+        throw new Error('Select a fully loaded individual parent substrate.');
+    }
+
+    const fullId = String(parent.data.lab_id || '').trim();
+    if (!fullId) throw new Error('Parent lab_id is missing.');
+
+    const name = document.getElementById('cutProcessName').value.trim();
+    if (!name) throw new Error('Process name is missing.');
+
+    const count = Number(document.getElementById('cutChildCount').value);
+    if (!Number.isSafeInteger(count) || count < 1 || count > 100) {
+        throw new Error('Child count must be an integer from 1 to 100.');
+    }
+
+    const dim = (id, fallback) => {
+        const raw = document.getElementById(id).value.trim();
+        const value = raw ? Number(raw) : fallback;
+        if (!Number.isFinite(value) || value <= 0) {
+            throw new Error('Invalid positive dimension: ' + id);
+        }
+        return value;
+    };
+
+    const pg = parent.data.geometry || {};
+    const pw = mm(pg.width);
+    const pl = mm(pg.length) ?? pw;
+    const pr = mm(pg.radius);
+    const ph = mm(pg.height);
+
+    let parentArea;
+
+    if (Number.isFinite(pw) && Number.isFinite(pl) && pw > 0 && pl > 0) {
+        parentArea = pw * pl;
+    } else if (Number.isFinite(pr) && pr > 0) {
+        const angle = pg.central_angle == null
+            ? 360 : Number(pg.central_angle);
+        if (!(angle > 0 && angle <= 360))
+            throw new Error('Invalid parent sector angle.');
+        parentArea = Math.PI * pr * pr * angle / 360;
+    } else {
+        throw new Error('Parent geometry missing or unsupported.');
+    }
+
+    const height = dim('cutChildHeight', ph);
+
+    if (Number.isFinite(ph) && height > ph + 1e-8) {
+        throw new Error('Child thickness exceeds parent thickness.');
+    }
+
+    const shape = document.getElementById('cutChildShape').value;
+    let geometry;
+    let area;
+
+    if (shape === 'rectangle') {
+        const w = dim('cutChildWidth');
+        const l = dim('cutChildLength');
+        area = w * l;
+
+        geometry = Math.abs(w - l) < 1e-8
+            ? {
+                m_def: 'nomad_material_processing.general.SquareCuboid',
+                width: w / 1000,
+                height: height / 1000
+            }
+            : {
+                m_def: 'nomad_material_processing.general.RectangleCuboid',
+                width: w / 1000,
+                length: l / 1000,
+                height: height / 1000
+            };
+
+        if (Number.isFinite(pw) && Number.isFinite(pl)) {
+            const grid = (a, b) =>
+                Math.floor((pw + 1e-8) / a) *
+                Math.floor((pl + 1e-8) / b);
+
+            if (Math.max(grid(w, l), grid(l, w)) < count) {
+                throw new Error(
+                    'Children cannot fit in a rectangular grid.'
+                );
+            }
+        } else if (Number.isFinite(pr) &&
+                   Math.hypot(w, l) > 2 * pr + 1e-8) {
+            throw new Error(
+                'Child rectangle exceeds parent diameter.'
+            );
+        }
+
+    } else if (shape === 'circle' || shape === 'circular_sector') {
+        const radius = dim('cutChildRadius');
+        const angle = shape === 'circle'
+            ? 360 : dim('cutChildAngle');
+
+        if (angle > 360)
+            throw new Error('Central angle exceeds 360 degrees.');
+
+        area = Math.PI * radius * radius * angle / 360;
+
+        geometry = {
+            m_def: shape === 'circle'
+                ? 'nomad_material_processing.general.Cylinder'
+                : 'nomad_material_processing.general.CylinderSector',
+            radius: radius / 1000,
+            height: height / 1000
+        };
+
+        if (shape === 'circular_sector')
+            geometry.central_angle = angle;
+
+        if (Number.isFinite(pr) && radius > pr + 1e-8)
+            throw new Error('Child radius exceeds parent radius.');
+
+        if (Number.isFinite(pw) && Number.isFinite(pl) &&
+            shape === 'circle' &&
+            (2 * radius > pw + 1e-8 || 2 * radius > pl + 1e-8)) {
+            throw new Error(
+                'Child circle exceeds parent dimensions.'
+            );
+        }
+
+    } else {
+        throw new Error('Unsupported child geometry.');
+    }
+
+    if (area * count > parentArea * (1 + 1e-8)) {
+        throw new Error(
+            'Total child area (' + (area * count).toFixed(2) +
+            ' mm²) exceeds parent area (' +
+            parentArea.toFixed(2) + ' mm²).'
+        );
+    }
+
+    // Cutting losses and general 2D packing are not modeled.
+    const locationChoice = document.getElementById('cutLocation').value;
+    const location = locationChoice === 'Elsewhere'
+        ? document.getElementById('cutLocationOther').value.trim()
+        : locationChoice;
+
+    if (locationChoice === 'Elsewhere' && !location)
+        throw new Error('Specify the Elsewhere location.');
+
+    const data = {
+        m_def: 'pdi_nomad_plugin.general.schema.SampleCutPDI',
+        lab_id: 'CUT_' + safeFilenamePart(fullId) + '_' + timestampPart(),
+        name: name,
+        datetime: new Date().toISOString(),
+        number_of_samples: count,
+        parent_sample: {
+            reference: '../uploads/' + parent.uploadId +
+                '/archive/' + parent.entryId + '#/data'
+        },
+        children_geometry: geometry,
+        trigger_cut_sample: true
+    };
+
+    if (location) data.location = location;
+
+    const notes = document.getElementById('cutDescription').value.trim();
+    if (notes) data.description = notes;
+
+    return data;
+}
+
+async function verifySampleCutChildren(uploadId, filename, original) {
+    const cuts = await queryEntriesBySchema(
+        'pdi_nomad_plugin.general.schema.SampleCutPDI'
+    );
+
+    const cut = cuts.find(x =>
+        x.uploadId === uploadId &&
+        (x.mainfile === filename ||
+         String(x.mainfile || '').endsWith('/' + filename))
+    );
+
+    if (!cut || !cut.entryId) {
+        throw new Error(
+            'Saved cut not indexed yet. Check NOMAD before retrying.'
+        );
+    }
+
+    async function read(id) {
+        const response = await fetch(
+            nomadApiBase() + '/entries/' +
+            encodeURIComponent(id) + '/archive'
+        );
+
+        if (!response.ok)
+            throw new Error(
+                'Cannot read archive ' + id +
+                ': HTTP ' + response.status
+            );
+
+        const obj = await response.json();
+        const wrapper = obj.data || obj.archive || obj;
+        const archive = wrapper.archive || wrapper;
+        return archive.data || archive;
+    }
+
+    const processed = await read(cut.entryId);
+
+    if (processed.m_def !== original.m_def ||
+        processed.lab_id !== original.lab_id ||
+        processed.number_of_samples !== original.number_of_samples ||
+        processed.trigger_cut_sample === true) {
+        throw new Error('Processed Sample Cut archive is inconsistent.');
+    }
+
+    const children = processed.children_samples || [];
+
+    if (children.length !== original.number_of_samples) {
+        throw new Error(
+            'Found ' + children.length + ' of ' +
+            original.number_of_samples + ' child references.'
+        );
+    }
+
+    const parentEntryId = original.parent_sample.reference
+        .split('/archive/')[1].split('#')[0];
+
+    const parent = sampleCutParents.find(
+        x => x.entryId === parentEntryId
+    );
+
+    if (!parent || !parent.data || !parent.data.lab_id)
+        throw new Error('Parent ID unavailable for verification.');
+
+    const seen = new Set();
+
+    await Promise.all(children.map(async (child, i) => {
+        const ref = String(child.reference || '');
+        const match = ref.match(/\/archive\/([^#?/]+)/);
+
+        if (!match || seen.has(match[1]) ||
+            !ref.includes('/uploads/' + uploadId + '/archive/')) {
+            throw new Error(
+                'Invalid, duplicate or wrong-upload child reference.'
+            );
+        }
+
+        seen.add(match[1]);
+
+        const created = await read(match[1]);
+        const expected = parent.data.lab_id + '.' + (i + 1);
+
+        if (created.lab_id !== expected || created.name !== expected) {
+            throw new Error(
+                'Child ID mismatch: expected ' + expected
+            );
+        }
+
+        const parentRef = String(
+            created.parent_sample?.reference || ''
+        );
+
+        if (!parentRef.includes('/archive/' + parentEntryId)) {
+            throw new Error(
+                'Missing parent reference for ' + expected
+            );
+        }
+
+        if (!created.geometry ||
+            created.geometry.m_def !== original.children_geometry.m_def) {
+            throw new Error(
+                'Child geometry schema mismatch for ' + expected
+            );
+        }
+
+        for (const key of [
+            'width', 'length', 'height', 'radius', 'central_angle'
+        ]) {
+            if (original.children_geometry[key] !== undefined &&
+                (!Number.isFinite(Number(created.geometry[key])) ||
+                 Math.abs(
+                     Number(created.geometry[key]) -
+                     original.children_geometry[key]
+                 ) > 1e-8)) {
+                throw new Error(
+                    'Child geometry mismatch: ' + key
+                );
+            }
+        }
+    }));
+
+    return children.length;
+}
+
 function editorArchiveData() {
+    if (currentType === 'sample_cut') return sampleCutArchiveData();
     const existing = editorItem && editorMode === 'edit'
         ? JSON.parse(JSON.stringify(editorItem.data || {}))
         : {};
@@ -3236,6 +4658,12 @@ function editorArchiveData() {
 
 
     if (currentType === 'holder') {
+        const thicknessMm = Number(document.getElementById('holderThickness').value);
+        if (!Number.isFinite(thicknessMm) || thicknessMm <= 0) {
+            throw new Error('Holder thickness must be greater than zero.');
+        }
+        data.thickness = thicknessMm / 1000;
+
         const rows =
             Array.from(
                 document.querySelectorAll(
@@ -3251,6 +4679,9 @@ function editorArchiveData() {
 
         const names =
             new Set();
+
+        const existingPositions = Array.isArray(data.positions)
+            ? data.positions : [];
 
         data.positions =
             rows.map(
@@ -3343,12 +4774,35 @@ function editorArchiveData() {
                         );
                     }
 
-                    return {
-                        name:
-                            name,
+                    const previous = existingPositions.find(function(pos) {
+                        return String(pos.name || '').trim().toUpperCase() === name;
+                    });
 
+                    const previousGeometry = previous?.slot_geometry || {};
+                    const squareDef = 'nomad_material_processing.general.SquareCuboid';
+
+                    if (previousGeometry.m_def &&
+                        previousGeometry.m_def !== squareDef) {
+                        throw new Error(
+                            'Position ' + name +
+                            ' has a different original geometry. ' +
+                            'Cannot replace it silently.'
+                        );
+                    }
+
+                    return {
+                        ...(previous || {}),
+                        name,
                         x_position: (rho / 1000) * Math.cos(theta * Math.PI / 180),
-                        y_position: -(rho / 1000) * Math.sin(theta * Math.PI / 180)
+                        y_position: -(rho / 1000) * Math.sin(theta * Math.PI / 180),
+                        rho: rho / 1000,
+                        theta: theta,
+                        slot_geometry: {
+                            ...previousGeometry,
+                            m_def: squareDef,
+                            width: size / 1000,
+                            length: size / 1000
+                        }
                     };
                 }
             );
@@ -3361,9 +4815,12 @@ function editorArchiveData() {
 }
 
     if (currentType === 'insert') {
-        // Do not serialize unverified insert geometry subsections.
-        delete data.outer_geometry;
-        delete data.inner_geometry;
+        data.outer_geometry = readInsertGeometryUi(
+            'Outer', data.outer_geometry
+        );
+        data.inner_geometry = readInsertGeometryUi(
+            'Inner', data.inner_geometry
+        );
         delete data.tags;
     }
 
@@ -3412,11 +4869,67 @@ async function uploadArchive(uploadId, filename, data, overwrite) {
     return result;
 }
 
+
+function showSampleCutSuccess(count) {
+    document.getElementById('sampleCutSuccessNotice')?.remove();
+
+    const banner = document.createElement('div');
+    banner.id = 'sampleCutSuccessNotice';
+    banner.setAttribute('role', 'status');
+    banner.setAttribute('aria-live', 'polite');
+
+    banner.textContent =
+        '✓ Sample Cut successful — ' +
+        count + ' child samples created and verified.';
+
+    banner.style.position = 'sticky';
+    banner.style.top = '0';
+    banner.style.zIndex = '1000';
+    banner.style.padding = '12px 16px';
+    banner.style.margin = '0 0 12px';
+    banner.style.background = '#eaf6eb';
+    banner.style.color = '#173b22';
+    banner.style.border = '1px solid #6da778';
+    banner.style.borderRadius = '8px';
+
+    document.body.insertBefore(banner, document.body.firstChild);
+
+    document.addEventListener('click', function dismiss() {
+        banner.remove();
+    }, {capture: true, once: true});
+}
+
 async function saveEditor(event) {
     event.preventDefault();
     const button = document.getElementById('saveEditorButton');
     const status = document.getElementById('editorStatus');
+    const form = document.getElementById('editorForm');
+
+    // Validate visible controls only. Hidden editor sections must not
+    // silently block submission through native HTML validation.
+    const invalid = Array.from(
+        form.querySelectorAll('input, select, textarea')
+    ).filter(function(input) {
+        return !input.disabled &&
+            input.getClientRects().length > 0 &&
+            !input.checkValidity();
+    });
+
+    if (invalid.length) {
+        const fields = invalid.map(function(input) {
+            const label = input.closest('div')?.querySelector('label');
+            return (label?.textContent || input.id ||
+                input.className || 'Unknown field').trim() +
+                ': ' + input.validationMessage;
+        });
+        status.textContent = 'Please check: ' + fields.join('; ');
+        invalid[0].focus();
+        return;
+    }
+
     button.disabled = true;
+    let cutWriteAttempted = false;
+    let verifiedChildren = null;
     try {
         // Original NOMAD sections without a verified EntryArchive.data root
         // must never reach the HTTP PUT path. This is an app-level safety
@@ -3461,6 +4974,22 @@ async function saveEditor(event) {
                 currentItems = latestItems;
             }
             assertUniqueGeneratedId(data.lab_id);
+            if (currentType === 'sample_cut') {
+                const parentId = data.parent_sample.reference
+                    .split('/archive/')[1].split('#')[0];
+
+                if (latestItems.some(x => {
+                    const ref = String(
+                        x.data?.parent_sample?.reference || ''
+                    );
+                    return (ref.split('/archive/')[1] || '')
+                        .split('#')[0] === parentId;
+                })) {
+                    throw new Error(
+                        'Parent already cut. Reload the sample list.'
+                    );
+                }
+            }
 
             uploadId = document.getElementById('targetUpload').value;
             if (!uploadId) throw new Error('Select a target upload first.');
@@ -3468,18 +4997,37 @@ async function saveEditor(event) {
             status.textContent = 'Creating new ' + entityNoun() + '...';
         }
 
+        if (currentType === 'sample_cut') cutWriteAttempted = true;
+
         await uploadArchive(uploadId, filename, data, overwrite);
-        status.textContent = 'Saved successfully.';
+
+        if (currentType === 'sample_cut') {
+            status.textContent = 'Checking generated child archives...';
+            const n = await verifySampleCutChildren(
+                uploadId, filename, data
+            );
+            verifiedChildren = n;
+            status.textContent =
+                'Verified ' + n + ' child substrates.';
+        } else {
+            status.textContent = 'Saved successfully.';
+        }
 
         if (currentType === 'processing_recipe') {
             allProcessingCatalogs[currentSubtype] = await queryEntriesBySchema(currentSchema());
         }
         await loadCurrentType();
         closeModal();
+
+        if (currentType === 'sample_cut' && verifiedChildren !== null) {
+            showSampleCutSuccess(verifiedChildren);
+        }
     } catch (error) {
-        status.textContent = 'Error: ' + error.message;
+        status.textContent = (cutWriteAttempted
+            ? 'Cut upload attempted. Do not retry before checking NOMAD: '
+            : 'Error: ') + error.message;
     } finally {
-        button.disabled = false;
+        button.disabled = cutWriteAttempted;
     }
 }
 
@@ -3513,8 +5061,6 @@ async function loadUploads() {
 }
 
 function populateStaticControls() {
-    const removedCutEditor = document.getElementById('sampleCutFields');
-    if (removedCutEditor) removedCutEditor.remove();
     ['holderSize','insertOuterSize','insertInnerSize'].forEach(function(id) {
         fillSizeSelect(id, true);
     });
@@ -3546,7 +5092,9 @@ async function initialise() {
     document.getElementById('librarySearch').addEventListener('input', renderLibrary);
     document.getElementById('closeModalButton').addEventListener('click', closeModal);
     document.getElementById('cancelEditorButton').addEventListener('click', closeModal);
-    document.getElementById('editorForm').addEventListener('submit', saveEditor);
+    const editorForm = document.getElementById('editorForm');
+    editorForm.noValidate = true;
+    editorForm.addEventListener('submit', saveEditor);
     document.getElementById('addHolderPositionButton').addEventListener('click', function() {
         addHolderPosition({name:''});
     });
@@ -3643,3 +5191,72 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+
+// Centralized Lab Library error presentation
+(function () {
+    const errorPattern =
+        /^(error\b|please check\b|could not\b|cannot\b|failed\b|unable\b|invalid\b|missing\b|parent archive unavailable\b|cut upload attempted\b|no writable\b)/i;
+
+    function initialize() {
+        const style = document.createElement('style');
+        style.textContent = `
+            .lab-library-error {
+                color: #c62828 !important;
+                font-weight: 600;
+            }
+            @media (prefers-color-scheme: dark) {
+                .lab-library-error {
+                    color: #ff7070 !important;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+
+        function updateErrors() {
+            document.querySelectorAll(
+                '.status, #cutParentDetails'
+            ).forEach(function (element) {
+                const message = element.textContent.trim();
+                element.classList.toggle(
+                    'lab-library-error',
+                    errorPattern.test(message)
+                );
+            });
+        }
+
+        const observer = new MutationObserver(updateErrors);
+        observer.observe(document.body, {
+            subtree: true,
+            childList: true,
+            characterData: true
+        });
+
+        document.addEventListener('invalid', function (event) {
+            const field = event.target;
+            if (!field.closest || !field.closest('#editorForm')) return;
+
+            const status = document.getElementById('editorStatus');
+            if (!status) return;
+
+            const label = field.labels?.[0]?.textContent.trim()
+                || field.id || 'Field';
+
+            status.textContent =
+                'Error: ' + label + ': ' +
+                (field.validationMessage || 'Invalid value.');
+
+            status.classList.add('lab-library-error');
+        }, true);
+
+        updateErrors();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initialize, {
+            once: true
+        });
+    } else {
+        initialize();
+    }
+})();

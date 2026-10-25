@@ -22,11 +22,6 @@ PROCESS_TYPES = {
         'schema': 'nomad_material_processing.general.AnnealingRecipe',
         'processSchema': 'nomad_material_processing.general.Annealing',
     },
-    'etching': {
-        'label': 'Etching',
-        'schema': 'nomad_material_processing.general.EtchingRecipe',
-        'processSchema': 'nomad_material_processing.general.Etching',
-    },
 }
 
 # No verified upstream SampleCut or BackSideCoating process in the

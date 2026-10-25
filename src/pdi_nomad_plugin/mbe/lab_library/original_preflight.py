@@ -162,11 +162,30 @@ def validate_original_recipe(data: dict, allowed_schemas: set[str]):
             f'{qualified_name} is not an EntryArchive.data root'
         )
     assert_upstream_normalizer(cls)
-    for forbidden in ('samples', 'instruments'):
-        if data.get(forbidden):
+    if data.get('samples'):
+        raise OriginalSchemaValidationError(
+            'Reusable recipes must not embed runtime samples references'
+        )
+
+    # Generic instrument names are original NOMAD recipe metadata.
+    # Concrete runtime instrument references must remain excluded.
+    instruments = data.get('instruments')
+    if instruments is not None:
+        if not isinstance(instruments, list):
             raise OriginalSchemaValidationError(
-                f'Reusable recipes must not embed runtime {forbidden} references'
+                'Recipe instruments must be a list'
             )
+        for index, instrument in enumerate(instruments):
+            if (
+                not isinstance(instrument, dict)
+                or set(instrument) != {'name'}
+                or not isinstance(instrument.get('name'), str)
+                or not instrument['name'].strip()
+            ):
+                raise OriginalSchemaValidationError(
+                    f'Recipe instruments[{index}] must contain only a '
+                    'generic name, without lab_id or reference'
+                )
     _check_original_tree(data, cls)
     try:
         section = cls.m_from_dict(data)
