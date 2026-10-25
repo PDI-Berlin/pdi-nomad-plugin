@@ -1,8 +1,7 @@
 """Processing must only register original upstream process/schema definitions.
 
-These tests replace historic SampleCutPDI tests; there is no verified
-SampleCut upstream m_def in the three exported runtime modules. We must fail
-closed instead of running a local PDI normalizer to create children.
+Sample Cut uses the separately verified original PDI SampleCutPDI.
+It is not registered as a generic PROCESS_TYPES action.
 """
 
 from pathlib import Path
@@ -18,6 +17,11 @@ HTML = ROOT / 'src/pdi_nomad_plugin/mbe/processing/templates/index.html'
 EXPECTED = {
     'cleaning': ('CleaningRecipe', 'Cleaning'),
     'annealing': ('AnnealingRecipe', 'Annealing'),
+}
+
+
+ORIGINAL_PROCESS_CLASSES = {
+    **EXPECTED,
     'etching': ('EtchingRecipe', 'Etching'),
 }
 
@@ -45,15 +49,13 @@ def test_unverified_cut_and_coating_actions_are_not_exposed():
 
 def test_processing_reads_original_intake_substrates_and_not_pdi_fields():
     js = JS.read_text(encoding='utf-8')
-    assert (
-        "const schema = 'nomad_material_processing.general.CrystallineSubstrate';" in js
-    )
+    assert "const schema = 'pdi_nomad_plugin.mbe.materials.SubstrateMbe';" in js
     assert 'originalSubstrateFields(data)' in js
     assert 'substance.molecular_formula' in js
     assert 'crystal.surface_orientation' in js
-    assert 'pdi_nomad_plugin.mbe.materials.SubstrateMbe' not in js
+    assert 'pdi_nomad_plugin.mbe.materials.SubstrateMbe' in js
     assert 'data.as_delivered' not in js
-    assert 'data.processed' not in js
+    assert 'processed: data.processed === true' in js
     assert 'data.grown' not in js
     assert 'treatmentReferencesSubstrate(treatment, substrate.entryId)' in js
     assert '<option value="grown">' not in HTML.read_text(encoding='utf-8')
@@ -77,7 +79,7 @@ def test_process_data_includes_original_recipe_steps_and_references():
 
 
 def test_original_upstream_process_fields_are_real():
-    for _, (recipe_name, process_name) in EXPECTED.items():
+    for _, (recipe_name, process_name) in ORIGINAL_PROCESS_CLASSES.items():
         recipe = getattr(original, recipe_name).m_def
         process = getattr(original, process_name).m_def
         for field in ['name', 'datetime', 'recipe']:

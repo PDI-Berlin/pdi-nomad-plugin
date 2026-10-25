@@ -61,7 +61,7 @@ def test_original_geometry_and_batch_roundtrip(client, cls, changes):
     assert payload['expected_substrate_count'] == 3
     assert len(payload['archives']) == 1
     item = payload['archives'][0]
-    assert item['filename'] == 'TEST_001_A.SubstrateBatch.archive.json'
+    assert item['filename'] == 'TEST_SrTiO3_001_001_A.SubstrateBatch.archive.json'
     data = item['data']
     assert data['m_def'] == SubstrateBatchMbe.m_def.qualified_name()
     assert data['number_of_substrates'] == 3

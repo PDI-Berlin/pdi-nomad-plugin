@@ -120,6 +120,7 @@ def test_cleaning_reference_object_and_no_fictitious_reagent(selected, keep_refe
         },querySelectorAll:function(sel){return sel==='.cleaning-step-row'?[row]:[];}};
     """)
     ctx.eval(_extract_js_function(source, 'cleaningReagentName'))
+    ctx.eval(_extract_js_function(source, 'cleaningReferenceFromRow'))
     ctx.eval(_extract_js_function(source, 'readCleaningFields'))
     data = json.loads(
         ctx.eval(

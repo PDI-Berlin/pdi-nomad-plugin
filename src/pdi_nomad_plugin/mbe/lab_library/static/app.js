@@ -4187,8 +4187,9 @@ function readCleaningFields(data) {
         }
         
         const reagentReference = cleaningReferenceFromRow(row);
+        // Preserve an existing reference for an unchanged reagent.
+        // Explicitly entered reference fields take precedence.
         if (reagentReference) step.cleaning_reagents = reagentReference;
-        else delete step.cleaning_reagents;
 
         const startTime = row.querySelector('.cleaning-start-time').value.trim();
         if (startTime) step.start_time = startTime;
@@ -4270,7 +4271,17 @@ function readAnnealingFields(data) {
         'MBE growth chamber': 'MBE8 growth chamber',
         'MBE 2nd transfer chamber': 'MBE8 middle chamber'
     };
-    data.instruments = [{name: instrumentNames[instrument] || instrument}];
+    const instrumentName = instrumentNames[instrument] || instrument;
+    const previousInstrument = Array.isArray(data.instruments)
+        ? data.instruments[0] : null;
+    const previousName = previousInstrument &&
+        (instrumentNames[previousInstrument.name] || previousInstrument.name);
+    data.instruments = [
+        previousInstrument && previousInstrument.reference &&
+        previousName === instrumentName
+            ? {...previousInstrument, name: instrumentName}
+            : {name: instrumentName}
+    ];
     data.location = instrument;
     if (instrument === 'MBE_GC' || instrument === 'MBE_MC') {
         const allowed = new Set(['', 'Vacuum', 'O2', 'Ar']);

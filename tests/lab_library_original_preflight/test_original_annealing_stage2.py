@@ -147,5 +147,8 @@ def test_annealing_editor_contains_no_non_original_inputs():
         'annealing-operation-temperature',
     ):
         assert obsolete not in render
-    assert 'annealing-starting-temperature' in render
-    assert 'annealing-ending-temperature' in render
+    step_html = source.split('function annealingStepHtml(', 1)[1].split(
+        '\nfunction ', 1
+    )[0]
+    assert 'annealing-starting-temperature' in step_html
+    assert 'annealing-ending-temperature' in step_html

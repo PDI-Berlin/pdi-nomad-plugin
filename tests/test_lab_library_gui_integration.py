@@ -43,6 +43,11 @@ def test_annealing_gui_preserves_nomad_step_fields():
                     ".annealing-starting-temperature": "25",
                     ".annealing-ending-temperature": "850",
                     ".annealing-duration": "60",
+                    ".annealing-step-type": "Heating",
+                    ".annealing-specification": "duration",
+                    ".annealing-step-atmosphere": "",
+                    ".annealing-step-atmosphere-custom": "",
+                    ".annealing-step-gas-flow": "",
                     ".annealing-comment": "Updated comment"
                 };
                 return {value: fields[selector] || ""};
@@ -58,6 +63,9 @@ def test_annealing_gui_preserves_nomad_step_fields():
     for name in (
         'annealingInstrumentName',
         'originalAnnealingStep',
+        'annealingAtmosphereNote',
+        'appendAnnealingNote',
+        'annealingStepPayload',
         'readAnnealingFields',
     ):
         ctx.eval(extract_js_function(source, name))
@@ -117,6 +125,11 @@ def test_annealing_instrument_references(selected, has_reference, keep_reference
                     ".annealing-starting-temperature": "25",
                     ".annealing-ending-temperature": "850",
                     ".annealing-duration": "60",
+                    ".annealing-step-type": "Heating",
+                    ".annealing-specification": "duration",
+                    ".annealing-step-atmosphere": "",
+                    ".annealing-step-atmosphere-custom": "",
+                    ".annealing-step-gas-flow": "",
                     ".annealing-comment": "Test"
                 };
                 return {value: fields[selector] || ""};
@@ -140,6 +153,9 @@ def test_annealing_instrument_references(selected, has_reference, keep_reference
     for name in (
         'annealingInstrumentName',
         'originalAnnealingStep',
+        'annealingAtmosphereNote',
+        'appendAnnealingNote',
+        'annealingStepPayload',
         'readAnnealingFields',
     ):
         ctx.eval(extract_js_function(source, name))
@@ -157,7 +173,12 @@ def test_annealing_instrument_references(selected, has_reference, keep_reference
     if keep_reference:
         assert data['instruments'] == initial['instruments']
     else:
-        assert 'instruments' not in data
+        expected = (
+            'MBE8 middle chamber'
+            if selected == 'MBE 2nd transfer chamber'
+            else selected
+        )
+        assert data['instruments'] == [{'name': expected}]
 
     recipe = AnnealingRecipe.m_from_dict(data)
     serialized = recipe.m_to_dict(with_meta=True)
@@ -166,7 +187,8 @@ def test_annealing_instrument_references(selected, has_reference, keep_reference
     if keep_reference:
         assert serialized['instruments'][0]['reference'] == ref
     else:
-        assert not serialized.get('instruments')
+        assert serialized['instruments'][0]['name'] == expected
+        assert 'reference' not in serialized['instruments'][0]
 
 
 @pytest.mark.parametrize(
@@ -216,6 +238,7 @@ def test_cleaning_reagent_references(selected, has_reference, keep_reference):
                     ".cleaning-reagent": chosen,
                     ".cleaning-reagent-custom": "",
                     ".cleaning-duration": "2",
+                        ".cleaning-duration-unit": "min",
                     ".cleaning-temperature": "25",
                     ".cleaning-agitation": "__none__",
                     ".cleaning-comment": "Test"
@@ -242,6 +265,7 @@ def test_cleaning_reagent_references(selected, has_reference, keep_reference):
     # readCleaningFields calls cleaningReagentName at runtime. Load both
     # functions into isolated QuickJS, just as the browser loads both.
     ctx.eval(extract_js_function(source, 'cleaningReagentName'))
+    ctx.eval(extract_js_function(source, 'cleaningReferenceFromRow'))
     ctx.eval(extract_js_function(source, 'readCleaningFields'))
 
     data = json.loads(
@@ -412,18 +436,23 @@ def test_removed_cut_recipe_geometry_editor_stays_removed():
     assert 'SampleCutRecipePDI' not in source
 
 
-def test_removed_cut_recipe_shape_fields_stay_removed():
+def test_sample_cut_gui_uses_verified_original_schemas():
     source = (
         Path(__file__).resolve().parents[1]
         / 'src/pdi_nomad_plugin/mbe/lab_library/static/app.js'
     ).read_text(encoding='utf-8')
-    for old_field in (
-        'cutParentShape',
-        'cutChildShape',
-        'cutParentWidth',
-        'cutChildWidth',
+
+    for required in (
+        "document.getElementById('cutChildShape').value",
+        "dim('cutChildWidth')",
+        "'pdi_nomad_plugin.general.schema.SampleCutPDI'",
+        "'nomad_material_processing.general.SquareCuboid'",
+        "'nomad_material_processing.general.RectangleCuboid'",
+        "'nomad_material_processing.general.Cylinder'",
+        "'nomad_material_processing.general.CylinderSector'",
     ):
-        assert old_field not in source
+        assert required in source
+
     assert 'RectangularGeometryPDI' not in source
     assert 'SampleCutRecipePDI' not in source
 

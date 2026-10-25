@@ -10,7 +10,7 @@ assert.ok(stop > 0, 'Cannot isolate Processing functions');
 const calls = [];
 let rejectValidation = false;
 const sample = {
-  m_def: 'nomad_material_processing.general.CrystallineSubstrate',
+  m_def: 'pdi_nomad_plugin.mbe.materials.SubstrateMbe',
   lab_id: 'MN2490_4',
   description: 'Crystal ID: MN2490\nCharge ID: 04',
   components: [{pure_substance: {molecular_formula: 'SrTiO3'}}],
@@ -23,9 +23,21 @@ const ctx = {
   console, URLSearchParams, Date, Set, Map, Promise,
   fetch: async (url, options = {}) => {
     calls.push({url, options});
-    if (url.includes('/entries/archive/query')) return {ok: true, json: async () => ({data: [{
-      entry_id: 'entry1', upload_id: 'up1', archive: {data: sample, metadata: {entry_name: 'MN2490_4'}}
-    }]})};
+    if (url.endsWith('/entries/query')) {
+      assert.equal(options.method, 'POST');
+      const body = JSON.parse(options.body);
+      assert.equal(body.query['section_defs.definition_qualified_name'],
+        'pdi_nomad_plugin.mbe.materials.SubstrateMbe');
+      return {ok: true, json: async () => ({
+        data: [{entry_id: 'entry1', upload_id: 'up1', entry_name: 'MN2490_4'}],
+        pagination: {}
+      })};
+    }
+    if (url.endsWith('/entries/entry1/archive')) {
+      return {ok: true, json: async () => ({
+        data: {archive: {data: sample}}
+      })};
+    }
     if (url === './validate-process') return {ok: !rejectValidation, status: rejectValidation ? 422 : 200,
       json: async () => rejectValidation ? {detail: 'Rejected by original m_def'} :
         {valid: true, schema: 'nomad_material_processing.general.Cleaning'}};
@@ -33,11 +45,15 @@ const ctx = {
     throw new Error('Unexpected fetch: ' + url);
   }
 };
+// This fixture contains no existing Sample Cuts.
+ctx.cutExistingEntries = async () => [];
 vm.createContext(ctx);
 vm.runInContext(source.slice(0, stop), ctx);
 (async () => {
   const entries = await vm.runInContext('loadSubstrates()', ctx);
   assert.equal(entries.length, 1);
+  assert.equal(ctx.window.processingCutHistoryError, '',
+    'Sample Cut history must load without errors');
   assert.equal(entries[0].material, 'SrTiO3');
   assert.equal(entries[0].orientation, '0 0 1');
   assert.equal(entries[0].crystalId, 'MN2490');

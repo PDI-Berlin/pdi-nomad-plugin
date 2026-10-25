@@ -44,12 +44,17 @@ CASES = {
 
 @pytest.mark.parametrize('kind', list(CASES))
 def test_recipe_nomad_roundtrip(kind):
-    spec = LIBRARY_TYPES['processing_recipe']['schemas'][kind]
-    module, name = spec['schema'].rsplit('.', 1)
+    if kind == 'etching':
+        assert 'etching' not in LIBRARY_TYPES['processing_recipe']['schemas']
+        schema = 'nomad_material_processing.general.EtchingRecipe'
+    else:
+        schema = LIBRARY_TYPES['processing_recipe']['schemas'][kind]['schema']
+
+    module, name = schema.rsplit('.', 1)
     cls = getattr(importlib.import_module(module), name)
 
     data = {
-        'm_def': spec['schema'],
+        'm_def': schema,
         'name': 'Integration test ' + kind,
         'description': 'Preserve complete recipe metadata',
         **CASES[kind],

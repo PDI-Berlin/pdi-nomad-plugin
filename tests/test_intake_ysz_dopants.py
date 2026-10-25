@@ -61,8 +61,9 @@ def test_8ysz_original_dopant_quantities_without_nan():
     [
         {'element': 'Y', 'atomic_fraction': 0.08, 'mass_fraction': 0.08},
         {'element': 'Y', 'atomic_fraction': 0.05},
-        {'element': 'Y', 'atomic_fraction': 0.05, 'mass_fraction': float('nan')},
-        {'element': 'Y', 'atomic_fraction': 0.05, 'mass_fraction': float('inf')},
+        # Nonfinite values must reach API validation as valid JSON strings.
+        {'element': 'Y', 'atomic_fraction': 0.05, 'mass_fraction': 'NaN'},
+        {'element': 'Y', 'atomic_fraction': 0.05, 'mass_fraction': 'Infinity'},
     ],
 )
 def test_incomplete_inconsistent_or_nonfinite_fractions_fail_closed(dopant):
