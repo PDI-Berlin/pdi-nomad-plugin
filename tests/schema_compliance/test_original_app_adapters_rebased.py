@@ -26,7 +26,7 @@ def assignment(path, name):
 
 def test_library_write_policy_uses_original_sections_only():
     defs = assignment(APP / 'lab_library' / 'app.py', 'LIBRARY_TYPES')
-    for kind in ('cleaning', 'annealing', 'etching'):
+    for kind in ('cleaning', 'annealing'):
         d = defs['processing_recipe']['schemas'][kind]
         assert d['schema'].startswith('nomad_material_processing.')
         assert d['write_supported'] is True
@@ -44,7 +44,7 @@ def test_library_write_policy_uses_original_sections_only():
 
 def test_processing_intake_and_search_keep_newer_original_migration():
     proc = assignment(APP / 'processing' / 'app.py', 'PROCESS_TYPES')
-    assert set(proc) == {'cleaning', 'annealing', 'etching'}
+    assert set(proc) == {'cleaning', 'annealing'}
     for d in proc.values():
         assert d['schema'].startswith('nomad_material_processing.')
         assert d['processSchema'].startswith('nomad_material_processing.')

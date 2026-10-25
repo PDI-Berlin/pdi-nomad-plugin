@@ -12,14 +12,14 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from schema_compliance.original_contract import (
     ROOT,
-    assert_original_archive_data,
     baseline,
 )
+from schema_compliance.test_app_schema_policy import verified_original_pdi_schema_paths
 
 APP = ROOT / 'src/pdi_nomad_plugin/mbe/lab_library/app.py'
 JS = ROOT / 'src/pdi_nomad_plugin/mbe/lab_library/static/app.js'
-HOLDER = 'nomad_material_processing.vapor_deposition.general.SubstrateHolder'
-INSERT = 'nomad_material_processing.vapor_deposition.general.InsertReduction'
+HOLDER = 'pdi_nomad_plugin.mbe.instrument.SubstrateHolderPDI'
+INSERT = 'pdi_nomad_plugin.mbe.instrument.InsertReductionPDI'
 
 
 def _registrations():
@@ -51,15 +51,11 @@ def _extract_js_function(name):
 
 def test_lab_library_registry_original_only_and_unsupported_features_removed():
     types = _registrations()
-    assert set(types) == {'processing_recipe', 'holder', 'insert'}
-    assert set(types['processing_recipe']['schemas']) == {
-        'cleaning',
-        'annealing',
-        'etching',
-    }
+    assert set(types) == {'processing_recipe', 'sample_cut', 'holder', 'insert'}
+    assert set(types['processing_recipe']['schemas']) == {'cleaning', 'annealing'}
     assert types['holder']['schema'] == HOLDER
     assert types['insert']['schema'] == INSERT
-    approved = baseline()
+    approved = set(baseline()) | verified_original_pdi_schema_paths()
 
     def iterate(data):
         if isinstance(data, dict):
@@ -99,23 +95,51 @@ def test_holder_and_insert_editor_emit_only_original_fields(kind):
                 return {value: values[q]};
             }
         }];
-        let document = {querySelectorAll: function(_) { return fakeRows; }};
+        let document = {
+            querySelectorAll: function(_) { return fakeRows; },
+            getElementById: function(id) {
+                if (id.endsWith('GeometryExtras')) {
+                    return {
+                        querySelector: function(_) { return {value: ''}; }
+                    };
+                }
+                const values = {
+                    holderThickness: '1',
+                    insertOuterGeometryType: 'SquareCuboid',
+                    insertInnerGeometryType: 'SquareCuboid'
+                };
+                return {value: values[id] || ''};
+            }
+        };
     """.replace("'%s' : '%s'", f"'{HOLDER}' : '{INSERT}'")
     )
+    ctx.eval(_extract_js_function('readInsertGeometryUi'))
     ctx.eval(_extract_js_function('editorArchiveData'))
     ctx.eval('currentType = ' + json.dumps(kind))
     archive = json.loads(ctx.eval('JSON.stringify(editorArchiveData())'))
-    assert_original_archive_data(archive, HOLDER if kind == 'holder' else INSERT)
+    from pdi_nomad_plugin.mbe.instrument import InsertReductionPDI, SubstrateHolderPDI
+
+    cls = SubstrateHolderPDI if kind == 'holder' else InsertReductionPDI
+    assert archive['m_def'] == cls.m_def.qualified_name()
+    restored = cls.m_from_dict(archive)
+    assert restored.m_to_dict(with_meta=True)['m_def'] == archive['m_def']
     assert 'tags' not in archive
     if kind == 'holder':
         p = archive['positions'][0]
         assert p['x_position'] == pytest.approx(0.01)
         assert p['y_position'] == pytest.approx(0)
-        assert 'rho' not in p and 'theta' not in p
-        # A slot's geometry was introduced in the unsupported custom PDI schema.
-        assert 'slot_geometry' not in p
+        assert p['rho'] == pytest.approx(0.01)
+        assert p['theta'] == pytest.approx(0)
+        assert (
+            p['slot_geometry']['m_def']
+            == 'nomad_material_processing.general.SquareCuboid'
+        )
+        assert p['slot_geometry']['width'] == pytest.approx(0.01)
+        assert p['slot_geometry']['length'] == pytest.approx(0.01)
+        assert archive['thickness'] == pytest.approx(0.001)
     else:
-        # Until the ORIGINAL InsertReduction geometry m_def is verified, neither
-        # section is fabricated by the editor. The writer is disabled.
-        assert 'outer_geometry' not in archive
-        assert 'inner_geometry' not in archive
+        for side, width in [('outer_geometry', 0.01), ('inner_geometry', 0.005)]:
+            geometry = archive[side]
+            assert geometry['m_def'] == 'nomad_material_processing.general.SquareCuboid'
+            assert geometry['width'] == pytest.approx(width)
+            assert geometry['length'] == pytest.approx(width)

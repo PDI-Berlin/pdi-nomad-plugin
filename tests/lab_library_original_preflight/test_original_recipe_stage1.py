@@ -1,4 +1,4 @@
-"""Original NOMAD recipe storage contracts, stage 1: Cleaning + Etching.
+"""Original NOMAD recipe storage contracts, stage 1: Cleaning.
 
 Do not replace or reimplement metainfo schema or normalizers here.
 """
@@ -12,7 +12,6 @@ import pytest
 MODULE = 'nomad_material_processing.general'
 REGISTERED = {
     'cleaning': ('CleaningRecipe', 'Cleaning'),
-    'etching': ('EtchingRecipe', 'Etching'),
 }
 
 
@@ -43,15 +42,6 @@ def test_registered_recipe_types_are_exact_original_classes():
                 'duration': 120.0,
                 'temperature': 25.0,
                 'comment': 'Ultrasonic',
-            },
-        ),
-        (
-            'etching',
-            {
-                'name': 'HF',
-                'duration': 30.0,
-                'temperature': 20.0,
-                'comment': 'Dilute HF',
             },
         ),
     ],

@@ -48,6 +48,9 @@ def test_no_unverified_custom_app_contracts():
         assert 'RectangularGeometryPDI' not in text, str(path)
     processing = js[0].read_text(encoding='utf-8-sig')
     library = js[1].read_text(encoding='utf-8-sig')
-    assert 'sample_cut' not in processing
+    assert (
+        "const CUT_SCHEMA = 'pdi_nomad_plugin.general.schema.SampleCutPDI';"
+        in processing
+    )
     assert 'sample_cut_recipe' not in library
     assert 'back_side_coating' not in library

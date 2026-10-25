@@ -33,6 +33,42 @@ APP_NAMES = (
 QUALIFIED = re.compile(r'pdi_nomad_plugin(?:\.[A-Za-z_]\w*){2,}')
 
 
+ORIGINAL_PDI_CLASSES = {
+    'src/pdi_nomad_plugin/general/schema.py': ('SampleCutPDI',),
+    'src/pdi_nomad_plugin/mbe/materials.py': ('SubstrateMbe', 'SubstrateBatchMbe'),
+    'src/pdi_nomad_plugin/mbe/instrument.py': (
+        'SubstrateHolderPDI',
+        'InsertReductionPDI',
+    ),
+}
+
+
+def verified_original_pdi_schema_paths():
+    """Allow only named original classes from unchanged upstream PDI files."""
+    allowed = set()
+    for relative, names in ORIGINAL_PDI_CLASSES.items():
+        current = (ROOT / relative).read_text(encoding='utf-8-sig')
+        original = subprocess.check_output(
+            ['git', 'show', 'upstream/main:' + relative],
+            cwd=ROOT,
+        ).decode('utf-8-sig')
+        assert current.replace('\\r\\n', '\\n') == original.replace('\\r\\n', '\\n'), (
+            f'Original PDI schema modified: {relative}'
+        )
+
+        classes = {
+            node.name
+            for node in ast.parse(original).body
+            if isinstance(node, ast.ClassDef)
+        }
+        assert set(names) <= classes, f'Original classes missing: {relative}'
+
+        module = relative.removeprefix('src/').removesuffix('.py').replace('/', '.')
+        allowed.update(f'{module}.{name}' for name in names)
+
+    return allowed
+
+
 def iter_gui_and_api_sources():
     for name in APP_NAMES:
         folder = APP_ROOT / name
@@ -56,7 +92,7 @@ def test_library_registered_schema_paths_are_original():
         'LIBRARY_TYPES must be uniquely declared (read-only audit)'
     )
     registrations = ast.literal_eval(matches[0])
-    allowed = baseline()
+    allowed = set(baseline()) | verified_original_pdi_schema_paths()
     findings = []
 
     def check(node, location='LIBRARY_TYPES'):
@@ -87,6 +123,7 @@ def test_library_registered_schema_paths_are_original():
 def test_app_sources_do_not_reference_pdi_schema_classes():
     """Scan literals, including JavaScript m_def strings, without executing any GUI."""
     findings = []
+    verified_pdi = verified_original_pdi_schema_paths()
     for path in iter_gui_and_api_sources():
         content = path.read_text(encoding='utf-8-sig', errors='replace')
         for lineno, line in enumerate(content.splitlines(), 1):
@@ -95,12 +132,7 @@ def test_app_sources_do_not_reference_pdi_schema_classes():
                 final = candidate.rsplit('.', 1)[-1]
                 # Only potential schema CLASS paths, not ordinary local APIs/modules.
                 if final[:1].isupper():
-                    # Only existing, pristine PDI substrate and batch roots.
-                    intake = APP_ROOT / 'substrate_intake' / 'app.py'
-                    if path == intake and candidate in {
-                        'pdi_nomad_plugin.mbe.materials.SubstrateMbe',
-                        'pdi_nomad_plugin.mbe.materials.SubstrateBatchMbe',
-                    }:
+                    if candidate in verified_pdi:
                         continue
                     findings.append(f'{path.relative_to(ROOT)}:{lineno}: {candidate}')
     assert not findings, (
