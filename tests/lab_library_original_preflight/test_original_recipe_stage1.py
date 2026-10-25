@@ -109,7 +109,8 @@ def test_cleaning_reference_object_and_no_fictitious_reagent(selected, keep_refe
        var row={__recipeSourceStep:originalStep,
         querySelector:function(selector){
            const fields={'.cleaning-reagent':chosen,'.cleaning-reagent-custom':'',
-            '.cleaning-duration':'2','.cleaning-temperature':'25',
+            '.cleaning-duration':'2','.cleaning-duration-unit':'min',
+            '.cleaning-temperature':'25',
             '.cleaning-agitation':'__none__','.cleaning-comment':'Test'};
            return {value:fields[selector]||''};
         }};

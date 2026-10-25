@@ -45,6 +45,14 @@ def test_lab_library_only_exposes_verified_original_schemas():
             'nomad_material_processing.vapor_deposition.general.FilledSubstrateHolder',
         }
     )
+    # Existing PDI classes; their pristine upstream source is verified separately.
+    allowed.update(
+        {
+            'pdi_nomad_plugin.general.schema.SampleCutPDI',
+            'pdi_nomad_plugin.mbe.instrument.SubstrateHolderPDI',
+            'pdi_nomad_plugin.mbe.instrument.InsertReductionPDI',
+        }
+    )
     found = []
     for spec in LIBRARY_TYPES.values():
         blocks = spec.get('schemas', {'single': spec})

@@ -30,10 +30,19 @@ def test_library_write_policy_uses_original_sections_only():
         d = defs['processing_recipe']['schemas'][kind]
         assert d['schema'].startswith('nomad_material_processing.')
         assert d['write_supported'] is True
-    for kind in ('holder', 'insert'):
+    from schema_compliance.test_app_schema_policy import (
+        verified_original_pdi_schema_paths,
+    )
+
+    approved = verified_original_pdi_schema_paths()
+    for kind, schema in (
+        ('holder', 'pdi_nomad_plugin.mbe.instrument.SubstrateHolderPDI'),
+        ('insert', 'pdi_nomad_plugin.mbe.instrument.InsertReductionPDI'),
+    ):
         d = defs[kind]
-        assert d['schema'].startswith('nomad_material_processing.')
-        assert d['write_supported'] is False
+        assert d['schema'] == schema
+        assert schema in approved
+        assert d['write_supported'] is True
     js = (APP / 'lab_library' / 'static' / 'app.js').read_text(encoding='utf-8')
     save = js.split('async function saveEditor(event) {', 1)[1]
     assert 'definition.write_supported !== true' in save

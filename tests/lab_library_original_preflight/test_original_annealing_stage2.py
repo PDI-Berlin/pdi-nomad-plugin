@@ -85,13 +85,20 @@ def test_gui_annealing_sends_only_original_mdef_fields():
     ctx.eval("""
        var document={
          getElementById:function(id){return {value:({annealingRecipeName:'STO',
-           annealingDescription:'Original only',annealingInstrument:'Tube furnace'})[id]||''}},
+           annealingDescription:'Original only',annealingInstrument:'Tube furnace',
+           annealingAtmosphere:'O2',annealingAtmosphereCustom:'',
+           annealingGasFlow:''})[id]||''}},
          querySelectorAll:function(){return [{
            __recipeSourceStep:{operation_temperature:950,ramp_rate:1,starting_temperature:25},
            querySelector:function(sel){return {value:({
              '.annealing-starting-temperature':'25',
              '.annealing-ending-temperature':'950',
              '.annealing-duration':'30',
+             '.annealing-step-type':'Heating',
+             '.annealing-specification':'duration',
+             '.annealing-step-atmosphere':'',
+             '.annealing-step-atmosphere-custom':'',
+             '.annealing-step-gas-flow':'',
              '.annealing-comment':'Test'})[sel]||''}}
          }]}
        };
@@ -99,6 +106,9 @@ def test_gui_annealing_sends_only_original_mdef_fields():
     for fn in (
         'annealingInstrumentName',
         'originalAnnealingStep',
+        'annealingAtmosphereNote',
+        'appendAnnealingNote',
+        'annealingStepPayload',
         'readAnnealingFields',
     ):
         ctx.eval(_extract_function(source, fn))
@@ -116,6 +126,7 @@ def test_gui_annealing_sends_only_original_mdef_fields():
     assert payload['steps'][0]['ending_temperature'] == 950
     assert payload['duration'] == 1800
     assert 'atmosphere' not in payload
+    assert 'Atmosphere: O2' in payload['description']
     recipe = AnnealingRecipe.m_from_dict(payload)
     assert recipe.steps[0].ending_temperature.magnitude == pytest.approx(950)
 
@@ -128,9 +139,9 @@ def test_annealing_editor_contains_no_non_original_inputs():
     render = source.split('function renderAnnealingFields(', 1)[1].split(
         '\nfunction ', 1
     )[0]
+    assert 'id="annealingAtmosphere"' in render
+    assert 'id="annealingGasFlow"' in render
     for obsolete in (
-        'annealingAtmosphere',
-        'annealingGasFlow',
         'annealingRfPower',
         'annealing-ramp-rate',
         'annealing-operation-temperature',

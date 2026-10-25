@@ -11,7 +11,11 @@ SOURCE = (
 def test_processing_client_rejects_unapproved_mdefs():
     js = SOURCE.read_text(encoding='utf-8')
     assert 'const ORIGINAL_PROCESS_TYPES = Object.freeze({' in js
-    for cls in ('Cleaning', 'Annealing', 'Etching'):
+    registered = js.split('const ORIGINAL_PROCESS_TYPES = Object.freeze({', 1)[1].split(
+        '});', 1
+    )[0]
+    assert 'Etching' not in registered
+    for cls in ('Cleaning', 'Annealing'):
         for suffix in ('', 'Recipe'):
             assert 'nomad_material_processing.general.' + cls + suffix in js
     assert (

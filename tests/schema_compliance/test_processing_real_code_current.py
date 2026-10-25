@@ -25,8 +25,7 @@ def test_processing_preflight_is_really_before_put():
     assert "fetch('./validate-process'" in upload
     assert "method: 'PUT'" in upload
     assert upload.index("fetch('./validate-process'") < upload.index("method: 'PUT'")
-    assert 'pdi_nomad_plugin.mbe.materials.SubstrateMbe' not in frontend
-    assert 'nomad_material_processing.general.CrystallineSubstrate' in frontend
+    assert "schema = 'pdi_nomad_plugin.mbe.materials.SubstrateMbe';" in frontend
 
 
 def test_preflight_contains_no_metainfo_reimplementation():
@@ -67,9 +66,15 @@ def test_installed_original_process_contract(process, recipe):
     from pdi_nomad_plugin.mbe.processing.app import PROCESS_TYPES
 
     key = process.lower()
-    definition = PROCESS_TYPES[key]
-    assert definition['processSchema'] == 'nomad_material_processing.general.' + process
-    assert definition['schema'] == 'nomad_material_processing.general.' + recipe
+    if key == 'etching':
+        assert key not in PROCESS_TYPES
+    else:
+        definition = PROCESS_TYPES[key]
+        assert (
+            definition['processSchema']
+            == 'nomad_material_processing.general.' + process
+        )
+        assert definition['schema'] == 'nomad_material_processing.general.' + recipe
     for name in (process, recipe):
         cls = getattr(
             importlib.import_module('nomad_material_processing.general'), name
