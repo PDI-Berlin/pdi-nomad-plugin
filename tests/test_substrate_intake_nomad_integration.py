@@ -46,8 +46,11 @@ def client():
         (Cylinder, {'geometry_shape': 'circle', 'radius_mm': 25.4}),
         (
             CylinderSector,
-            {'geometry_shape': 'circular_sector', 'radius_mm': 25.4,
-             'sector_angle_deg': 90},
+            {
+                'geometry_shape': 'circular_sector',
+                'radius_mm': 25.4,
+                'sector_angle_deg': 90,
+            },
         ),
     ],
 )
@@ -92,13 +95,17 @@ def test_batch_retains_crystal_properties_and_physical_metadata(client):
     assert data['components'][0]['pure_substance']['molecular_formula'] == 'SrTiO3'
     assert 'Test' in data['description']
     assert data['crystal_properties']['surface_orientation']['hkl_reciprocal'] == {
-        'h_index': 0, 'k_index': 0, 'l_index': 1,
+        'h_index': 0,
+        'k_index': 0,
+        'l_index': 1,
     }
-    orientation = data['crystal_properties']['miscut'][
-        'cartesian_miscut'
-    ]['reference_orientation']
+    orientation = data['crystal_properties']['miscut']['cartesian_miscut'][
+        'reference_orientation'
+    ]
     assert orientation['hkl_direct'] == {
-        'h_index': 1, 'k_index': 1, 'l_index': 0,
+        'h_index': 1,
+        'k_index': 1,
+        'l_index': 0,
     }
     assert orientation['angle'] == pytest.approx(0.5)
 

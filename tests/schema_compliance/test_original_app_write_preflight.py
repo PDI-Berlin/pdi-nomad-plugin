@@ -47,7 +47,9 @@ def test_intake_requires_verified_entrydata_root_before_put():
     assert 'EntryArchive(data=section)' in code
     assert 'saveButton.disabled = true;' in code
     assert 'Upload a Substrate Batch and generate substrates' in code
-    guard_js = (INTAKE / 'static' / 'intake_duplicate_guard.js').read_text(encoding='utf-8')
+    guard_js = (INTAKE / 'static' / 'intake_duplicate_guard.js').read_text(
+        encoding='utf-8'
+    )
     assert 'body.directory_metadata.content' in guard_js
     assert code.index('pdiIntakeDuplicateGuard.assertNoCollision', start) < put
 
@@ -112,6 +114,7 @@ def test_real_intake_payload_and_original_root():
     pytest.importorskip('nomad')
     from nomad.datamodel.data import EntryData
     from nomad_material_processing.general import CrystallineSubstrate
+
     from pdi_nomad_plugin.mbe.materials import SubstrateBatchMbe, SubstrateMbe
 
     intake = _load_module(INTAKE / 'app.py', 'substrate_intake_under_test')

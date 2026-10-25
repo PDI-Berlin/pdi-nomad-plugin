@@ -172,9 +172,7 @@ def validate_original_recipe(data: dict, allowed_schemas: set[str]):
     instruments = data.get('instruments')
     if instruments is not None:
         if not isinstance(instruments, list):
-            raise OriginalSchemaValidationError(
-                'Recipe instruments must be a list'
-            )
+            raise OriginalSchemaValidationError('Recipe instruments must be a list')
         for index, instrument in enumerate(instruments):
             if (
                 not isinstance(instrument, dict)

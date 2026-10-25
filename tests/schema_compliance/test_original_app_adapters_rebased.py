@@ -50,7 +50,7 @@ def test_processing_intake_and_search_keep_newer_original_migration():
         assert d['processSchema'].startswith('nomad_material_processing.')
     intake = (APP / 'substrate_intake' / 'app.py').read_text(encoding='utf-8')
     assert "'m_def': 'pdi_nomad_plugin.mbe.materials.SubstrateBatchMbe'" not in intake
-    assert "SubstrateBatchMbe.m_def.qualified_name()" in intake
+    assert 'SubstrateBatchMbe.m_def.qualified_name()' in intake
     native = (APP / 'mbe_app' / '__init__.py').read_text(encoding='utf-8')
     assert 'nomad_material_processing.general.CrystallineSubstrate' in native
 

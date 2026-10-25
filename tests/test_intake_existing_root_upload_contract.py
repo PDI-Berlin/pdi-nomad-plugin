@@ -13,9 +13,16 @@ def test_existing_entry_root_preview_roundtrip_and_safe_ids():
     assert issubclass(SubstrateBatchMbe, (SubstrateMbe, EntryData))
     assert issubclass(SubstrateMbe, CrystallineSubstrate)
     form = {
-        'supplier': 'CrysTec', 'supplier_id': 'CTC', 'crystal_id': 'GSO',
-        'charge': 'P 43671/26', 'material': 'GdScO3', 'orientation': '1 1 0',
-        'count': 2, 'width_mm': 10, 'length_mm': 10, 'thickness_mm': 0.5,
+        'supplier': 'CrysTec',
+        'supplier_id': 'CTC',
+        'crystal_id': 'GSO',
+        'charge': 'P 43671/26',
+        'material': 'GdScO3',
+        'orientation': '1 1 0',
+        'count': 2,
+        'width_mm': 10,
+        'length_mm': 10,
+        'thickness_mm': 0.5,
         'polishing': 'Single-side',
         'subsections': {'electronic_properties': {'conductivity_type': 'Insulating'}},
     }
@@ -27,7 +34,9 @@ def test_existing_entry_root_preview_roundtrip_and_safe_ids():
     assert payload['root_is_entrydata'] is True
     assert len(payload['archives']) == 1
     item = payload['archives'][0]
-    assert item['filename'] == 'CTC_GdScO3_110_GSO_P-43671-26.SubstrateBatch.archive.json'
+    assert (
+        item['filename'] == 'CTC_GdScO3_110_GSO_P-43671-26.SubstrateBatch.archive.json'
+    )
     data = item['data']
     assert data['m_def'] == SubstrateBatchMbe.m_def.qualified_name()
     assert data['lab_id'] == 'CTC_GdScO3_110_GSO_P-43671-26'
@@ -36,12 +45,14 @@ def test_existing_entry_root_preview_roundtrip_and_safe_ids():
     assert data['charge_id'] == 'P 43671/26'
     assert data['electronic_properties']['conductivity_type'] == 'Insulating'
     assert data['crystal_properties']['surface_orientation']['hkl_reciprocal'] == {
-        'h_index': 1, 'k_index': 1, 'l_index': 0,
+        'h_index': 1,
+        'k_index': 1,
+        'l_index': 0,
     }
     batch = SubstrateBatchMbe.m_from_dict(data)
     assert isinstance(EntryArchive(data=batch).data, EntryData)
     assert [x['filename'] for x in payload['expected_children']] == [
-        f'CTC_GdScO3_110_GSO_P-43671-26_{n}.Substrate.archive.yaml' for n in (1,2)
+        f'CTC_GdScO3_110_GSO_P-43671-26_{n}.Substrate.archive.yaml' for n in (1, 2)
     ]
 
 
@@ -87,7 +98,5 @@ def test_negative_miller_indices_in_ids():
         ((-1, 1, 0), '-110'),
     ]:
         orientation = dict(zip(('h_index', 'k_index', 'l_index'), indices))
-        result = batch_lab_id(
-            'CTC', 'MN2371', '3434-1234-9876', 'DyScO3', orientation
-        )
+        result = batch_lab_id('CTC', 'MN2371', '3434-1234-9876', 'DyScO3', orientation)
         assert result == f'CTC_DyScO3_{expected}_MN2371_3434-1234-9876'

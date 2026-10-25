@@ -37,7 +37,7 @@ def test_feedback_asset_is_served_and_post_ack_is_not_false_success():
 
 @pytest.mark.skipif(shutil.which('node') is None, reason='Node.js not installed')
 def test_browser_success_and_failure_behavior():
-    script = r'''
+    script = r"""
 const fs = require('fs');
 const vm = require('vm');
 const assert = require('assert').strict;
@@ -117,7 +117,7 @@ function setup(fetchImpl, denyStorage=false) {
     }),/processing errors/);
     assert.equal(failure.state.reloads,0);
 })().catch(error=>{console.error(error);process.exit(1);});
-'''
+"""
     result = subprocess.run(
         ['node', '-e', script, str(HELPER)],
         check=False,

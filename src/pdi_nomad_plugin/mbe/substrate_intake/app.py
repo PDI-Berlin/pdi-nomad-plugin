@@ -125,13 +125,12 @@ def batch_lab_id(
     orientation: dict,
 ) -> str:
     indices = [orientation[k] for k in ('h_index', 'k_index', 'l_index')]
-    encode = lambda n: str(n)
+    encode = str
+    single_digit_limit = 10
     hkl = (
         ''.join(encode(n) for n in indices)
-        if all(abs(n) < 10 for n in indices)
-        else '_'.join(
-            f'{axis}{encode(n)}' for axis, n in zip('hkl', indices)
-        )
+        if all(abs(n) < single_digit_limit for n in indices)
+        else '_'.join(f'{axis}{encode(n)}' for axis, n in zip('hkl', indices))
     )
     parts = [
         safe_id_part(supplier_id),
@@ -141,7 +140,9 @@ def batch_lab_id(
         safe_id_part(charge_id),
     ]
     if not all(parts):
-        raise ValueError('Supplier, material, orientation, crystal and charge are required.')
+        raise ValueError(
+            'Supplier, material, orientation, crystal and charge are required.'
+        )
     return '_'.join(parts)
 
 
@@ -273,9 +274,7 @@ def _validate_section_tree(value, expected_cls, label):
 
     definition = selected_cls.m_def
     allowed = (
-        set(definition.all_quantities)
-        | set(definition.all_sub_sections)
-        | {'m_def'}
+        set(definition.all_quantities) | set(definition.all_sub_sections) | {'m_def'}
     )
     extra = sorted(set(value) - allowed)
     if extra:
@@ -286,7 +285,9 @@ def _validate_section_tree(value, expected_cls, label):
             type(x) not in (int, float) or not math.isfinite(x) or int(x) != x
             for x in indices
         ) or all(x == 0 for x in indices):
-            raise ValueError(f'{label}: three nonzero-together integer Miller indices required.')
+            raise ValueError(
+                f'{label}: three nonzero-together integer Miller indices required.'
+            )
     for key, subsection in definition.all_sub_sections.items():
         if key not in value or value[key] is None:
             continue
@@ -301,8 +302,8 @@ def _validate_section_tree(value, expected_cls, label):
             _validate_section_tree(item, inner_cls, f'{label}.{key}')
 
 
-
 MAX_YSZ_Y_ATOMIC_FRACTION = 2 / 5
+
 
 # UI-only 8YSZ stoichiometry check: 1-x mol ZrO2 + x mol Y2O3.
 # Stored quantities are ORIGINAL NOMAD dopant atomic_fraction/mass_fraction.
@@ -316,18 +317,21 @@ def ysz_fractions(oxide_fraction: float) -> tuple[float, float]:
     return (y / (zr + y + oxygen), y * 88.90584 / total_mass)
 
 
-
 # Intake-only adaptation for original NOMAD elemental-composition / Dopant logic.
 # Neither upstream schemas nor their normalizers are replaced or wrapped.
 def apply_ysz_host_composition(base: dict, formula: str, preset: str = '') -> None:
     dopants = base.get('dopants') or []
     ydopants = [d for d in dopants if isinstance(d, dict) and d.get('element') == 'Y']
-    if preset == '8ysz' and (formula != 'ZrO2' or len(dopants) != 1 or len(ydopants) != 1):
+    if preset == '8ysz' and (
+        formula != 'ZrO2' or len(dopants) != 1 or len(ydopants) != 1
+    ):
         raise ValueError('8YSZ requires ZrO2 with exactly one Y dopant.')
     if formula != 'ZrO2' or not ydopants:
         return
     if len(dopants) != 1:
-        raise ValueError('ZrO2/Y concentration requires one Y dopant; additional dopants cannot be safely combined.')
+        raise ValueError(
+            'ZrO2/Y concentration requires one Y dopant; additional dopants cannot be safely combined.'
+        )
     a = ydopants[0].get('atomic_fraction')
     w = ydopants[0].get('mass_fraction')
     if a is None or w is None:
@@ -338,8 +342,9 @@ def apply_ysz_host_composition(base: dict, formula: str, preset: str = '') -> No
         raise ValueError('Invalid Y dopant fractions.')
     x = 3 * a / (2 * (1 - a))
     expected_a, expected_w = ysz_fractions(x)
-    if (not math.isclose(expected_a, a, rel_tol=1e-7, abs_tol=1e-9) or
-        not math.isclose(expected_w, w, rel_tol=1e-6, abs_tol=1e-8)):
+    if not math.isclose(expected_a, a, rel_tol=1e-7, abs_tol=1e-9) or not math.isclose(
+        expected_w, w, rel_tol=1e-6, abs_tol=1e-8
+    ):
         raise ValueError('Y dopant fractions do not match the ZrO2/Y2O3 model.')
     if preset == '8ysz' and not math.isclose(x, 0.08, rel_tol=1e-6, abs_tol=1e-8):
         raise ValueError('8YSZ preset requires exactly 8 mol-% Y2O3.')
@@ -349,11 +354,18 @@ def apply_ysz_host_composition(base: dict, formula: str, preset: str = '') -> No
     atom_total = zr + oxygen + yttrium
     total_mass = zr * 91.224 + yttrium * 88.90584 + oxygen * 15.999
     base['elemental_composition'] = [
-        {'element': 'Zr', 'atomic_fraction': zr / atom_total,
-         'mass_fraction': zr * 91.224 / total_mass},
-        {'element': 'O', 'atomic_fraction': oxygen / atom_total,
-         'mass_fraction': oxygen * 15.999 / total_mass},
+        {
+            'element': 'Zr',
+            'atomic_fraction': zr / atom_total,
+            'mass_fraction': zr * 91.224 / total_mass,
+        },
+        {
+            'element': 'O',
+            'atomic_fraction': oxygen / atom_total,
+            'mass_fraction': oxygen * 15.999 / total_mass,
+        },
     ]
+
 
 def validate_dopant_fractions(base: dict, additions: dict) -> None:
     def nonfinite(value, location='subsections'):
@@ -365,6 +377,7 @@ def validate_dopant_fractions(base: dict, additions: dict) -> None:
                 nonfinite(v, f'{location}[{i}]')
         elif isinstance(value, float) and not math.isfinite(value):
             raise ValueError(f'{location}: non-finite numbers (NaN/Inf) are forbidden.')
+
     nonfinite(additions)
     dopants = additions.get('dopants')
     if not isinstance(dopants, list):
@@ -372,7 +385,8 @@ def validate_dopant_fractions(base: dict, additions: dict) -> None:
     components = base.get('components') or []
     formula = (
         (components[0].get('pure_substance') or {}).get('molecular_formula')
-        if components else None
+        if components
+        else None
     )
     for i, dopant in enumerate(dopants):
         if not isinstance(dopant, dict):
@@ -380,12 +394,18 @@ def validate_dopant_fractions(base: dict, additions: dict) -> None:
         a = dopant.get('atomic_fraction')
         w = dopant.get('mass_fraction')
         if (a is None) != (w is None):
-            raise ValueError(f'dopants[{i}]: specify both atomic and mass fractions, or neither.')
+            raise ValueError(
+                f'dopants[{i}]: specify both atomic and mass fractions, or neither.'
+            )
         if a is None:
             continue
-        if any(type(v) not in (int, float) or not math.isfinite(v) or
-               v < 0 or v > 1 for v in (a, w)):
-            raise ValueError(f'dopants[{i}]: fractions must be finite numbers in [0,1].')
+        if any(
+            type(v) not in (int, float) or not math.isfinite(v) or v < 0 or v > 1
+            for v in (a, w)
+        ):
+            raise ValueError(
+                f'dopants[{i}]: fractions must be finite numbers in [0,1].'
+            )
         if formula == 'ZrO2' and dopant.get('element') == 'Y':
             if a >= MAX_YSZ_Y_ATOMIC_FRACTION:
                 raise ValueError('YSZ: Y atomic fraction is outside ZrO2/Y2O3 model.')
@@ -412,12 +432,12 @@ def merge_original_subsections(base, additions):
     # Reference import may not silently override the three visible hkl fields.
     crystal = additions.get('crystal_properties')
     if isinstance(crystal, dict):
-        imported_hkl = (
-            crystal.get('surface_orientation') or {}
-        ).get('hkl_reciprocal')
+        imported_hkl = (crystal.get('surface_orientation') or {}).get('hkl_reciprocal')
         current_hkl = (
-            base.get('crystal_properties') or {}
-        ).get('surface_orientation', {}).get('hkl_reciprocal')
+            (base.get('crystal_properties') or {})
+            .get('surface_orientation', {})
+            .get('hkl_reciprocal')
+        )
         if imported_hkl is not None and imported_hkl != current_hkl:
             raise ValueError(
                 'Reference hkl differs from the visible orientation inputs. '
@@ -441,7 +461,9 @@ def merge_original_subsections(base, additions):
             prior = base.get(key) or {}
             merged = {**prior, **value}
             for nested in ('surface_orientation', 'miscut'):
-                if isinstance(prior.get(nested), dict) and isinstance(value.get(nested), dict):
+                if isinstance(prior.get(nested), dict) and isinstance(
+                    value.get(nested), dict
+                ):
                     merged[nested] = {**prior[nested], **value[nested]}
             base[key] = merged
         else:
@@ -470,8 +492,11 @@ async def preview_substrate_batch(data: SubstrateIntakePreview):
             raise ValueError('Surface orientation (h k l) is required.')
         material_id = '8YSZ' if data.material_preset == '8ysz' else formula
         lab_id = batch_lab_id(
-            data.supplier_id, data.crystal_id, data.charge,
-            material_id, orientation,
+            data.supplier_id,
+            data.crystal_id,
+            data.charge,
+            material_id,
+            orientation,
         )
         offcut = parse_offcut_direction(data.offcut_direction)
         if data.offcut_angle is not None:
