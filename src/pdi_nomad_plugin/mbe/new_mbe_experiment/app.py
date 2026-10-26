@@ -65,3 +65,11 @@ async def mbe_drafts_javascript():
         STATIC_DIR / 'mbe_drafts.js',
         media_type='application/javascript',
     )
+
+
+@app.get('/static/mbe_nomad_write.js')
+async def mbe_nomad_write_javascript():
+    return FileResponse(
+        STATIC_DIR / 'mbe_nomad_write.js',
+        media_type='application/javascript',
+    )

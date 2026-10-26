@@ -1,7 +1,7 @@
 /*
  * Local-only MBE draft exporter. This file does not call NOMAD APIs and
- * does not create EntryArchive.data. Every m_def below is an unchanged
- * upstream NOMAD section; UI-only metadata is deliberately outside them.
+ * does not create EntryArchive.data. Every m_def below uses an unchanged
+ * original PDI or NOMAD section; UI-only metadata is deliberately outside them.
  * The result is NOT a valid NOMAD archive and MUST NOT be uploaded as one.
  */
 (function (root, factory) {
@@ -10,9 +10,12 @@
     if (root) root.NomadMbeDrafts = api;
 })(typeof window !== 'undefined' ? window : null, function () {
     'use strict';
-    const MBE = 'nomad_material_processing.vapor_deposition.pvd.mbe.MolecularBeamEpitaxy';
-    const FILLED = 'nomad_material_processing.vapor_deposition.general.FilledSubstrateHolder';
-    const POSITION = 'nomad_material_processing.vapor_deposition.general.FilledSubstrateHolderPosition';
+    const MBE = 'pdi_nomad_plugin.mbe.processes.ExperimentMbePDI';
+    const FILM = 'pdi_nomad_plugin.mbe.materials.ThinFilmMbe';
+    const STACK = 'pdi_nomad_plugin.mbe.materials.ThinFilmStackMbePDI';
+    const FILM_REF = 'nomad_material_processing.general.ThinFilmReference';
+    const FILLED = 'pdi_nomad_plugin.mbe.instrument.FilledSubstrateHolderPDI';
+    const POSITION = 'pdi_nomad_plugin.mbe.instrument.FilledSubstrateHolderPositionPDI';
     const SAMPLE_REF = 'nomad.datamodel.metainfo.basesections.v1.CompositeSystemReference';
     const INSERT_REF = 'nomad_material_processing.vapor_deposition.general.InsertReductionReference';
     const SUPPORTED_GEOMETRIES = new Set([
@@ -42,7 +45,6 @@
         const holder = state.holder;
         const holderRef = makeRef(holder.uploadId, holder.entryId);
         const warnings = [];
-        const samples = [];
         const filledPositions = [];
         const localPositions = [];
 
@@ -53,9 +55,8 @@
                 name: name
             };
             const coords = xyFromPosition(position, name);
-            positionData.x_position = coords.x_position;
-            positionData.y_position = coords.y_position;
-            const slot = position.slot_geometry;
+            Object.assign(positionData, coords);
+            const slot = position.slotGeometry || position.slot_geometry;
             if (slot && SUPPORTED_GEOMETRIES.has(slot.m_def)) {
                 const allowed = slot.m_def.endsWith('CylinderSector')
                     ? ['height', 'radius', 'central_angle']
@@ -85,7 +86,6 @@
                     throw new Error('Position ' + name + ': substrate lacks a NOMAD archive reference.');
                 }
                 positionData.substrate = {m_def: SAMPLE_REF, reference: sampleRef};
-                samples.push({m_def: SAMPLE_REF, reference: sampleRef});
             } else if (position.position_usage === 'si_dummy' ||
                        position.position_usage === 'sapphire_dummy') {
                 warnings.push('Position ' + name + ': dummy is GUI-only; no ' +
@@ -104,21 +104,51 @@
             m_def: MBE,
             name: String(state.growthRunId).trim(),
             lab_id: String(state.growthRunId).trim(),
-            method: 'Molecular Beam Epitaxy',
-            samples: samples
+            method: 'Molecular Beam Epitaxy'
+            // The original normalizer populates samples and creates _lyr_1.
+            // Pre-populating samples would suppress automatic layer creation!
         };
+        const postNormalization = [];
+        const growthId = String(state.growthRunId).trim();
+        for (const p of localPositions) {
+            if (p.usage !== 'substrate') continue;
+            const stackId = growthId + '_' + p.name;
+            const extra = layers.slice(1).map(function(layer, index) {
+                const layerId = stackId + '_lyr_' + (index + 2);
+                return {
+                    layer_number: index + 2,
+                    filename: layerId + '.archive.yaml',
+                    thin_film: {m_def: FILM, name: layerId, lab_id: layerId},
+                    // A reference cannot be assigned until this archive is created.
+                    stack_reference_type: FILM_REF,
+                    nominal_properties_local_only: layer
+                };
+            });
+            postNormalization.push({
+                holder_position: p.name,
+                stack_id: stackId,
+                expected_stack_type: STACK,
+                mandatory_layer_1: stackId + '_lyr_1',
+                extra_layer_archives: extra
+            });
+        }
         return {
-            format: 'pdi-local-mbe-draft-v1',
+            format: 'pdi-local-mbe-draft-v2',
             nomad_archive: false,
-            notice: 'Local planning export only. Sections are original NOMAD types ' +
-                'but neither section is a verified EntryArchive.data root. Do not upload.',
+            notice: 'Local planning export only. Original PDI EntryData roots are used, ' +
+                'but this planning preview is not validated for upload. Do not upload.',
             original_sections: {mbe: mbe, filled_holder: filled},
             local_planning_only: {
                 combined_id: String(state.growthRunId).trim() + '@' + holder.id,
                 nominal_layers: layers,
                 position_usage: localPositions
             },
-            warnings: warnings
+            post_normalization_plan: postNormalization,
+            warnings: warnings.concat([
+                'Each _lyr_1 is created by the original ExperimentMbePDI normalizer.',
+                'Additional layer archives and stack links are PLANNED ONLY, not uploaded.',
+                'The original experiment must have samples absent or empty before normalization.'
+            ])
         };
     }
     return {build: build};

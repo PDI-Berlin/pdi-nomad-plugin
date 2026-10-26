@@ -31,12 +31,15 @@ function nomadApiBase() {
 const experimentState = {
     growthRunId: '',
     holder: null,
-    positions: {}
+    positions: {},
+    // UI planning data. This is not a new NOMAD metainfo quantity.
+    nominalLayers: [{composition: '', thicknessNm: '', dopant: '', notes: ''}]
 };
 
+// Layer 1 is mandatory. The unmodified ExperimentMbePDI normalizer creates it.
+// Additional ThinFilmMbe entries must be attached after its processing completes.
+// Nothing in the local layer plan is silently written into original PDI quantities.
 
-// Nominal composition/dopant/thickness inputs are disabled until original NOMAD
-// definitions can represent them. No substitute m_def is introduced.
 
 async function loadTreatmentHistoryEntries() {
     const definitions = [
@@ -146,7 +149,7 @@ async function loadTreatmentRecipes() {
 // the already-fixed queryEntriesBySchema(), which talks to
 // /entries/archive/query instead and returns the same entry shape.
 async function loadSubstrates() {
-    const schema = 'nomad_material_processing.general.CrystallineSubstrate';
+    const schema = 'pdi_nomad_plugin.mbe.materials.SubstrateMbe';
     const entries = await queryEntriesBySchema(schema, 1000, ['entry_id','upload_id','entry_name','data']);
     return entries.filter(function(entry) { return entry.data && entry.data.m_def === schema; });
 }
@@ -154,7 +157,7 @@ async function loadSubstrates() {
 
 async function loadHolders() {
     return await queryEntriesBySchema(
-        'nomad_material_processing.vapor_deposition.general.SubstrateHolder',
+        'pdi_nomad_plugin.mbe.instrument.SubstrateHolderPDI',
         500, ['entry_id','upload_id','entry_name','data']);
 }
 
@@ -2047,6 +2050,115 @@ function addTreatmentToQueue() {
 }
 
 
+
+function validateNominalLayers() {
+    const list = experimentState.nominalLayers;
+    if (!Array.isArray(list) || !list.length) {
+        throw new Error('Layer 1 is mandatory.');
+    }
+    return list.map(function(layer, index) {
+        const composition = String(layer.composition || '').trim();
+        const dopant = String(layer.dopant || '').trim();
+        const notes = String(layer.notes || '').trim();
+        const thickness = String(layer.thicknessNm ?? '').trim();
+        if (index > 0 && !composition) {
+            throw new Error('Layer ' + (index + 1) + ': nominal composition is required.');
+        }
+        if (thickness && (!Number.isFinite(Number(thickness)) || Number(thickness) <= 0)) {
+            throw new Error('Layer ' + (index + 1) + ': nominal thickness must be positive.');
+        }
+        return {
+            number: index + 1,
+            composition: composition,
+            thicknessNm: thickness ? Number(thickness) : null,
+            dopant: dopant,
+            notes: notes,
+            creation: index === 0 ? 'original-ExperimentMbePDI-normalizer' : 'post-normalization'
+        };
+    });
+}
+
+function renderNominalLayers() {
+    const container = document.getElementById('layerStackList');
+    const preview = document.getElementById('layerStackPreview');
+    if (!container) return;
+    container.replaceChildren();
+    const layers = experimentState.nominalLayers;
+    layers.forEach(function(layer, index) {
+        const card = document.createElement('div');
+        card.className = 'layer-card';
+        const header = document.createElement('div');
+        header.className = 'layer-card-header';
+        const title = document.createElement('strong');
+        title.textContent = 'Layer ' + (index + 1) +
+            (index === 0 ? ' — mandatory (PDI normalizer)' : ' — optional');
+        header.appendChild(title);
+        if (index > 0) {
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'secondary layer-remove-button';
+            remove.textContent = 'Remove';
+            remove.addEventListener('click', function() {
+                experimentState.nominalLayers.splice(index, 1);
+                renderNominalLayers();
+                updateStatePreview();
+            });
+            header.appendChild(remove);
+        }
+        card.appendChild(header);
+        const fields = [
+            ['composition', 'Nominal composition / formula', 'text', 'e.g. BaSnO3'],
+            ['thicknessNm', 'Nominal thickness (nm)', 'number', 'e.g. 20'],
+            ['dopant', 'Dopant (optional)', 'text', 'e.g. La'],
+            ['notes', 'Growth notes (optional)', 'text', '']
+        ];
+        fields.forEach(function(spec) {
+            const label = document.createElement('label');
+            label.textContent = spec[1];
+            const input = document.createElement('input');
+            input.type = spec[2];
+            input.placeholder = spec[3];
+            if (spec[2] === 'number') {
+                input.min = '0';
+                input.step = 'any';
+            }
+            input.value = layer[spec[0]] ?? '';
+            input.addEventListener('input', function() {
+                layer[spec[0]] = input.value;
+                updateNominalLayerPreview();
+                updateStatePreview();
+            });
+            label.appendChild(input);
+            card.appendChild(label);
+        });
+        container.appendChild(card);
+    });
+    updateNominalLayerPreview();
+}
+
+function updateNominalLayerPreview() {
+    const preview = document.getElementById('layerStackPreview');
+    if (!preview) return;
+    preview.replaceChildren();
+    experimentState.nominalLayers.forEach(function(layer, index) {
+        const row = document.createElement('div');
+        row.className = 'layer-preview-row';
+        row.textContent = 'Layer ' + (index + 1) + ': ' +
+            (layer.composition.trim() || 'composition not specified') +
+            (String(layer.thicknessNm).trim() ? ' · ' + layer.thicknessNm + ' nm' : '') +
+            (index === 0 ? ' · automatically created' : ' · post-normalization');
+        preview.appendChild(row);
+    });
+}
+
+function addNominalLayer() {
+    experimentState.nominalLayers.push({
+        composition: '', thicknessNm: '', dopant: '', notes: ''
+    });
+    renderNominalLayers();
+    updateStatePreview();
+}
+
 function updateGrowthRunId() {
 
     experimentState.growthRunId =
@@ -2423,7 +2535,7 @@ async function loadHolderCatalogV2() {
     const [holdersRaw, filledRaw] =
         await Promise.all([
             queryEntriesBySchema(
-                'nomad_material_processing.vapor_deposition.general.SubstrateHolder',
+                'pdi_nomad_plugin.mbe.instrument.SubstrateHolderPDI',
                 500,
                 [
                     'entry_id',
@@ -2435,7 +2547,7 @@ async function loadHolderCatalogV2() {
                 ]
             ),
             queryEntriesBySchema(
-                'nomad_material_processing.vapor_deposition.general.FilledSubstrateHolder',
+                'pdi_nomad_plugin.mbe.instrument.FilledSubstrateHolderPDI',
                 500,
                 [
                     'entry_id',
@@ -2465,7 +2577,7 @@ async function loadHolderCatalogV2() {
                  * by m_def and by substrate_holder reference.
                  */
                 return (
-                    mDef !== 'nomad_material_processing.vapor_deposition.general.FilledSubstrateHolder' &&
+                    mDef !== 'pdi_nomad_plugin.mbe.instrument.FilledSubstrateHolderPDI' &&
                     !data.substrate_holder
                 );
             }
@@ -2482,7 +2594,7 @@ async function loadHolderCatalogV2() {
 
                 return (
                     !mDef ||
-                    mDef === 'nomad_material_processing.vapor_deposition.general.FilledSubstrateHolder'
+                    mDef === 'pdi_nomad_plugin.mbe.instrument.FilledSubstrateHolderPDI'
                 );
             }
         );
@@ -2594,7 +2706,24 @@ async function loadHolderCatalogV2() {
 // Insert selection intentionally unavailable: the original geometry contract
 // has not been validated. No synthetic dimensions or substitute m_def.
 async function loadInsertCatalogV2() {
-    insertCatalogState = [];
+    const schema = 'pdi_nomad_plugin.mbe.instrument.InsertReductionPDI';
+    const entries = await queryEntriesBySchema(
+        schema, 500, ['entry_id', 'upload_id', 'entry_name', 'data']
+    );
+    insertCatalogState = entries
+        .filter(entry => entry.data && entry.data.m_def === schema)
+        .map(entry => {
+            const data = entry.data;
+            return {
+                entryId: entry.entry_id,
+                uploadId: entry.upload_id,
+                name: data.lab_id || data.name || entry.entry_name || entry.entry_id,
+                labId: data.lab_id || '',
+                innerGeometry: data.inner_geometry || null,
+                outerGeometry: data.outer_geometry || null
+            };
+        });
+    return insertCatalogState;
 }
 
 
@@ -2751,6 +2880,7 @@ function makePositionState(position) {
         position_usage: null,
         substrate: null,
         insertReduction: null,
+        slotGeometry: position.slot_geometry || null,
         pendingTreatments: [],
         rho: position.rho,
         theta: position.theta,
@@ -3273,44 +3403,8 @@ function geometryXY(geometry) {
 }
 
 
-function fallbackHolderSlotGeometry() {
-    const holder =
-        experimentState.holder || {};
-
-    const holderId =
-        String(
-            holder.id ||
-            holder.labId ||
-            holder.name ||
-            ''
-        ).trim();
-
-    if (holderId.endsWith('_1/4')) {
-        return {shape: 'circular_sector', radius: 0.0254, central_angle: 90};
-    }
-    if (holderId.endsWith('_2')) {
-        return {shape: 'circle', radius: 0.0254, central_angle: 360};
-    }
-    if (holderId.endsWith('_10')) {
-        return {
-            width: 0.01,
-            length: 0.01
-        };
-    }
-
-    if (holderId.endsWith('_20')) {
-        return {
-            width: 0.02,
-            length: 0.02
-        };
-    }
-
-    return null;
-}
-
-
 function positionSlotGeometry(position) {
-    return fallbackHolderSlotGeometry();
+    return position ? position.slotGeometry || null : null;
 }
 
 
@@ -3459,6 +3553,104 @@ function renderHolder() {
         row.appendChild(button);
     });
     controls.appendChild(row);
+
+    // Existing original PDI InsertReductionPDI archives only.
+    const insertLabel = document.createElement('label');
+    insertLabel.textContent = 'Insert (original PDI archive)';
+    insertLabel.style.display = 'block';
+    insertLabel.style.marginTop = '12px';
+
+    const insertSelect = document.createElement('select');
+    insertSelect.setAttribute('aria-label', 'Insert for position ' + positionName);
+
+    const slotGeometry = positionSlotGeometry(position);
+    const currentInsertId = position.insertReduction
+        ? String(position.insertReduction.entryId || '')
+        : '';
+
+    const emptyOption = document.createElement('option');
+    emptyOption.value = '';
+    emptyOption.textContent = 'No insert';
+    insertSelect.appendChild(emptyOption);
+
+    insertCatalogState.forEach(function(insert) {
+        const option = document.createElement('option');
+        option.value = insert.entryId;
+        option.textContent = insert.name;
+
+        const outerFits = Boolean(
+            slotGeometry && insert.outerGeometry &&
+            geometryFits(insert.outerGeometry, slotGeometry)
+        );
+        const innerValid = Boolean(insert.innerGeometry);
+        const substrateFits = !position.substrate || Boolean(
+            position.substrate.geometry &&
+            innerValid &&
+            geometryFits(position.substrate.geometry, insert.innerGeometry)
+        );
+
+        option.disabled = !(outerFits && innerValid && substrateFits);
+        if (option.disabled) {
+            option.textContent += ' (geometry not verified)';
+        }
+        insertSelect.appendChild(option);
+    });
+
+    if (currentInsertId &&
+        !insertCatalogState.some(item => item.entryId === currentInsertId)) {
+        const missing = document.createElement('option');
+        missing.value = currentInsertId;
+        missing.textContent = 'Existing insert (not found in catalog)';
+        missing.disabled = true;
+        insertSelect.appendChild(missing);
+    }
+
+    insertSelect.value = currentInsertId;
+
+    insertSelect.addEventListener('change', function() {
+        const next = insertCatalogState.find(
+            item => item.entryId === insertSelect.value
+        ) || null;
+
+        const opening = next ? next.innerGeometry : slotGeometry;
+        if (position.substrate && (
+            !opening ||
+            !position.substrate.geometry ||
+            !geometryFits(position.substrate.geometry, opening)
+        )) {
+            window.alert('Substrate geometry does not fit or cannot be verified.');
+            insertSelect.value = currentInsertId;
+            return;
+        }
+
+        if (next && (
+            !slotGeometry ||
+            !next.outerGeometry ||
+            !next.innerGeometry ||
+            !geometryFits(next.outerGeometry, slotGeometry)
+        )) {
+            window.alert('Insert geometry does not fit or cannot be verified.');
+            insertSelect.value = currentInsertId;
+            return;
+        }
+
+        position.insertReduction = next;
+        experimentState.currentFilledDirty = true;
+        renderHolder();
+        updateStatePreview();
+    });
+
+    insertLabel.appendChild(insertSelect);
+    controls.appendChild(insertLabel);
+
+    if (!slotGeometry) {
+        const warning = document.createElement('p');
+        warning.className = 'small';
+        warning.textContent =
+            'No verified slot_geometry in original holder archive.';
+        controls.appendChild(warning);
+    }
+
 
 
 
@@ -3707,45 +3899,31 @@ function renderTreatmentQueue() {
 
 
 /*
- * Do not serialize RectangleCuboid/SquareCuboid as FilledHolder slot_geometry:
- * these original classes are not Geometry subclasses in NOMAD 1.4.3.
- * The local draft exporter omits unsupported geometries explicitly.
+ * Holder slot_geometry uses original Geometry subclasses.
+ * Archive compatibility must be validated against installed NOMAD metainfo.
  */
 
 function xyForFilledHolderPosition(position, positionName) {
-    const present = function(value) {
-        return value !== null && value !== undefined && value !== '';
-    };
-    if (present(position.rho) && present(position.theta)) {
-        const rho = Number(position.rho);
-        const theta = Number(position.theta);
-        if (!Number.isFinite(rho) || rho < 0 ||
-            !Number.isFinite(theta)) {
-            throw new Error(
-                'Invalid rho/theta for position ' + positionName + '.'
-            );
-        }
-        const radians = theta * Math.PI / 180;
-        return {
-            x_position: rho * Math.cos(radians),
-            y_position: rho * Math.sin(radians)
-        };
+    // Original PDI holders use dimensionless rho and theta in degrees.
+    // Never reinterpret rho as meters or convert the stored fields to x/y.
+    const present = value => value !== undefined && value !== null && value !== '';
+    const polar = present(position.rho) && present(position.theta);
+    const cartesian = present(position.x_position) && present(position.y_position);
+    if (!polar && !cartesian) {
+        throw new Error('Missing original holder coordinates for ' + positionName);
     }
-    if (present(position.x_position) && present(position.y_position)) {
-        const x = Number(position.x_position);
-        const y = Number(position.y_position);
-        if (!Number.isFinite(x) || !Number.isFinite(y)) {
-            throw new Error(
-                'Invalid x/y coordinates for position ' + positionName + '.'
-            );
+    const fields = polar ? ['rho', 'theta'] : ['x_position', 'y_position'];
+    const result = {};
+    fields.forEach(function(field) {
+        const value = geometryNumber(position[field]);
+        if (value === null || (field === 'rho' && value < 0)) {
+            throw new Error('Invalid original ' + field + ' for ' + positionName);
         }
-        return {x_position: x, y_position: y};
-    }
-    throw new Error(
-        'Position ' + positionName +
-        ' has no complete physical-holder coordinates.'
-    );
+        result[field] = value;
+    });
+    return result;
 }
+
 
 function filledHolderArchiveData() {
     throw new Error('Cannot save a filled holder until position usage, dummy inserts and lifecycle have been mapped to original FilledSubstrateHolder quantities.');
@@ -3782,19 +3960,140 @@ async function setPhysicalHolderWorkflowStatus(nextStatus) {
 }
 
 
-async function saveFilledHolderToNomad() {
-    throw new Error(
-        'A FilledSubstrateHolder is an original NOMAD section, not a verified ' +
-        'EntryArchive.data root. Export a local draft instead; nothing was saved to NOMAD.'
-    );
+function newMbeWriter() {
+    if (!window.NomadMbeWriter) {
+        throw new Error('NOMAD MBE write module is not loaded.');
+    }
+    return window.NomadMbeWriter.createClient({
+        apiBase: nomadApiBase(),
+        fetch: fetch.bind(window),
+        entryIdForFile: archiveEntryId
+    });
 }
 
+function selectedWritableUpload() {
+    const select = document.getElementById('targetUpload');
+    const value = select && select.value;
+    if (!value) throw new Error('Select a writable, unpublished NOMAD target upload.');
+    return value;
+}
+
+function currentLoadoutFingerprint() {
+    return JSON.stringify({
+        physicalHolder: experimentState.holder && experimentState.holder.entryId,
+        positions: experimentState.positions
+    });
+}
+
+async function saveFilledHolderToNomad() {
+    const button = document.getElementById('saveFilledHolderButton');
+    const status = document.getElementById('filledHolderSaveStatus');
+    if (button) button.disabled = true;
+    try {
+        const uploadId = selectedWritableUpload();
+        if (experimentState.savedExperiment) {
+            throw new Error('Experiment already created. Start a new experiment for a new holder loadout.');
+        }
+        const fingerprint = currentLoadoutFingerprint();
+        if (experimentState.savedFilledHolder &&
+            experimentState.savedFilledHolder.uploadId === uploadId &&
+            experimentState.savedFilledHolder.fingerprint === fingerprint) {
+            status.textContent = 'Filled holder already saved: ' +
+                experimentState.savedFilledHolder.filename;
+            return;
+        }
+        // Build only from unchanged original PDI classes. A temporary ID is used
+        // exclusively for constructing the filled section, never saved to NOMAD.
+        const draftState = Object.assign({}, experimentState, {
+            growthRunId: experimentState.growthRunId || '_holder_only'
+        });
+        const draft = window.NomadMbeDrafts.build(
+            draftState, [{}], nomadArchiveReference, xyForFilledHolderPosition
+        );
+        const data = Object.assign({}, draft.original_sections.filled_holder);
+        const tag = experimentSafePart(experimentState.holder.id || 'holder');
+        const stamp = Date.now().toString() + '_' +
+            Math.random().toString(36).slice(2, 8);
+        data.lab_id = tag + '_loadout_' + stamp;
+        data.name = data.lab_id;
+        data.datetime = new Date().toISOString();
+        const filename = data.lab_id + '.archive.json';
+        status.textContent = 'Creating filled holder in NOMAD...';
+        const saved = await newMbeWriter().createFilled(uploadId, filename, data);
+        experimentState.savedFilledHolder = Object.assign({}, saved, {fingerprint});
+        experimentState.currentFilledDirty = false;
+        status.textContent = 'Saved original FilledSubstrateHolderPDI: ' + filename;
+    } catch (error) {
+        status.textContent = 'Filled holder save failed: ' + error.message;
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
 
 async function saveExperimentToNomad() {
-    throw new Error(
-        'MolecularBeamEpitaxy is not an EntryData root in the installed original schema. ' +
-        'Export a local draft instead; nothing was saved to NOMAD.'
-    );
+    const button = document.getElementById('saveExperimentButton');
+    const status = document.getElementById('experimentSaveStatus');
+    if (button) button.disabled = true;
+    try {
+        const uploadId = selectedWritableUpload();
+        const filled = experimentState.savedFilledHolder;
+        if (!filled || filled.uploadId !== uploadId ||
+            filled.fingerprint !== currentLoadoutFingerprint()) {
+            throw new Error('Save the current filled holder first. The holder assignments must not change afterwards.');
+        }
+        const layers = validateNominalLayers();
+        const draft = window.NomadMbeDrafts.build(
+            experimentState, layers, nomadArchiveReference, xyForFilledHolderPosition
+        );
+        const growthId = experimentState.growthRunId.trim();
+        const snapshot = JSON.stringify(draft.post_normalization_plan);
+        const saved = experimentState.savedExperiment;
+        let experiment;
+        const writer = newMbeWriter();
+        if (saved) {
+            if (saved.uploadId !== uploadId || saved.growthId !== growthId ||
+                saved.snapshot !== snapshot || saved.filledReference !== filled.reference) {
+                throw new Error('Experiment already created with different data. Original archives will not be overwritten.');
+            }
+            experiment = saved;
+        } else {
+            const filename = experimentSafePart(growthId) + '_mbe_exp.archive.json';
+            status.textContent = 'Creating ExperimentMbePDI; original normalizer will create Layer 1...';
+            // Original ExperimentMbePDI.description is a verified original
+            // quantity. Preserve nominal layer metadata as descriptive text
+            // without inventing typed metainfo fields or modifying normalizers.
+            const experimentData = Object.assign({}, draft.original_sections.mbe);
+            experimentData.description = 'Nominal layer plan (all occupied positions):\n' +
+                layers.map(function(layer) {
+                    return 'Layer ' + layer.number + ': ' + (layer.composition || 'unspecified') +
+                        (layer.thicknessNm === null ? '' : ', ' + layer.thicknessNm + ' nm') +
+                        (layer.dopant ? ', dopant ' + layer.dopant : '') +
+                        (layer.notes ? ', notes: ' + layer.notes : '');
+                }).join('\n');
+            experiment = await writer.createExperiment(
+                uploadId, filename, experimentData, filled.reference
+            );
+            experiment.growthId = growthId;
+            experiment.snapshot = snapshot;
+            experiment.filledReference = filled.reference;
+            experimentState.savedExperiment = experiment;
+        }
+        status.textContent = 'Verifying original Layer 1 and connecting optional layers...';
+        const result = await writer.addExtraLayers(
+            uploadId, experiment.entryId, draft.post_normalization_plan
+        );
+        experimentState.experimentSaved = true;
+        const count = result.reduce((n, item) => n + item.extraLayers, 0);
+        status.textContent = 'Saved and verified experiment. ' + result.length +
+            ' stack(s), ' + count + ' optional layer reference(s).';
+    } catch (error) {
+        status.textContent = 'Experiment save incomplete: ' + error.message +
+            (experimentState.savedExperiment
+                ? ' Experiment entry exists; retry to resume, do not create a duplicate.'
+                : ' No experiment entry was confirmed.');
+    } finally {
+        if (button) button.disabled = false;
+    }
 }
 
 
@@ -3844,11 +4143,15 @@ function resetHolderSelection(clearSelect) {
 async function startNewExperiment() {
     const targetUpload = document.getElementById('targetUpload').value;
     experimentState.growthRunId = '';
+    experimentState.nominalLayers = [{composition: '', thicknessNm: '', dopant: '', notes: ''}];
+    renderNominalLayers();
     experimentState.experimentSaved = false;
+    experimentState.savedFilledHolder = null;
+    experimentState.savedExperiment = null;
     document.getElementById('growthRunId').value = '';
     document.getElementById('experimentSaveStatus').textContent = 'Configure the next experiment.';
     document.getElementById('filledHolderSaveStatus').textContent =
-        'Local holder assignments only; NOMAD writes remain disabled.';
+        'No holder loadout saved for this new experiment.';
     document.getElementById('startNewExperimentButton').style.display = 'none';
     resetHolderSelection(true);
     await Promise.all([initialiseHolderSelect(), refreshSubstrateData()]);
@@ -3870,7 +4173,7 @@ function downloadLocalMbeDraft() {
     const status = document.getElementById('experimentSaveStatus');
     try {
         const draft = window.NomadMbeDrafts.build(
-            experimentState, [], nomadArchiveReference,
+            experimentState, validateNominalLayers(), nomadArchiveReference,
             xyForFilledHolderPosition
         );
         const filename = experimentSafePart(experimentState.growthRunId || 'MBE') +
@@ -3892,45 +4195,24 @@ function downloadLocalMbeDraft() {
     }
 }
 
-function hideUnmappedNominalLayerControls() {
-    // The nominal-layer UI was backed exclusively by the removed custom schema.
-    const list = document.getElementById('layerStackList');
-    if (list) {
-        const panel = list.closest('section, .card, .panel');
-        const sharedPanel = panel && (
-            panel.querySelector('#holderGrid') ||
-            panel.querySelector('#growthRunId')
-        );
-        if (panel && !sharedPanel) panel.hidden = true;
-        else list.hidden = true;
-    }
-    ['layerStackPreview', 'addLayerButton', 'resetLayerButton'].forEach(function(id) {
-        const element = document.getElementById(id);
-        if (element) element.hidden = true;
-    });
-}
 
 function configureOriginalSchemaWriteSafety() {
-    const disabled = [
-        ['saveFilledHolderButton', 'filledHolderSaveStatus'],
-        ['saveExperimentButton', 'experimentSaveStatus']
-    ];
-    disabled.forEach(function(ids) {
-        const button = document.getElementById(ids[0]);
-        const status = document.getElementById(ids[1]);
-        if (button) {
-            button.disabled = true;
-            button.title = 'Original NOMAD section has no verified EntryData root';
-        }
-        if (status) status.textContent =
-            'NOMAD write disabled: the original section is not an EntryData root. ' +
-            'Use Export local draft; this does not create a NOMAD entry.';
-    });
+    // The original PDI EntryData classes have been verified. Keep the explicit
+    // save actions enabled; each verifies the response before advancing.
+    for (const id of ['saveFilledHolderButton', 'saveExperimentButton']) {
+        const button = document.getElementById(id);
+        if (button) button.disabled = false;
+    }
+    const filled = document.getElementById('filledHolderSaveStatus');
+    const experiment = document.getElementById('experimentSaveStatus');
+    if (filled) filled.textContent = 'Choose a writable upload and save this loadout.';
+    if (experiment) experiment.textContent =
+        'Save the filled holder first. Layer 1 comes from the original normalizer; optional layers are linked afterwards.';
 }
 
 async function initialiseWorkflowV2() {
     configureOriginalSchemaWriteSafety();
-    hideUnmappedNominalLayerControls();
+    renderNominalLayers();
     installTargetUploadPersistence();
 
     await loadUploads();
