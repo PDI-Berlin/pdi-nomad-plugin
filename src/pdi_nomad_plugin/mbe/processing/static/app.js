@@ -32,6 +32,10 @@ const ORIGINAL_PROCESS_TYPES = Object.freeze({
         schema: 'nomad_material_processing.general.AnnealingRecipe',
         processSchema: 'nomad_material_processing.general.Annealing'
     }),
+    backside_coating: Object.freeze({
+        schema: 'pdi_nomad_plugin.general.schema.BackSideCoatingRecipePDI',
+        processSchema: 'pdi_nomad_plugin.general.schema.BackSideCoatingPDI'
+    }),
 });
 
 
@@ -249,12 +253,36 @@ function formatProcessingDateTime(value) {
 
 
 function treatmentHistoryForSubstrate(substrate) {
-    // Only the original Process.samples[] reference is verified.
+    // Follow verified Sample Cut parent links without changing NOMAD archives.
+    const entryIds = new Set([substrate.entryId]);
+    let currentId = substrate.entryId;
+
+    while (true) {
+        // Reconstruct ancestry from saved Sample Cut entries after reload.
+        const verified = processingVerifiedCutChildren.get(currentId);
+        const cutRecords =
+            processingCutHistoryByEntry.get(currentId) || [];
+        const savedCut = cutRecords.find(function(record) {
+            return record.role === 'child' && record.parentId;
+        });
+        const parentId = verified?.parentId || savedCut?.parentId;
+
+        if (!parentId || entryIds.has(parentId)) break;
+        entryIds.add(parentId);
+        currentId = parentId;
+    }
+
     const rows = treatmentHistoryState.filter(function(treatment) {
-        return treatmentReferencesSubstrate(treatment, substrate.entryId);
-    }).map(function(treatment) { return {treatment: treatment}; });
+        return [...entryIds].some(function(entryId) {
+            return treatmentReferencesSubstrate(treatment, entryId);
+        });
+    }).map(function(treatment) {
+        return {treatment: treatment};
+    });
+
     rows.sort(function(a, b) {
-        return String(treatmentDate(a.treatment)).localeCompare(String(treatmentDate(b.treatment)));
+        return String(treatmentDate(a.treatment))
+            .localeCompare(String(treatmentDate(b.treatment)));
     });
     return rows;
 }
@@ -462,7 +490,10 @@ async function loadSubstrates() {
 
             childIds.forEach((childId, index) => {
                 recordProcessingCutHistory(childId, {
-                    ...record, role: 'child', childIndex: index + 1
+                    ...record,
+                    role: 'child',
+                    childIndex: index + 1,
+                    parentId: parentId
                 });
             });
 
@@ -876,7 +907,7 @@ function addProcess() {
             </div>
             <label class="recipe-label">Recipe</label><select class="recipe-select"></select>
             <label>Comments</label><textarea class="process-comments" placeholder="Optional"></textarea>
-            <div class="process-footer"><button class="remove-button" type="button">Remove process</button><button class="collapse-button" type="button">Done / collapse</button></div>
+            <div class="process-footer"><button class="remove-button" type="button">Cancel</button><button class="collapse-button" type="button">Done / collapse</button></div>
         </div>`;
     document.getElementById('processList').appendChild(card);
     const typeSelect = card.querySelector('.process-type');
@@ -1100,6 +1131,21 @@ function resetProcessingAfterSuccess(entryIds) {
     // Intentionally preserve targetUpload and success messages.
 }
 
+function confirmFutureProcessDates(dates) {
+    const now = Date.now();
+    const hasFutureDate = dates.some(function(value) {
+        const timestamp = Date.parse(value);
+        return Number.isFinite(timestamp) && timestamp > now;
+    });
+
+    if (!hasFutureDate) return true;
+
+    return window.confirm(
+        'The selected process date is in the future. ' +
+        'Do you want to continue?'
+    );
+}
+
 async function saveProcesses() {
     const button = document.getElementById('saveProcessesButton');
     const status = document.getElementById('processStatus');
@@ -1119,6 +1165,13 @@ async function saveProcesses() {
         });
     } catch (error) {
         status.textContent = 'Validation failed before upload: ' + error.message;
+        return;
+    }
+
+    if (!confirmFutureProcessDates(
+        definitions.map(definition => definition.datetime)
+    )) {
+        status.textContent = 'Save cancelled. No changes were written.';
         return;
     }
 
@@ -1763,6 +1816,18 @@ function processingCutInitialize() {
         panel.style.display = panel.style.display === 'none' ? '' : 'none';
     });
 
+    processingCutElement('cutCancelButton').addEventListener(
+        'click', function() {
+            panel.style.display = 'none';
+            const bar = document.getElementById('processChoiceBar');
+            if (bar) bar.style.display = 'flex';
+            processingCutFeedback(
+                'Sample Cut cancelled. No changes were written.',
+                false
+            );
+        }
+    );
+
     for (let i = 0; i < 24; i++) {
         const n = String(i).padStart(2, '0');
         processingCutElement('cutHour').add(new Option(n, n));
@@ -2272,6 +2337,13 @@ async function processingCutSave() {
 
             filenames.add(filename);
             jobs.push({parent, parentData, data, filename, labId});
+        }
+
+        if (!confirmFutureProcessDates(
+            jobs.map(job => job.data.datetime)
+        )) {
+            button.disabled = false;
+            return;
         }
 
         // Each SampleCutPDI invokes the ORIGINAL normalizer independently.

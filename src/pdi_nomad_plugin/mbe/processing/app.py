@@ -22,6 +22,11 @@ PROCESS_TYPES = {
         'schema': 'nomad_material_processing.general.AnnealingRecipe',
         'processSchema': 'nomad_material_processing.general.Annealing',
     },
+    'backside_coating': {
+        'label': 'Backside Coating',
+        'schema': 'pdi_nomad_plugin.general.schema.BackSideCoatingRecipePDI',
+        'processSchema': 'pdi_nomad_plugin.general.schema.BackSideCoatingPDI',
+    },
 }
 
 # No verified upstream SampleCut or BackSideCoating process in the

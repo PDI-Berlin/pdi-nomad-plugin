@@ -339,6 +339,9 @@ function filteredSubstrates() {
     return substrateCatalogState.filter(
         function(substrate) {
 
+            // Grown substrates cannot be assigned to a new MBE holder.
+            if (substrate.grown) return false;
+
             const searchable = [
                 substrate.labId,
                 substrate.entryName,
@@ -497,6 +500,104 @@ function selectSubstrate(
 }
 
 
+function reservedHolderResources(exceptPositionName) {
+    const result = {
+        substrates: new Set(),
+        inserts: new Set(),
+        unverified: []
+    };
+
+    // Unsaved assignments on the currently selected physical holder.
+    Object.entries(experimentState.positions || {}).forEach(
+        function([name, position]) {
+            if (name === exceptPositionName) return;
+
+            if (position.substrate && position.substrate.entryId) {
+                result.substrates.add(String(position.substrate.entryId));
+            }
+            if (position.insertReduction && position.insertReduction.entryId) {
+                result.inserts.add(String(position.insertReduction.entryId));
+            }
+        }
+    );
+
+    // Persisted occupancy on other physical holders.
+    const catalog = holderCatalogState;
+    if (!catalog || !Array.isArray(catalog.holders)) return result;
+
+    const selectedPhysicalId = experimentState.holder
+        ? experimentState.holder.entryId : null;
+
+    catalog.holders.forEach(function(physical) {
+        if (physical.entry_id === selectedPhysicalId) return;
+
+        const state = holderWorkflowStatus(physical.data || {});
+        if (state === 'empty') return;
+
+        const snapshot = catalog.currentByPhysical &&
+            catalog.currentByPhysical.get(physical.entry_id);
+
+        if (!snapshot || !Array.isArray((snapshot.data || {}).positions)) {
+            if (state === 'filled' || state === 'grown') {
+                result.unverified.push(
+                    (physical.data || {}).lab_id || physical.entry_id
+                );
+            }
+            return;
+        }
+
+        // Unknown holders with a historical loadout are treated
+        // conservatively until their physical status is confirmed.
+        snapshot.data.positions.forEach(function(position) {
+            const substrateId = entryIdFromReference(
+                referenceValue(position.substrate)
+            );
+            const insertId = entryIdFromReference(
+                referenceValue(position.insert_reduction)
+            );
+            if (substrateId) result.substrates.add(substrateId);
+            if (insertId) result.inserts.add(insertId);
+        });
+    });
+
+    return result;
+}
+
+
+function assertUniqueHolderAssignments() {
+    Object.entries(experimentState.positions || {}).forEach(
+        function([name, position]) {
+            const reserved = reservedHolderResources(name);
+
+            if (reserved.unverified.length) {
+                throw new Error(
+                    'Occupancy could not be verified for holder(s): ' +
+                    reserved.unverified.join(', ')
+                );
+            }
+
+            const substrateId = position.substrate &&
+                position.substrate.entryId;
+            const insertId = position.insertReduction &&
+                position.insertReduction.entryId;
+
+            if (position.substrate && !substrateId) {
+                throw new Error('Missing substrate entry ID at ' + name);
+            }
+            if (position.insertReduction && !insertId) {
+                throw new Error('Missing insert entry ID at ' + name);
+            }
+            if (substrateId && reserved.substrates.has(String(substrateId))) {
+                throw new Error('Substrate already assigned elsewhere: ' + name);
+            }
+            if (insertId && reserved.inserts.has(String(insertId))) {
+                throw new Error('Insert already assigned elsewhere: ' + name);
+            }
+        }
+    );
+}
+
+
 function renderSubstrateResults() {
 
     const container =
@@ -543,14 +644,20 @@ function renderSubstrateResults() {
             }
         );
 
+    const occupied = reservedHolderResources(
+        experimentState.activePositionName
+    );
+
     const substrates =
         filteredSubstrates()
             .filter(
                 function(substrate) {
-                    return substrateFitsPosition(
-                        substrate,
-                        position
-                    );
+                    return !occupied.unverified.length &&
+                        !occupied.substrates.has(String(substrate.entryId)) &&
+                        substrateFitsPosition(
+                            substrate,
+                            position
+                        );
                 }
             )
             .sort(
@@ -709,7 +816,47 @@ async function initialiseSubstrates() {
     container.innerHTML = '<p class="small" style="padding:10px;">Loading substrates...</p>';
     try {
         const entries = await loadSubstrates();
-        substrateCatalogState = entries.map(function(entry) {
+
+        // Exclude consumed parent substrates using persisted SampleCutPDI archives.
+        const cuts = await queryEntriesBySchema(
+            'pdi_nomad_plugin.general.schema.SampleCutPDI',
+            500,
+            ['entry_id', 'upload_id', 'data']
+        );
+
+        const entryIds = new Set(entries.map(entry => entry.entry_id));
+        const consumedParentIds = new Set();
+
+        cuts.forEach(function(cut) {
+            const parent = (cut.data || {}).parent_sample || {};
+            const reference = parent.reference;
+
+            if (!reference) return;
+
+            if (typeof reference !== 'string') {
+                throw new Error('Invalid SampleCut parent reference: ' + cut.entry_id);
+            }
+
+            const match = reference.match(
+                /(?:^|\/)(?:archive|entries)\/([^\/?#]+)/
+            );
+
+            const parentId = match
+                ? decodeURIComponent(match[1])
+                : (entryIds.has(reference) ? reference : null);
+
+            if (!parentId) {
+                throw new Error('Unresolved SampleCut parent: ' + reference);
+            }
+
+            consumedParentIds.add(parentId);
+        });
+
+        const selectableEntries = entries.filter(function(entry) {
+            return !consumedParentIds.has(entry.entry_id);
+        });
+
+        substrateCatalogState = selectableEntries.map(function(entry) {
             const data = entry.data || {};
             const fields = originalMbeSubstrateFields(data);
             return {
@@ -719,8 +866,12 @@ async function initialiseSubstrates() {
                 parentSample:null, material:fields.material, formula:fields.formula,
                 supplierId:data.supplier_id || '', crystalId:fields.crystalId, chargeId:fields.chargeId,
                 polishing:'', orientation:fields.orientation, offcut:fields.offcut,
-                offcutDirection:fields.offcutDirection, asDelivered:false,
-                processed:false, grown:false, geometry:data.geometry || null
+                offcutDirection:fields.offcutDirection,
+                asDelivered:data.as_delivered === true,
+                processed:data.processed === true,
+                grown:data.grown === true ||
+                    (Array.isArray(data.tags) && data.tags.includes('grown')),
+                geometry:data.geometry || null
             };
         });
         updateSubstrateFilters();
@@ -1386,7 +1537,11 @@ function restoreTargetUploadSelection() {
 
 function updateEmptyHolderButton() {
     const button = document.getElementById('emptyHolderButton');
-    if (button) button.textContent = 'Clear local assignments';
+    if (button) {
+        button.textContent = 'Empty Holder';
+        delete button.dataset.confirmEmptyId;
+    }
+    document.getElementById('cancelEmptyHolderButton')?.remove();
 }
 
 
@@ -2432,9 +2587,18 @@ function filledPhysicalReference(data) {
 }
 
 
-function holderWorkflowStatus() {
-    // Original SubstrateHolder has no lifecycle/status quantity.
-    return 'not recorded';
+function holderWorkflowStatus(data) {
+    const tags = Array.isArray(data && data.tags) ? data.tags : [];
+    const empty = tags.includes('empty');
+    const filled = tags.includes('filled');
+    const grown = tags.includes('grown');
+    const legacy = tags.includes('ungrown');
+
+    if (legacy || (empty && (filled || grown)) ||
+        (grown && !filled) || (!empty && !filled)) {
+        return 'unknown';
+    }
+    return empty ? 'empty' : (grown ? 'grown' : 'filled');
 }
 
 
@@ -2728,9 +2892,13 @@ async function loadInsertCatalogV2() {
 
 
 function holderDisplayStatus(workflowStatus, hasFilledHolder) {
-    return hasFilledHolder
-        ? 'recorded loadout (current occupancy unverified)'
-        : 'no recorded loadout (occupancy unverified)';
+    const labels = {
+        empty: 'Empty Substrate Holder',
+        filled: 'Filled Substrate Holder',
+        grown: 'Filled Substrate Holder (Grown)',
+        unknown: 'Unknown Substrate Holder Status'
+    };
+    return labels[workflowStatus] || labels.unknown;
 }
 
 
@@ -3023,7 +3191,11 @@ async function selectHolder() {
             option.dataset.filledEntryId ||
             '';
 
-        if (filledEntryId) {
+        // Historical FilledSubstrateHolder archives are not proof
+        // of current physical occupancy.
+        // Only explicit physical holder tags authorize restoring a loadout.
+        if (filledEntryId &&
+            (workflowStatus === 'filled' || workflowStatus === 'grown')) {
             const filledArchive =
                 await loadHolderArchive(
                     filledEntryId
@@ -3421,6 +3593,33 @@ function effectivePositionGeometry(position) {
 }
 
 
+function geometryMatchesSlot(candidate, opening) {
+    const a = substrateFootprint(candidate);
+    const b = substrateFootprint(opening);
+    if (!a || !b || a.shape !== b.shape) return false;
+
+    const tolerance = 0.00005; // 0.05 mm, geometry in metres
+    const same = (x, y) => Math.abs(x - y) <= tolerance;
+
+    if (a.shape === 'rectangle') {
+        return (same(a.width, b.width) &&
+                same(a.length, b.length)) ||
+               (same(a.width, b.length) &&
+                same(a.length, b.width));
+    }
+
+    if (a.shape === 'circle') {
+        return same(a.radius, b.radius);
+    }
+
+    if (a.shape === 'circular_sector') {
+        return same(a.radius, b.radius) &&
+               Math.abs(a.central_angle - b.central_angle) <= 1e-6;
+    }
+
+    return false;
+}
+
 function substrateFitsPosition(substrate, position) {
     if (!substrate || !position) {
         return false;
@@ -3437,10 +3636,11 @@ function substrateFitsPosition(substrate, position) {
         return false;
     }
 
-    return geometryFits(
-        substrate.geometry,
-        target
-    );
+    // Direct holder slots require matching dimensions.
+    // Insert openings retain their existing fit validation.
+    return position.insertReduction
+        ? geometryFits(substrate.geometry, target)
+        : geometryMatchesSlot(substrate.geometry, target);
 }
 
 
@@ -3456,10 +3656,18 @@ function positionDisplayState(position) {
 
 
 function selectHolderPosition(positionName) {
-    if (!experimentState.positions[positionName]) return;
+    const position = experimentState.positions[positionName];
+    if (!position) return;
+
+    // Selecting an empty slot opens the substrate picker directly.
+    // No physical occupancy is created until a substrate is assigned.
+    if (position.position_usage === null ||
+        position.position_usage === undefined) {
+        position.position_usage = 'substrate';
+    }
+
     experimentState.activePositionName = positionName;
     renderHolder();
-    const position = experimentState.positions[positionName];
     const picker = document.getElementById('substratePicker');
     const label = document.getElementById('activePositionLabel');
     if (label) label.textContent = 'Active holder position: ' + positionName;
@@ -3573,7 +3781,15 @@ function renderHolder() {
     emptyOption.textContent = 'No insert';
     insertSelect.appendChild(emptyOption);
 
+    const occupied = reservedHolderResources(positionName);
+
     insertCatalogState.forEach(function(insert) {
+        if (String(insert.entryId) !== currentInsertId &&
+            (occupied.unverified.length ||
+             occupied.inserts.has(String(insert.entryId)))) {
+            return;
+        }
+
         const option = document.createElement('option');
         option.value = insert.entryId;
         option.textContent = insert.name;
@@ -3612,12 +3828,22 @@ function renderHolder() {
             item => item.entryId === insertSelect.value
         ) || null;
 
-        const opening = next ? next.innerGeometry : slotGeometry;
-        if (position.substrate && (
-            !opening ||
-            !position.substrate.geometry ||
-            !geometryFits(position.substrate.geometry, opening)
-        )) {
+        const reserved = reservedHolderResources(positionName);
+        if (next && String(next.entryId) !== currentInsertId &&
+            (reserved.unverified.length ||
+             reserved.inserts.has(String(next.entryId)))) {
+            window.alert('Insert is already assigned or its availability cannot be verified.');
+            insertSelect.value = currentInsertId;
+            return;
+        }
+
+        // Removing or switching an insert must respect the final slot geometry.
+        // Direct loading requires matching dimensions, not merely a smaller sample.
+        const candidatePosition = Object.assign({}, position, {
+            insertReduction: next
+        });
+        if (position.substrate &&
+            !substrateFitsPosition(position.substrate, candidatePosition)) {
             window.alert('Substrate geometry does not fit or cannot be verified.');
             insertSelect.value = currentInsertId;
             return;
@@ -3637,6 +3863,9 @@ function renderHolder() {
         position.insertReduction = next;
         experimentState.currentFilledDirty = true;
         renderHolder();
+        if (position.position_usage === 'substrate') {
+            renderSubstrateResults();
+        }
         updateStatePreview();
     });
 
@@ -3688,8 +3917,27 @@ function setPositionUsage(positionName, usage) {
 
 const selectSubstrateOriginal = selectSubstrate;
 selectSubstrate = function(substrate) {
+    if (substrate.grown) {
+        window.alert('This substrate has already been grown.');
+        return;
+    }
     const position = getActivePosition();
     if (!position || position.position_usage !== 'substrate') return;
+
+    const occupied = reservedHolderResources(
+        experimentState.activePositionName
+    );
+    if (!substrate.entryId ||
+        occupied.unverified.length ||
+        occupied.substrates.has(String(substrate.entryId))) {
+        window.alert('Substrate already assigned or its availability cannot be verified.');
+        return;
+    }
+    if (!substrateFitsPosition(substrate, position)) {
+        window.alert('Substrate geometry does not fit this position.');
+        return;
+    }
+
     position.substrate = {
         entryId: substrate.entryId,
         uploadId: substrate.uploadId,
@@ -3956,7 +4204,140 @@ function loadoutTimestamp() {
 
 
 async function setPhysicalHolderWorkflowStatus(nextStatus) {
-    throw new Error('Original SubstrateHolder has no tags/status quantities; cannot persist ' + nextStatus + ' as invented metainfo.');
+    const holder = experimentState.holder;
+    if (!holder || !holder.entryId || !holder.archiveData) {
+        throw new Error('Select a physical substrate holder first.');
+    }
+
+    const allowed = {
+        unknown: ['empty', 'filled'],
+        empty: ['filled'],
+        filled: ['grown', 'empty'],
+        grown: ['empty']
+    };
+
+    const writer = newMbeWriter();
+    const before = await writer.getArchive(holder.entryId);
+
+    if (before.data.m_def !==
+        'pdi_nomad_plugin.mbe.instrument.SubstrateHolderPDI') {
+        throw new Error('Selected entry is not a physical SubstrateHolderPDI.');
+    }
+
+    if (before.metadata && before.metadata.published === true) {
+        throw new Error('Published physical holder is read-only.');
+    }
+
+    const currentStatus = holderWorkflowStatus(before.data);
+
+    if (currentStatus === nextStatus) return;
+
+    if (!(allowed[currentStatus] || []).includes(nextStatus)) {
+        throw new Error(
+            'Invalid holder transition: ' +
+            currentStatus + ' -> ' + nextStatus
+        );
+    }
+
+    const snapshot = tags => JSON.stringify(
+        [...new Set(
+            (Array.isArray(tags) ? tags : [])
+                .filter(tag => typeof tag === 'string')
+        )].sort()
+    );
+
+    if (snapshot(before.data.tags) !==
+        snapshot(holder.archiveData.tags)) {
+        throw new Error(
+            'Physical holder tags changed in NOMAD. Reload before updating.'
+        );
+    }
+
+    const states = new Set(['empty', 'filled', 'grown', 'ungrown']);
+    const preserved = (Array.isArray(before.data.tags)
+        ? before.data.tags : [])
+        .filter(tag => !states.has(tag));
+
+    const workflowTags = nextStatus === 'empty'
+        ? ['empty']
+        : nextStatus === 'grown'
+            ? ['filled', 'grown']
+            : ['filled'];
+
+    const nextTags = [...new Set([...preserved, ...workflowTags])];
+
+    const response = await fetch(
+        nomadApiBase() + '/entries/' +
+        encodeURIComponent(holder.entryId) + '/edit',
+        {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                changes: [{
+                    path: 'data/tags',
+                    action: 'upsert',
+                    new_value: nextTags
+                }]
+            })
+        }
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            'Physical holder tag update failed: HTTP ' +
+            response.status
+        );
+    }
+
+    // Verify the persisted status, not just the HTTP response.
+    let verified = null;
+    for (let attempt = 0; attempt < 10; attempt++) {
+        const after = await writer.getArchive(holder.entryId);
+        if (snapshot(after.data.tags) === snapshot(nextTags)) {
+            verified = after;
+            break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    if (!verified) {
+        throw new Error(
+            'Tag update was accepted but could not be verified. ' +
+            'Reload NOMAD before retrying.'
+        );
+    }
+
+    holder.archiveData = verified.data;
+    holder.workflowStatus = nextStatus;
+
+    // Keep the physical holder catalog synchronized.
+    if (holderCatalogState && Array.isArray(holderCatalogState.holders)) {
+        const catalogHolder = holderCatalogState.holders.find(
+            item => item.entry_id === holder.entryId
+        );
+        if (catalogHolder) catalogHolder.data = verified.data;
+    }
+
+    const select = document.getElementById('holderSelect');
+    const option = select && Array.from(select.options).find(
+        item => item.value === holder.entryId
+    );
+
+    if (option) {
+        option.dataset.status = nextStatus;
+        if (nextStatus === 'empty') {
+            option.dataset.filledEntryId = '';
+        }
+        option.textContent =
+            (holder.id || holder.entryId) + ' — ' +
+            holderDisplayStatus(nextStatus, false);
+    }
+
+    if (nextStatus === 'empty') {
+        holder.filledHolder = null;
+    }
+
+    updateEmptyHolderButton();
 }
 
 
@@ -3994,14 +4375,32 @@ async function saveFilledHolderToNomad() {
         if (experimentState.savedExperiment) {
             throw new Error('Experiment already created. Start a new experiment for a new holder loadout.');
         }
+        // Refresh NOMAD occupancy before creating a new Filled Holder.
+        await loadHolderCatalogV2();
+        assertUniqueHolderAssignments();
+
         const fingerprint = currentLoadoutFingerprint();
         if (experimentState.savedFilledHolder &&
             experimentState.savedFilledHolder.uploadId === uploadId &&
             experimentState.savedFilledHolder.fingerprint === fingerprint) {
+            await setPhysicalHolderWorkflowStatus('filled');
             status.textContent = 'Filled holder already saved: ' +
                 experimentState.savedFilledHolder.filename;
             return;
         }
+
+        // Do not create another historical Filled Holder for a holder
+        // that is already physically occupied or has an unknown state.
+        const physicalState = holderWorkflowStatus(
+            experimentState.holder.archiveData
+        );
+        if (physicalState !== 'empty') {
+            throw new Error(
+                'Physical holder status is ' + physicalState +
+                '. Confirm it is empty before creating a new Filled Holder.'
+            );
+        }
+
         // Build only from unchanged original PDI classes. A temporary ID is used
         // exclusively for constructing the filled section, never saved to NOMAD.
         const draftState = Object.assign({}, experimentState, {
@@ -4014,21 +4413,342 @@ async function saveFilledHolderToNomad() {
         const tag = experimentSafePart(experimentState.holder.id || 'holder');
         const stamp = Date.now().toString() + '_' +
             Math.random().toString(36).slice(2, 8);
-        data.lab_id = tag + '_loadout_' + stamp;
-        data.name = data.lab_id;
+        // Keep the original physical holder lab_id unchanged.
+        // Historical Filled Holder archives have separate NOMAD entry IDs.
+        const physicalLabId = String(
+            experimentState.holder.archiveData.lab_id || ''
+        ).trim();
+
+        if (!physicalLabId) {
+            throw new Error('Physical holder has no verified lab_id.');
+        }
+
+        data.lab_id = physicalLabId;
+        data.name = physicalLabId;
         data.datetime = new Date().toISOString();
-        const filename = data.lab_id + '.archive.json';
+
+        // Filled Holder retains the physical holder identity.
+        // Workflow status is stored exclusively in the existing tags.
+        const reservedTags = new Set(['empty', 'ungrown', 'filled', 'grown']);
+        data.tags = [
+            ...new Set([
+                ...(Array.isArray(data.tags) ? data.tags : [])
+                    .filter(t => !reservedTags.has(t)),
+                'filled'
+            ])
+        ];
+
+        // Unique neutral filename; never encode workflow status in lab_id.
+        const filename =
+            experimentSafePart(physicalLabId) + '_' +
+            stamp + '.archive.json';
         status.textContent = 'Creating filled holder in NOMAD...';
-        const saved = await newMbeWriter().createFilled(uploadId, filename, data);
-        experimentState.savedFilledHolder = Object.assign({}, saved, {fingerprint});
+        const physicalId = experimentState.holder.entryId;
+        if (entryIdFromReference(filledPhysicalReference(data)) !== physicalId) {
+            throw new Error(
+                'Filled Holder does not reference the selected physical holder.'
+            );
+        }
+
+        const writer = newMbeWriter();
+        const saved = await writer.createFilled(uploadId, filename, data);
+
+        // The upload has succeeded. Never automatically repeat it.
+        const stored = await writer.getArchive(saved.entryId);
+        const storedPhysicalId =
+            entryIdFromReference(filledPhysicalReference(stored.data));
+
+        if (storedPhysicalId !== physicalId) {
+            status.style.color = '#c62828';
+            status.textContent =
+                'Filled Holder was uploaded, but its physical holder ' +
+                'reference could not be verified. Check NOMAD before retrying.';
+            return;
+        }
+
+        experimentState.savedFilledHolder =
+            Object.assign({}, saved, {fingerprint});
         experimentState.currentFilledDirty = false;
-        status.textContent = 'Saved original FilledSubstrateHolderPDI: ' + filename;
+
+        try {
+            await setPhysicalHolderWorkflowStatus('filled');
+        } catch (statusError) {
+            status.textContent =
+                'Filled Holder archive saved, but physical holder status ' +
+                'could not be verified: ' + statusError.message +
+                '. Retry Save Filled Holder without creating a duplicate.';
+            return;
+        }
+
+        // Refresh catalog data without rebuilding the holder editor
+        // or discarding the current substrate and insert assignments.
+        let indexed = false;
+        try {
+            const catalog = await loadHolderCatalogV2();
+            indexed = catalog.filled.some(function(entry) {
+                return entry.entry_id === saved.entryId &&
+                    entryIdFromReference(
+                        filledPhysicalReference(entry.data || {})
+                    ) === physicalId;
+            });
+        } catch (refreshError) {
+            console.warn(
+                'Filled Holder saved; catalog refresh pending:',
+                refreshError
+            );
+        }
+
+        // Update only the existing physical holder option.
+        const select = document.getElementById('holderSelect');
+        const option = select && Array.from(select.options).find(
+            item => item.value === physicalId
+        );
+
+        if (option) {
+            option.dataset.filledEntryId = saved.entryId;
+            const currentStatus = holderWorkflowStatus(
+                experimentState.holder.archiveData
+            );
+            option.dataset.status = currentStatus;
+            option.textContent =
+                (experimentState.holder.id || physicalId) +
+                ' — ' + holderDisplayStatus(currentStatus, true);
+        }
+
+        status.style.color = '#173b22';
+        status.textContent = indexed
+            ? 'Successfully saved Filled Holder to NOMAD: ' + filename
+            : 'Filled Holder saved to NOMAD: ' + filename +
+              '. Catalog indexing is pending; do not upload again.';
     } catch (error) {
         status.textContent = 'Filled holder save failed: ' + error.message;
     } finally {
         if (button) button.disabled = false;
     }
 }
+
+
+// Preserve existing SubstrateMbe processing metadata across MBE growth.
+// Use only existing PDI quantities and the NOMAD archive edit API.
+async function captureProcessingHistory(filled, writer) {
+    const archive = await writer.getArchive(filled.entryId);
+    if (archive.data.m_def !==
+        'pdi_nomad_plugin.mbe.instrument.FilledSubstrateHolderPDI') {
+        throw new Error('Expected original FilledSubstrateHolderPDI.');
+    }
+
+    const result = new Map();
+
+    for (const position of archive.data.positions || []) {
+        if (!position.substrate) continue;
+
+        const id = entryIdFromReference(
+            referenceValue(position.substrate)
+        );
+        if (!id) {
+            throw new Error('Substrate reference cannot be resolved.');
+        }
+
+        if (result.has(id)) {
+            throw new Error('Duplicate substrate in Filled Holder: ' + id);
+        }
+
+        const substrate = await writer.getArchive(id);
+
+        if (substrate.data.m_def !==
+            'pdi_nomad_plugin.mbe.materials.SubstrateMbe') {
+            throw new Error('Expected original SubstrateMbe: ' + id);
+        }
+
+        const tags = Array.isArray(substrate.data.tags)
+            ? [...substrate.data.tags] : [];
+
+        result.set(id, {
+            id: id,
+            processed: substrate.data.processed === true ||
+                tags.includes('processed'),
+            tags: tags
+        });
+    }
+
+    return [...result.values()];
+}
+
+
+async function preserveProcessingHistory(records, writer) {
+    for (const record of records) {
+        const current = await writer.getArchive(record.id);
+
+        if (current.data.m_def !==
+            'pdi_nomad_plugin.mbe.materials.SubstrateMbe') {
+            throw new Error('Substrate schema mismatch: ' + record.id);
+        }
+
+        if (current.data.grown !== true) {
+            throw new Error(
+                'Original normalizer has not confirmed grown=true: ' +
+                record.id
+            );
+        }
+
+        const currentTags = Array.isArray(current.data.tags)
+            ? current.data.tags : [];
+
+        // Preserve existing custom tags, but remove the redundant
+        // grown text tag. Grown is represented by its Boolean quantity.
+        const expectedTags = [...new Set(
+            [...record.tags, ...currentTags].filter(
+                tag => typeof tag === 'string' &&
+                       tag.trim() !== '' &&
+                       tag !== 'grown'
+            )
+        )];
+
+        const normalizeTags = tags =>
+            JSON.stringify([...new Set(tags)].sort());
+
+        const changes = [];
+
+        // Never reset an already processed substrate to false.
+        if (record.processed && current.data.processed !== true) {
+            changes.push({
+                path: 'data/processed',
+                action: 'upsert',
+                new_value: true
+            });
+        }
+
+        if (normalizeTags(currentTags) !==
+            normalizeTags(expectedTags)) {
+            changes.push({
+                path: 'data/tags',
+                action: 'upsert',
+                new_value: expectedTags
+            });
+        }
+
+        if (changes.length) {
+            const response = await fetch(
+                nomadApiBase() + '/entries/' +
+                encodeURIComponent(record.id) + '/edit',
+                {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({changes})
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error(
+                    'Substrate status update failed: ' +
+                    record.id + ' HTTP ' + response.status
+                );
+            }
+        }
+
+        let verified = false;
+
+        for (let attempt = 0; attempt < 10; attempt++) {
+            const after = await writer.getArchive(record.id);
+            const tags = Array.isArray(after.data.tags)
+                ? after.data.tags : [];
+
+            verified =
+                after.data.grown === true &&
+                (!record.processed || after.data.processed === true) &&
+                normalizeTags(tags) === normalizeTags(expectedTags);
+
+            if (verified) break;
+
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
+        if (!verified) {
+            throw new Error(
+                'Substrate status not verified: ' + record.id
+            );
+        }
+    }
+}
+
+
+async function markFilledHolderGrownInNomad(filled, writer) {
+    if (!filled || !filled.entryId || !experimentState.holder) {
+        throw new Error('Missing filled or physical holder reference.');
+    }
+
+    const before = await writer.getArchive(filled.entryId);
+    if (before.data.m_def !==
+        'pdi_nomad_plugin.mbe.instrument.FilledSubstrateHolderPDI') {
+        throw new Error('Unexpected Filled Holder schema.');
+    }
+
+    if (entryIdFromReference(filledPhysicalReference(before.data)) !==
+        experimentState.holder.entryId) {
+        throw new Error('Filled Holder physical reference mismatch.');
+    }
+
+    if (before.metadata && before.metadata.published === true) {
+        throw new Error('Filled Holder archive is published/read-only.');
+    }
+
+    const reserved = new Set(['empty', 'ungrown', 'filled', 'grown']);
+    const existing = Array.isArray(before.data.tags)
+        ? before.data.tags : [];
+
+    const target = [
+        ...new Set([
+            ...existing.filter(t => !reserved.has(t)),
+            'filled',
+            'grown'
+        ])
+    ];
+
+    const normalized = tags => JSON.stringify([...tags].sort());
+
+    if (normalized(existing) === normalized(target)) return;
+
+    const response = await fetch(
+        nomadApiBase() + '/entries/' +
+        encodeURIComponent(filled.entryId) + '/edit',
+        {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                changes: [{
+                    path: 'data/tags',
+                    action: 'upsert',
+                    new_value: target
+                }]
+            })
+        }
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            'Filled Holder tag update failed: HTTP ' + response.status
+        );
+    }
+
+    for (let attempt = 0; attempt < 10; attempt++) {
+        const after = await writer.getArchive(filled.entryId);
+        const tags = Array.isArray(after.data.tags)
+            ? after.data.tags : [];
+
+        if (normalized(tags) === normalized(target) &&
+            after.data.lab_id === before.data.lab_id &&
+            after.data.name === before.data.name) {
+            return;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    throw new Error(
+        'Filled Holder tags not verified. Inspect NOMAD before retrying.'
+    );
+}
+
 
 async function saveExperimentToNomad() {
     const button = document.getElementById('saveExperimentButton');
@@ -4041,6 +4761,9 @@ async function saveExperimentToNomad() {
             filled.fingerprint !== currentLoadoutFingerprint()) {
             throw new Error('Save the current filled holder first. The holder assignments must not change afterwards.');
         }
+        const processingHistory = await captureProcessingHistory(
+            filled, newMbeWriter()
+        );
         const layers = validateNominalLayers();
         const draft = window.NomadMbeDrafts.build(
             experimentState, layers, nomadArchiveReference, xyForFilledHolderPosition
@@ -4082,6 +4805,17 @@ async function saveExperimentToNomad() {
         const result = await writer.addExtraLayers(
             uploadId, experiment.entryId, draft.post_normalization_plan
         );
+
+        await preserveProcessingHistory(
+            processingHistory, writer
+        );
+
+        // Experiment saved: mark the historical Filled Holder grown.
+        // Preserve its name, lab_id, references and geometry.
+        await markFilledHolderGrownInNomad(filled, writer);
+
+        // Update the current state of the physical holder separately.
+        await setPhysicalHolderWorkflowStatus('grown');
         experimentState.experimentSaved = true;
         const count = result.reduce((n, item) => n + item.extraLayers, 0);
         status.textContent = 'Saved and verified experiment. ' + result.length +
@@ -4098,29 +4832,102 @@ async function saveExperimentToNomad() {
 
 
 async function emptyCurrentHolder() {
-    // Clear only local assignments. The original holder schema has no persisted
-    // empty/grown lifecycle status, and historical loadouts must not be edited.
     const status = document.getElementById('filledHolderSaveStatus');
-    if (!experimentState.holder) {
-        if (status) status.textContent = 'Select a holder first.';
+    const button = document.getElementById('emptyHolderButton');
+    const holder = experimentState.holder;
+
+    if (!holder || !holder.archiveData) {
+        if (status) status.textContent = 'Select a physical holder first.';
         return;
     }
-    const physicalPositions = Array.isArray(experimentState.holder.archiveData.positions)
-        ? experimentState.holder.archiveData.positions : [];
-    experimentState.positions = {};
-    physicalPositions.forEach(function(position) {
-        if (position.name) experimentState.positions[position.name] = makePositionState(position);
-    });
-    experimentState.activePositionName = null;
-    experimentState.currentFilledDirty = true;
-    renderHolder();
-    renderTreatmentHistory();
-    updateStatePreview();
-    if (status) {
-        status.textContent = 'Local assignments cleared. No NOMAD holder or historical loadout was changed.';
+
+    // Do not use window.confirm inside the NOMAD dashboard iframe.
+    // Sandboxed iframes may suppress native modal dialogs.
+    if (button && button.dataset.confirmEmptyId !== holder.entryId) {
+        button.dataset.confirmEmptyId = holder.entryId;
+        button.textContent = 'Confirm Empty Holder';
+
+        const cancel = document.createElement('button');
+        cancel.id = 'cancelEmptyHolderButton';
+        cancel.type = 'button';
+        cancel.className = 'secondary';
+        cancel.textContent = 'Cancel';
+
+        cancel.addEventListener('click', function() {
+            delete button.dataset.confirmEmptyId;
+            button.textContent = 'Empty Holder';
+            cancel.remove();
+            if (status) {
+                status.textContent = 'Empty Holder cancelled.';
+            }
+        });
+
+        button.insertAdjacentElement('afterend', cancel);
+
+        if (status) {
+            status.textContent =
+                'Confirm that all samples have been physically removed from ' +
+                holder.id + '. Click Confirm Empty Holder to update NOMAD.';
+            status.scrollIntoView({block: 'center'});
+        }
+        return;
+    }
+
+    if (button) {
+        delete button.dataset.confirmEmptyId;
+        button.textContent = 'Empty Holder';
+    }
+    document.getElementById('cancelEmptyHolderButton')?.remove();
+
+    if (button) button.disabled = true;
+
+    try {
+        if (status) status.textContent =
+            'Updating physical holder status in NOMAD...';
+
+        // Must succeed and be verified before local assignments are cleared.
+        await setPhysicalHolderWorkflowStatus('empty');
+
+        const physicalPositions =
+            Array.isArray(holder.archiveData.positions)
+                ? holder.archiveData.positions : [];
+
+        experimentState.positions = {};
+
+        physicalPositions.forEach(function(position) {
+            if (position.name) {
+                experimentState.positions[position.name] =
+                    makePositionState(position);
+            }
+        });
+
+        experimentState.activePositionName = null;
+        experimentState.currentFilledDirty = true;
+        experimentState.savedFilledHolder = null;
+
+        // Only local active occupancy is cleared.
+        // Historical NOMAD archives remain unchanged.
+        renderHolder();
+        renderTreatmentHistory();
+        updateStatePreview();
+
+        if (status) {
+            status.textContent =
+                'Physical holder confirmed EMPTY in NOMAD. ' +
+                'Local assignments cleared. Historical archives preserved.';
+        }
+
+    } catch (error) {
+        console.error(error);
+        if (status) {
+            status.textContent =
+                'Empty Holder failed: ' + error.message +
+                '. Local assignments were not cleared.';
+        }
+    } finally {
+        if (button) button.disabled = false;
     }
 }
-
 
 function resetHolderSelection(clearSelect) {
     experimentState.holder = null;

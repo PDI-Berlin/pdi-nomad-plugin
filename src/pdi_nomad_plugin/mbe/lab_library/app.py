@@ -35,14 +35,16 @@ LIBRARY_TYPES = {
                     'nomad_material_processing.general.Annealing',
                 ],
             },
+            'backside_coating': {
+                'label': 'Backside Coating',
+                'schema': 'pdi_nomad_plugin.general.schema.BackSideCoatingRecipePDI',
+                'id_prefix': 'BACKCOAT',
+                'write_supported': True,
+                'usage_schemas': [
+                    'pdi_nomad_plugin.general.schema.BackSideCoatingPDI',
+                ],
+            },
         },
-    },
-    'sample_cut': {
-        'label': 'Sample Cut',
-        'schema': 'pdi_nomad_plugin.general.schema.SampleCutPDI',
-        'kind': 'sample_cut',
-        'write_supported': True,
-        'usage_schemas': [],
     },
     'holder': {
         'label': 'Holders',

@@ -9,10 +9,6 @@
 <body>
 <div class="page">
     <h1>New MBE Experiment</h1>
-    <p class="subtitle">
-        Load original NOMAD holders and substrates, assign positions, and prepare an MBE growth run.
-        The original PDI EntryData schemas are used. NOMAD entries are created in your selected writable upload using original PDI EntryData schemas.
-    </p>
 
     <div class="layout">
         <div class="card workflow-card">
@@ -22,7 +18,6 @@
             <select id="holderSelect" onchange="selectHolder()">
                 <option value="">Loading holders...</option>
             </select>
-            <p id="holderCatalogStatus" class="small"></p>
 
             <label for="targetUpload">2.) Target upload</label>
             <select id="targetUpload">
@@ -36,7 +31,7 @@
                     Save filled holder to NOMAD
                 </button>
                 <button id="emptyHolderButton" class="secondary danger-outline" type="button" onclick="emptyCurrentHolder()">
-                    Clear local assignments
+                    Empty Holder
                 </button>
             </div>
             <p id="filledHolderSaveStatus" class="small">
@@ -130,7 +125,6 @@
                 <div class="picker-heading">
                     <div>
                         <h2>Substrate selection</h2>
-                        <p id="activePositionLabel" class="small"></p>
                     </div>
                 </div>
 

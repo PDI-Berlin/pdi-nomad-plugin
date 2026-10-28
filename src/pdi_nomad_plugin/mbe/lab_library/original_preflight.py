@@ -13,14 +13,22 @@ from typing import Any
 
 ORIGINAL_MODULE_PREFIXES = ('nomad.', 'nomad_material_processing.')
 
+# Existing PDI schemas introduced in commit 9d8cddb (2024-08-19).
+# Explicit exceptions; no general authorization of local PDI schemas.
+APPROVED_LEGACY_PDI_CLASSES = frozenset({
+    'pdi_nomad_plugin.general.schema.BackSideCoatingPDI',
+    'pdi_nomad_plugin.general.schema.BackSideCoatingRecipePDI',
+})
+
 
 class OriginalSchemaValidationError(ValueError):
     pass
 
 
 def _resolve_original_class(qualified_name: str):
-    if not isinstance(qualified_name, str) or not qualified_name.startswith(
-        ORIGINAL_MODULE_PREFIXES
+    if not isinstance(qualified_name, str) or not (
+        qualified_name.startswith(ORIGINAL_MODULE_PREFIXES)
+        or qualified_name in APPROVED_LEGACY_PDI_CLASSES
     ):
         raise OriginalSchemaValidationError(f'Non-original m_def: {qualified_name!r}')
     module_name, sep, name = qualified_name.rpartition('.')
@@ -51,7 +59,10 @@ def _resolve_original_class(qualified_name: str):
     if class_source != module_source:
         raise OriginalSchemaValidationError(f'm_def source mismatch: {qualified_name}')
     plugin_root = Path(__file__).resolve().parents[2]
-    if plugin_root == class_source or plugin_root in class_source.parents:
+    if (
+        (plugin_root == class_source or plugin_root in class_source.parents)
+        and qualified_name not in APPROVED_LEGACY_PDI_CLASSES
+    ):
         raise OriginalSchemaValidationError('Project-local m_def is forbidden')
     return cls
 
@@ -69,11 +80,20 @@ def assert_upstream_normalizer(cls):
             continue
         method = ancestor.__dict__['normalize']
         module_name = ancestor.__module__
-        if not module_name.startswith(ORIGINAL_MODULE_PREFIXES):
+        approved_pdi_normalizer = (
+            cls.m_def.qualified_name() in APPROVED_LEGACY_PDI_CLASSES
+            and module_name == 'pdi_nomad_plugin.general.schema'
+            and ancestor.__name__ == 'BackSideCoatingPDI'
+            and getattr(method, '__module__', '') == module_name
+        )
+        if not module_name.startswith(ORIGINAL_MODULE_PREFIXES) and not approved_pdi_normalizer:
             raise OriginalSchemaValidationError(
                 f'Normalizer for {cls.__name__} comes from non-original {module_name}'
             )
-        if not getattr(method, '__module__', '').startswith(ORIGINAL_MODULE_PREFIXES):
+        if (
+            not getattr(method, '__module__', '').startswith(ORIGINAL_MODULE_PREFIXES)
+            and not approved_pdi_normalizer
+        ):
             raise OriginalSchemaValidationError(
                 f'Normalizer implementation for {cls.__name__} is not upstream'
             )
@@ -88,7 +108,12 @@ def assert_upstream_normalizer(cls):
             raise OriginalSchemaValidationError(
                 'Normalizer source cannot be verified'
             ) from exc
-        if plugin_root == source or plugin_root in source.parents:
+        if approved_pdi_normalizer:
+            if source != Path(inspect.getfile(owner_module)).resolve():
+                raise OriginalSchemaValidationError(
+                    'Approved PDI normalizer source mismatch'
+                )
+        elif plugin_root == source or plugin_root in source.parents:
             raise OriginalSchemaValidationError('Project-local normalizer forbidden')
         return module_name + '.' + ancestor.__name__
     # No normalizer in the MRO is permitted; do not introduce one.

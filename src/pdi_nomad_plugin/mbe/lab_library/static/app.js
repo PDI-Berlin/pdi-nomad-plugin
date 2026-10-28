@@ -746,6 +746,7 @@ async function assertHolderGeometryNotChanged(item) {
 
 async function loadCurrentType() {
     const status = document.getElementById('libraryStatus');
+    status.style.color = '';
     status.textContent = 'Loading ' + currentLabel().toLowerCase() + ' from NOMAD...';
     document.getElementById('libraryList').innerHTML = '';
     try {
@@ -765,9 +766,12 @@ async function loadCurrentType() {
             return itemTitle(a).localeCompare(itemTitle(b));
         });
         renderLibrary();
+        return true;
     } catch (error) {
         currentItems = [];
+        status.style.color = '#a31919';
         status.textContent = 'Error: ' + error.message;
+        return false;
     }
 }
 
@@ -1342,6 +1346,39 @@ function generatedId() {
 
     if (currentType === 'processing_recipe') {
         const prefix = currentDefinition().id_prefix || 'RECIPE';
+
+        if (currentSubtype === 'backside_coating') {
+            if (editorMode === 'edit' && editorItem?.data?.lab_id) {
+                return editorItem.data.lab_id;
+            }
+
+            const selected =
+                document.getElementById('backsideMaterial')?.value || '';
+            const material = selected === 'Other'
+                ? document.getElementById('backsideCustomMaterial')?.value.trim()
+                : selected;
+            const thickness = Number(
+                document.getElementById('backsideThickness')?.value
+            );
+
+            if (!material || !Number.isFinite(thickness) ||
+                thickness <= 0) {
+                return '—';
+            }
+
+            const thicknessPart = String(thickness).replace('.', 'p');
+            const id = nextNamedRecipeId(
+                'backcoat',
+                material + '_' + thicknessPart + 'um',
+                allProcessingCatalogs[currentSubtype] || []
+            );
+
+            const nameInput =
+                document.getElementById('backsideRecipeName');
+            if (nameInput) nameInput.value = id;
+
+            return id;
+        }
 
         if (currentSubtype === 'etching') {
             if (editorMode === 'edit' && editorItem &&
@@ -3595,6 +3632,206 @@ function readRecipeAdditionalFields(data) {
     });
 }
 
+
+
+function backsideCoatingSeed(source) {
+    const data = source || {};
+    const element = document.createElement('div');
+    element.innerHTML = String(data.description || '');
+    const plain = (element.textContent || '').trim();
+
+    const materialLine = plain.match(/^Coating material:\s*(.+)$/mi);
+    const umLine = plain.match(
+        /^Film thickness \((?:µm|μm|um)\):\s*(.+)$/mi
+    );
+    const nmLine = plain.match(/^Film thickness \(nm\):\s*(.+)$/mi);
+    const methodLine = plain.match(/^Deposition method:\s*(.+)$/mi);
+
+    const legacy = plain.match(
+        /(\d+(?:[.,]\d+)?)\s*(µm|μm|um|nm)\s+of\s+([A-Za-z][A-Za-z0-9.+-]*)/i
+    );
+
+    let thickness = '';
+
+    if (umLine) {
+        thickness = String(Number(umLine[1].replace(',', '.')));
+    } else if (nmLine) {
+        thickness = String(Number(nmLine[1].replace(',', '.')) / 1000);
+    } else if (legacy) {
+        const factor = /^nm$/i.test(legacy[2]) ? 0.001 : 1;
+        thickness = String(
+            Number(legacy[1].replace(',', '.')) * factor
+        );
+    }
+
+    return {
+        name: data.name || '',
+        material: materialLine
+            ? materialLine[1].trim()
+            : (legacy ? legacy[3] : 'Ti'),
+        thickness: thickness,
+        method: data.method ||
+            (methodLine ? methodLine[1].trim() :
+                /e[\s-]?beam/i.test(plain) ? 'E-beam evaporation' :
+                /sputter/i.test(plain) ? 'Sputtering' : ''),
+        instrument: Array.isArray(data.instruments)
+            ? data.instruments.map(item => item.name || '')
+                .filter(Boolean).join('; ')
+            : '',
+        notes: plain.replace(
+            /^(Coating material:|Film thickness \((?:nm|µm|μm|um)\):|Deposition method:).*$/gmi,
+            ''
+        ).trim()
+    };
+}
+
+function renderBacksideCoatingFields(seedData) {
+    const data = backsideCoatingSeed(seedData);
+    const container = document.getElementById('processingDynamicFields');
+    container.classList.remove('cleaning-editor', 'annealing-editor');
+
+    const materials = [
+        'Ti', 'Al', 'Au', 'Pt', 'Cr', 'Ni', 'Cu', 'Ag', 'Pd'
+    ];
+
+    const selected = materials.includes(data.material)
+        ? data.material : 'Other';
+
+    const options = materials.map(material =>
+        '<option value="' + material + '"' +
+        (selected === material ? ' selected' : '') +
+        '>' + material + '</option>'
+    ).join('');
+
+    container.innerHTML = `
+        <div class="field-grid">
+            <div>
+                <label>Recipe name / ID (automatic)</label>
+                <input id="backsideRecipeName" readonly
+                    value="${escapeHtml(data.name)}">
+            </div>
+            <div>
+                <label>Coating material *</label>
+                <select id="backsideMaterial" required>
+                    ${options}
+                    <option value="Other"
+                        ${selected === 'Other' ? 'selected' : ''}>
+                        Other...
+                    </option>
+                </select>
+                <div id="backsideCustomMaterialWrap"
+                    ${selected === 'Other' ? '' : 'hidden'}>
+                    <input id="backsideCustomMaterial"
+                        placeholder="Enter coating material"
+                        value="${escapeHtml(
+                            selected === 'Other' ? data.material : ''
+                        )}">
+                </div>
+            </div>
+            <div>
+                <label>Film thickness (µm) *</label>
+                <input id="backsideThickness" type="number"
+                    min="0.000001" step="any" required
+                    value="${escapeHtml(data.thickness)}">
+            </div>
+            <div>
+                <label>Deposition method *</label>
+                <input id="backsideMethod" required
+                    list="backsideMethods"
+                    value="${escapeHtml(data.method)}">
+                <datalist id="backsideMethods">
+                    <option value="Sputtering">
+                    <option value="E-beam evaporation">
+                    <option value="Thermal evaporation">
+                </datalist>
+            </div>
+            <div>
+                <label>Instrument</label>
+                <input id="backsideInstrument"
+                    placeholder="e.g. PDI_Cleanroom_Pfeiffer_EBEV"
+                    value="${escapeHtml(data.instrument)}">
+            </div>
+            <div>
+                <label>Description / Additional notes</label>
+                <textarea id="backsideNotes" rows="4">${escapeHtml(
+                    data.notes
+                )}</textarea>
+            </div>
+        </div>
+
+    `;
+
+    const materialSelect =
+        document.getElementById('backsideMaterial');
+    const customWrap =
+        document.getElementById('backsideCustomMaterialWrap');
+
+    materialSelect.addEventListener('change', function() {
+        customWrap.hidden = materialSelect.value !== 'Other';
+        updateGeneratedId();
+    });
+
+    if (container.dataset.backsideIdHook !== '1') {
+        container.dataset.backsideIdHook = '1';
+        container.addEventListener('input', updateGeneratedId);
+        container.addEventListener('change', updateGeneratedId);
+    }
+
+    updateGeneratedId();
+}
+
+function readBacksideCoatingFields(data) {
+    if (Array.isArray(data.samples) && data.samples.length) {
+        throw new Error(
+            'A reusable coating recipe must not contain sample references.'
+        );
+    }
+
+    const value = id => document.getElementById(id).value.trim();
+    const selected = value('backsideMaterial');
+    const material = selected === 'Other'
+        ? value('backsideCustomMaterial') : selected;
+
+    const thickness = Number(value('backsideThickness'));
+    const method = value('backsideMethod');
+    const instrument = value('backsideInstrument');
+    const notes = value('backsideNotes');
+
+    if (!material || !method ||
+        !Number.isFinite(thickness) || thickness <= 0) {
+        throw new Error(
+            'Enter a coating material, positive film thickness (µm), ' +
+            'and deposition method.'
+        );
+    }
+
+    const id = generatedId();
+
+    if (id === '—') {
+        throw new Error('Cannot generate a valid recipe ID.');
+    }
+
+    if (editorMode !== 'edit') {
+        data.name = id;
+    }
+
+    data.method = method;
+    data.description = [
+        'Coating material: ' + material,
+        'Film thickness (µm): ' + thickness,
+        'Deposition method: ' + method,
+        ...(notes ? ['', notes] : [])
+    ].join('\n');
+
+    if (instrument) {
+        data.instruments = instrument.split(';').map(name => ({
+            name: name.trim()
+        })).filter(item => item.name);
+    } else {
+        delete data.instruments;
+    }
+}
+
 function renderProcessingDynamicFields(seedData) {
     const container = document.getElementById('processingDynamicFields');
     container.classList.remove('cleaning-editor', 'annealing-editor');
@@ -3608,6 +3845,11 @@ function renderProcessingDynamicFields(seedData) {
     if (currentSubtype === 'annealing') {
         renderAnnealingFields(seedData || {});
         renderRecipeAdditionalFields(seedData || {});
+        return;
+    }
+
+    if (currentSubtype === 'backside_coating') {
+        renderBacksideCoatingFields(seedData || {});
         return;
     }
 
@@ -4649,6 +4891,8 @@ function editorArchiveData() {
             readCleaningFields(data);
         } else if (currentSubtype === 'annealing') {
             readAnnealingFields(data);
+        } else if (currentSubtype === 'backside_coating') {
+            readBacksideCoatingFields(data);
         } else if (currentSubtype === 'etching') {
             if (editorMode === 'edit' && Array.isArray(data.samples) &&
                 data.samples.length) {
@@ -4662,7 +4906,8 @@ function editorArchiveData() {
         } else {
             readDynamicFields(data);
         }
-        if (currentSubtype !== 'etching') {
+        if (currentSubtype !== 'etching' &&
+            currentSubtype !== 'backside_coating') {
             readRecipeAdditionalFields(data);
         }
     }
@@ -4821,8 +5066,11 @@ function editorArchiveData() {
         data.number_of_positions =
             data.positions.length;
 
-        // Only real SubstrateHolder fields are written; never write workflow tags.
-        delete data.tags;
+        // Preserve the existing physical holder lifecycle and additional tags.
+        // A newly registered physical holder starts empty.
+        data.tags = editorMode === 'edit'
+            ? (Array.isArray(editorItem.data.tags) ? [...editorItem.data.tags] : [])
+            : ['empty'];
 }
 
     if (currentType === 'insert') {
@@ -4881,6 +5129,30 @@ async function uploadArchive(uploadId, filename, data, overwrite) {
 }
 
 
+
+function showLibraryFeedback(level, message) {
+    const anchor = document.getElementById('libraryStatus');
+    if (!anchor) return;
+
+    let notice = document.getElementById('libraryActionNotice');
+    if (!notice) {
+        notice = document.createElement('div');
+        notice.id = 'libraryActionNotice';
+        anchor.insertAdjacentElement('beforebegin', notice);
+    }
+
+    const success = level === 'success';
+    notice.setAttribute('role', success ? 'status' : 'alert');
+    notice.setAttribute('aria-live', success ? 'polite' : 'assertive');
+    notice.style.cssText =
+        'padding:12px 16px;margin:8px 0 14px;border-radius:8px;' +
+        'font-weight:600;white-space:pre-wrap;' +
+        (success
+            ? 'background:#eaf6eb;color:#173b22;border:1px solid #6da778;'
+            : 'background:#fff0f0;color:#a31919;border:1px solid #d76c6c;');
+    notice.textContent = (success ? '✓ ' : '✕ ') + message;
+}
+
 function showSampleCutSuccess(count) {
     document.getElementById('sampleCutSuccessNotice')?.remove();
 
@@ -4933,12 +5205,16 @@ async function saveEditor(event) {
                 input.className || 'Unknown field').trim() +
                 ': ' + input.validationMessage;
         });
+        status.style.color = '#a31919';
         status.textContent = 'Please check: ' + fields.join('; ');
+        showLibraryFeedback('error', status.textContent);
         invalid[0].focus();
         return;
     }
 
     button.disabled = true;
+    status.style.color = '';
+    let uploadAccepted = false;
     let cutWriteAttempted = false;
     let verifiedChildren = null;
     try {
@@ -4971,6 +5247,38 @@ async function saveEditor(event) {
             }
             if (currentType === 'holder') {
                 await assertHolderGeometryNotChanged(editorItem);
+
+                // Verify current NOMAD tags before overwriting the archive.
+                const response = await fetch(
+                    nomadApiBase() + '/entries/' +
+                    encodeURIComponent(editorItem.entryId) + '/archive'
+                );
+                if (!response.ok) {
+                    throw new Error('Could not verify physical holder tags.');
+                }
+                const result = await response.json();
+                const latest = result?.data?.archive?.data ||
+                    result?.archive?.data;
+                if (!latest || latest.m_def !== data.m_def ||
+                    latest.lab_id !== editorItem.data.lab_id) {
+                    throw new Error('Physical holder identity verification failed.');
+                }
+
+                const snapshot = tags => JSON.stringify(
+                    [...new Set(
+                        (Array.isArray(tags) ? tags : [])
+                            .filter(tag => typeof tag === 'string')
+                    )].sort()
+                );
+
+                if (snapshot(latest.tags) !== snapshot(editorItem.data.tags)) {
+                    throw new Error(
+                        'Holder tags changed in NOMAD. Reload the Lab Library before editing.'
+                    );
+                }
+
+                data.tags = Array.isArray(latest.tags)
+                    ? [...latest.tags] : [];
             }
 
             uploadId = editorItem.uploadId;
@@ -5011,6 +5319,7 @@ async function saveEditor(event) {
         if (currentType === 'sample_cut') cutWriteAttempted = true;
 
         await uploadArchive(uploadId, filename, data, overwrite);
+        uploadAccepted = true;
 
         if (currentType === 'sample_cut') {
             status.textContent = 'Checking generated child archives...';
@@ -5027,16 +5336,52 @@ async function saveEditor(event) {
         if (currentType === 'processing_recipe') {
             allProcessingCatalogs[currentSubtype] = await queryEntriesBySchema(currentSchema());
         }
-        await loadCurrentType();
+
+        let reloaded = await loadCurrentType();
+        let visible = reloaded && (
+            editorMode === 'edit' ||
+            currentItems.some(item => item.data?.lab_id === data.lab_id)
+        );
+
+        // Elasticsearch indexing may lag behind successful NOMAD processing.
+        for (let attempt = 0; attempt < 3 && reloaded && !visible; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, 700));
+            if (currentType === 'processing_recipe') {
+                allProcessingCatalogs[currentSubtype] =
+                    await queryEntriesBySchema(currentSchema());
+            }
+            reloaded = await loadCurrentType();
+            visible = reloaded && currentItems.some(
+                item => item.data?.lab_id === data.lab_id
+            );
+        }
+
         closeModal();
+
+        if (!reloaded || !visible) {
+            showLibraryFeedback(
+                'error',
+                'Saved to NOMAD, but the entry is not yet visible in the library. ' +
+                'Please refresh the library before trying again.'
+            );
+        } else {
+            showLibraryFeedback(
+                'success',
+                'Successfully saved to NOMAD: ' + data.lab_id
+            );
+        }
 
         if (currentType === 'sample_cut' && verifiedChildren !== null) {
             showSampleCutSuccess(verifiedChildren);
         }
     } catch (error) {
+        status.style.color = '#a31919';
         status.textContent = (cutWriteAttempted
             ? 'Cut upload attempted. Do not retry before checking NOMAD: '
-            : 'Error: ') + error.message;
+            : uploadAccepted
+                ? 'Saved to NOMAD, but a subsequent operation failed: '
+                : 'Upload failed: ') + error.message;
+        showLibraryFeedback('error', status.textContent);
     } finally {
         button.disabled = cutWriteAttempted;
     }
