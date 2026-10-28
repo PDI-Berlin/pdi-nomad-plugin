@@ -1,5 +1,5 @@
-# Original Material Processing EtchingRecipe; only original fields.
+# Etching recipe for testing the "Substrate Processing" dashboard.
 data:
-  m_def: nomad_material_processing.general.EtchingRecipe
+  m_def: pdi_nomad_plugin.general.schema.EtchingRecipePDI
   name: Test HF etch
   lab_id: TEST-RECIPE-ETCH-01

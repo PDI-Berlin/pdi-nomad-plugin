@@ -1,38 +1,51 @@
-"""Guard against reintroducing removed SampleCutRecipePDI and related PDI schemas."""
-
 import ast
+import unittest
 from pathlib import Path
 
-SCHEMA_FILES = [
-    Path('src/pdi_nomad_plugin/general/schema.py'),
-    Path('src/pdi_nomad_plugin/mbe/instrument.py'),
-    Path('src/pdi_nomad_plugin/mbe/processes.py'),
-]
-FORBIDDEN = {
-    'AnnealingStepPDI',
-    'CleaningStepPDI',
-    'SampleCutRecipePDI',
-    'RectangularGeometryPDI',
-    'MBENominalLayerPDI',
-}
+SCHEMA = Path('src/pdi_nomad_plugin/general/schema.py')
 
 
-def test_removed_custom_pdi_schema_classes_stay_removed():
-    for path in SCHEMA_FILES:
-        root = ast.parse(path.read_text(encoding='utf-8-sig'))
-        present = {node.name for node in root.body if isinstance(node, ast.ClassDef)}
-        assert not FORBIDDEN.intersection(present), (
-            f'{path}: {sorted(FORBIDDEN & present)}'
+class SampleCutRecipeSchemaTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        source = SCHEMA.read_text(encoding='utf-8')
+        cls.tree = ast.parse(source)
+        cls.recipe = next(
+            (
+                node
+                for node in cls.tree.body
+                if isinstance(node, ast.ClassDef) and node.name == 'SampleCutRecipePDI'
+            ),
+            None,
         )
 
+    def test_recipe_class_exists(self):
+        self.assertIsNotNone(self.recipe)
 
-def test_cut_recipe_not_exposed_in_lab_library():
-    app = Path('src/pdi_nomad_plugin/mbe/lab_library/app.py').read_text(
-        encoding='utf-8-sig'
-    )
-    js = Path('src/pdi_nomad_plugin/mbe/lab_library/static/app.js').read_text(
-        encoding='utf-8-sig'
-    )
-    assert 'sample_cut_recipe' not in app
-    assert 'sample_cut_recipe' not in js
-    assert 'SampleCutRecipePDI' not in app
+    def test_recipe_inherits_recipe_and_entry_data(self):
+        bases = {base.id for base in self.recipe.bases if isinstance(base, ast.Name)}
+        self.assertIn('Recipe', bases)
+        self.assertIn('EntryData', bases)
+
+    def test_recipe_contains_expected_fields_only(self):
+        assigned = {
+            target.id
+            for node in self.recipe.body
+            if isinstance(node, ast.Assign)
+            for target in node.targets
+            if isinstance(target, ast.Name)
+        }
+
+        self.assertIn('m_def', assigned)
+        self.assertIn('lab_id', assigned)
+        self.assertIn('input_geometry', assigned)
+        self.assertIn('number_of_samples', assigned)
+        self.assertIn('children_geometry', assigned)
+
+        self.assertNotIn('trigger_cut_sample', assigned)
+        self.assertNotIn('parent_sample', assigned)
+        self.assertNotIn('children_samples', assigned)
+
+
+if __name__ == '__main__':
+    unittest.main()
