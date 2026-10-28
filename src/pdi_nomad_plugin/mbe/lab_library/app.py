@@ -24,6 +24,7 @@ LIBRARY_TYPES = {
                 'write_supported': True,
                 'usage_schemas': [
                     'nomad_material_processing.general.Cleaning',
+                    'pdi_nomad_plugin.general.schema.CleaningPDI',
                 ],
             },
             'annealing': {
@@ -33,6 +34,7 @@ LIBRARY_TYPES = {
                 'write_supported': True,
                 'usage_schemas': [
                     'nomad_material_processing.general.Annealing',
+                    'pdi_nomad_plugin.general.schema.AnnealingPDI',
                 ],
             },
             'backside_coating': {
@@ -54,6 +56,7 @@ LIBRARY_TYPES = {
         'write_block_reason': '',
         'usage_schemas': [
             'nomad_material_processing.vapor_deposition.general.FilledSubstrateHolder',
+            'pdi_nomad_plugin.mbe.instrument.FilledSubstrateHolderPDI',
         ],
     },
     'insert': {
@@ -64,6 +67,7 @@ LIBRARY_TYPES = {
         'write_block_reason': '',
         'usage_schemas': [
             'nomad_material_processing.vapor_deposition.general.FilledSubstrateHolder',
+            'pdi_nomad_plugin.mbe.instrument.FilledSubstrateHolderPDI',
         ],
     },
 }

@@ -24,6 +24,11 @@ let recipeSchemas = {};
 // The server returns this list; never trust a substituted process m_def from
 // configuration, browser state, or an older custom PDI schema registration.
 const ORIGINAL_PROCESS_TYPES = Object.freeze({
+    sample_cut: Object.freeze({
+        schema: null,
+        processSchema: 'pdi_nomad_plugin.general.schema.SampleCutPDI',
+        kind: 'sample_cut'
+    }),
     cleaning: Object.freeze({
         schema: 'nomad_material_processing.general.CleaningRecipe',
         processSchema: 'nomad_material_processing.general.Cleaning'
@@ -61,7 +66,8 @@ async function loadProcessTypes() {
         const approved = ORIGINAL_PROCESS_TYPES[key];
         if (!approved || !definition ||
             definition.schema !== approved.schema ||
-            definition.processSchema !== approved.processSchema) {
+            definition.processSchema !== approved.processSchema ||
+            (key === 'sample_cut' && definition.kind !== 'sample_cut')) {
             throw new Error('Non-original process or recipe m_def rejected: ' + key);
         }
     }
@@ -195,6 +201,16 @@ function referenceContainsEntryId(reference, substrateEntryId) {
 
 function treatmentReferencesSubstrate(treatment, substrateEntryId) {
     if (!treatment || !treatment.data || !substrateEntryId) return false;
+
+    if (treatment.type === 'sample_cut') {
+        if (referenceContainsEntryId(
+            treatment.data.parent_sample, substrateEntryId
+        )) return true;
+
+        return (treatment.data.children_samples || []).some(function(child) {
+            return referenceContainsEntryId(child.reference, substrateEntryId);
+        });
+    }
 
     const samples = treatment.data.samples || [];
     return samples.some(function(sample) {
@@ -410,7 +426,7 @@ async function loadSubstrates() {
                 const archive = wrapper.archive || wrapper;
                 const data = archive.data || archive;
 
-                if (data.m_def !== schema) continue;
+                if (data.m_def !== schema || data.grown === true) continue;
 
                 const fields = originalSubstrateFields(data);
                 accepted.push({
@@ -539,6 +555,7 @@ async function loadSubstrates() {
 
             try {
                 const data = await cutReadArchive(childId);
+                if (data.grown === true) continue;
 
                 if (!data.lab_id || !data.geometry ||
                     cutReferenceEntryId(
@@ -597,6 +614,7 @@ async function loadSubstrates() {
 async function loadRecipes() {
     const result = [];
     for (const [type, definition] of Object.entries(recipeSchemas)) {
+        if (definition.kind === 'sample_cut' || !definition.schema) continue;
         const entries = await queryEntries(definition.schema, 200, [
             'entry_id', 'upload_id', 'entry_name', 'data.name', 'data.lab_id',
             'data.steps', 'data.instruments'
@@ -868,7 +886,9 @@ function addProcess() {
     const card = document.createElement('div');
     card.className = 'process-card open';
     collapseOthers(card);
-    const options = Object.entries(recipeSchemas).map(function(entry) {
+    const options = Object.entries(recipeSchemas)
+        .filter(function(entry) { return entry[1].kind !== 'sample_cut'; })
+        .map(function(entry) {
         return '<option value="' + entry[0] + '">' + entry[1].label + '</option>';
     }).join('');
     card.innerHTML = `
@@ -1163,6 +1183,12 @@ async function saveProcesses() {
         definitions.forEach(function(definition, i) {
             processArchiveData(definition, selected, i);
         });
+        for (const substrate of selected) {
+            const latest = await cutReadArchive(substrate.entryId);
+            if (latest.grown === true) {
+                throw new Error('Substrate already grown: ' + substrate.labId);
+            }
+        }
     } catch (error) {
         status.textContent = 'Validation failed before upload: ' + error.message;
         return;
@@ -1349,6 +1375,7 @@ function refreshProcessCardCatalogs() {
 
         typeSelect.innerHTML = '';
         Object.entries(recipeSchemas).forEach(function([key, definition]) {
+            if (definition.kind === 'sample_cut') return;
             typeSelect.add(new Option(definition.label || key, key));
         });
 
@@ -2235,6 +2262,29 @@ function cutSuccessBanner(count) {
     });
 }
 
+function sampleCutArchiveData(parent, cut, labId, selectedCount) {
+    const data = {
+        m_def: CUT_SCHEMA,
+        name: selectedCount === 1
+            ? (cut.name || 'cut_' + processingCutShortId(parent))
+            : 'cut_' + processingCutShortId(parent),
+        lab_id: labId,
+        datetime: cut.datetime,
+        number_of_samples: cut.count,
+        parent_sample: {
+            reference: nomadArchiveReference(
+                parent.uploadId, parent.entryId
+            )
+        },
+        children_geometry: cut.geometry,
+        trigger_cut_sample: true
+    };
+
+    if (cut.location) data.location = cut.location;
+    if (cut.description) data.description = cut.description;
+    return data;
+}
+
 // Prevent repeated uploads of parents already attempted in this session.
 const processingCutAttemptedParents = new Set();
 
@@ -2267,7 +2317,8 @@ async function processingCutSave() {
         const filenames = new Set();
 
         // Validate ALL parents before creating the first archive.
-        for (const parent of selected) {
+        for (let parentIndex = 0; parentIndex < selected.length; parentIndex++) {
+            const parent = selected[parentIndex];
             if (processingCutAttemptedParents.has(parent.entryId)) {
                 throw new Error(
                     'A cut was already attempted for ' +
@@ -2287,6 +2338,9 @@ async function processingCutSave() {
             cutCheckPacking(cut);
 
             const parentData = await cutReadArchive(parent.entryId);
+            if (parentData.grown === true) {
+                throw new Error('Substrate already grown: ' + parent.labId);
+            }
 
             if (parentData.m_def !== SUBSTRATE_SCHEMA ||
                 !parentData.lab_id ||
@@ -2307,25 +2361,9 @@ async function processingCutSave() {
             const labId =
                 'CUT_' + safePart(parentData.lab_id) + '_' + stamp;
 
-            const data = {
-                m_def: CUT_SCHEMA,
-                name: selected.length === 1
-                    ? (cut.name || 'cut_' + processingCutShortId(parent))
-                    : 'cut_' + processingCutShortId(parent),
-                lab_id: labId,
-                datetime: cut.datetime,
-                number_of_samples: cut.count,
-                parent_sample: {
-                    reference: nomadArchiveReference(
-                        parent.uploadId, parent.entryId
-                    )
-                },
-                children_geometry: cut.geometry,
-                trigger_cut_sample: true
-            };
-
-            if (cut.location) data.location = cut.location;
-            if (cut.description) data.description = cut.description;
+            const data = sampleCutArchiveData(
+                parent, cut, labId, selected.length
+            );
 
             const filename = safePart(labId) + '.archive.json';
 

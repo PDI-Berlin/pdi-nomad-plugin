@@ -140,239 +140,15 @@ async function queryEntriesBySchema(schema) {
 }
 
 
-let sampleCutParents = [];
 
-let skippedSampleCutParentArchives = 0;
 
-async function querySampleCutParentArchives() {
-    const schema = 'pdi_nomad_plugin.mbe.materials.SubstrateMbe';
-    const entries = [];
-    let after = null;
-    let richFields = true;
 
-    while (true) {
-        const pagination = {page_size: 500};
-        if (after) pagination.page_after_value = after;
-
-        const required = {include: [
-            'entry_id', 'upload_id', 'entry_name',
-            ...(richFields ? [
-                'entry_type', 'mainfile',
-                'results.material.chemical_formula_reduced',
-                'results.material.chemical_formula_descriptive'
-            ] : [])
-        ]};
-
-        let response = await fetch(nomadApiBase() + '/entries/query', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                owner: 'visible',
-                query: {'section_defs.definition_qualified_name': schema},
-                pagination, required
-            })
-        });
-
-        if (response.status === 422 && richFields) {
-            richFields = false;
-            continue;
-        }
-        if (!response.ok) {
-            throw new Error('Substrate index query failed (' + response.status + ')');
-        }
-
-        const result = await response.json();
-        entries.push(...(result.data || []));
-        const next = result.pagination?.next_page_after_value;
-        if (!next || next === after) break;
-        after = next;
-    }
-
-    return entries.filter(function(entry) {
-        const type = String(entry.entry_type || '');
-        const file = String(entry.mainfile || '');
-        return entry.entry_id && entry.upload_id &&
-            !/SubstrateBatchMbe/i.test(type) &&
-            !/SubstrateBatch\.archive/i.test(file);
-    }).map(function(entry) {
-        const material = entry.results?.material || {};
-        return {
-            entryId: entry.entry_id,
-            uploadId: entry.upload_id,
-            entryName: entry.entry_name || entry.entry_id,
-            material: material.chemical_formula_descriptive ||
-                      material.chemical_formula_reduced || '',
-            data: null
-        };
-    });
-}
-
-async function loadSampleCutParents() {
-    const select = document.getElementById('cutParentSample');
-    const details = document.getElementById('cutParentDetails');
-    const heightInput = document.getElementById('cutChildHeight');
-    const locationSelect = document.getElementById('cutLocation');
-    const otherLocationWrapper = document.getElementById('cutLocationOtherWrapper');
-
-    locationSelect.onchange = function() {
-        otherLocationWrapper.classList.toggle(
-            'hidden', locationSelect.value !== 'Elsewhere'
-        );
-    };
-
-    const nameInput = document.getElementById('cutProcessName');
-    nameInput.readOnly = true;
-
-    let materialFilter = document.getElementById('cutMaterialFilter');
-    if (!materialFilter) {
-        const wrapper = document.createElement('div');
-        const label = document.createElement('label');
-        label.htmlFor = 'cutMaterialFilter';
-        label.textContent = 'Filter by material';
-        materialFilter = document.createElement('select');
-        materialFilter.id = 'cutMaterialFilter';
-        wrapper.append(label, materialFilter);
-        select.parentElement.parentElement.prepend(wrapper);
-    }
-
-    select.replaceChildren(new Option('Loading substrate index...', ''));
-    select.disabled = true;
-
-    const [substrates, cuts] = await Promise.all([
-        querySampleCutParentArchives(),
-        queryEntriesBySchema('pdi_nomad_plugin.general.schema.SampleCutPDI')
-    ]);
-
-    const alreadyCut = new Set();
-    cuts.forEach(function(item) {
-        const d = item.data || {};
-        if (!Array.isArray(d.children_samples) || !d.children_samples.length) return;
-        const ref = String(d.parent_sample?.reference || '');
-        const part = ref.split('/archive/')[1] || '';
-        const parentId = part.split('#')[0].split('?')[0].split('/')[0];
-        if (parentId) alreadyCut.add(parentId);
-    });
-
-    const collator = new Intl.Collator(undefined, {
-        numeric: true, sensitivity: 'base'
-    });
-
-    sampleCutParents = substrates.filter(item =>
-        !alreadyCut.has(item.entryId)
-    ).sort((a, b) => collator.compare(a.entryName, b.entryName));
-
-    const materialName = item => item.material || 'Material not indexed';
-    const materials = [...new Set(sampleCutParents.map(materialName))]
-        .sort(collator.compare);
-
-    materialFilter.replaceChildren(new Option('All materials', ''));
-    materials.forEach(material =>
-        materialFilter.add(new Option(material, material))
-    );
-
-    function refreshOptions() {
-        select.replaceChildren(new Option('Select parent sample...', ''));
-        sampleCutParents.filter(item =>
-            !materialFilter.value ||
-            materialName(item) === materialFilter.value
-        ).forEach(item => {
-            select.add(new Option(
-                item.entryName + ' | ' + materialName(item),
-                item.entryId
-            ));
-        });
-        details.textContent = 'Select a parent sample to load its geometry.';
-        heightInput.value = '';
-        nameInput.value = '';
-    }
-
-    materialFilter.onchange = refreshOptions;
-    refreshOptions();
-    select.disabled = false;
-
-    select.onchange = async function() {
-        const item = sampleCutParents.find(x => x.entryId === select.value);
-        if (!item) return;
-
-        details.textContent = 'Loading selected parent archive...';
-        heightInput.value = '';
-        nameInput.value = '';
-
-        try {
-            if (!item.data) {
-                const response = await fetch(
-                    nomadApiBase() + '/entries/' +
-                    encodeURIComponent(item.entryId) + '/archive'
-                );
-                if (!response.ok) throw new Error('HTTP ' + response.status);
-
-                const payload = await response.json();
-                const wrapper = payload.data || payload.archive || payload;
-                const archive = wrapper.archive || wrapper;
-                const data = archive.data || archive;
-
-                if (data.m_def !== 'pdi_nomad_plugin.mbe.materials.SubstrateMbe') {
-                    throw new Error('Selected entry is not an individual SubstrateMbe.');
-                }
-                item.data = data;
-            }
-
-            if (select.value !== item.entryId) return;
-
-            const d = item.data;
-            const fullId = String(d.lab_id || item.entryName).trim();
-            const charge = String(d.charge_id || '').trim()
-                .normalize('NFKD')
-                .replace(/[\u0300-\u036f]/g, '')
-                .replace(/[^A-Za-z0-9._-]+/g, '-')
-                .replace(/-+/g, '-')
-                .replace(/^[-_.]+|[-_.]+$/g, '');
-            const segment = '_' + charge + '_';
-            const index = charge ? fullId.lastIndexOf(segment) : -1;
-            const shortId = index < 0 ? fullId :
-                fullId.slice(0, index) + '_' +
-                fullId.slice(index + segment.length);
-            nameInput.value = 'cut_' + shortId;
-
-            const g = d.geometry || {};
-            const width = mm(g.width);
-            const length = mm(g.length) ?? width;
-            const radius = mm(g.radius);
-            const height = mm(g.height);
-            const formula = d.components?.[0]?.pure_substance?.molecular_formula;
-            const material = formula || item.material || 'not specified';
-
-            const size = Number.isFinite(width)
-                ? formatNumber(width) + ' × ' + formatNumber(length) + ' mm'
-                : Number.isFinite(radius)
-                    ? 'Radius ' + formatNumber(radius) + ' mm'
-                    : 'Geometry not specified';
-
-            const hkl = d.crystal_properties?.surface_orientation?.hkl_reciprocal || {};
-            const indices = ['h_index', 'k_index', 'l_index'].map(k => hkl[k]);
-            const orientation = indices.every(x => x !== undefined)
-                ? '(' + indices.join('') + ')' : 'not specified';
-
-            details.textContent =
-                'Parent: ' + (d.lab_id || d.name || item.entryName) +
-                ' | Material: ' + material +
-                ' | Geometry: ' + size +
-                ' | Thickness: ' +
-                (Number.isFinite(height) ? formatNumber(height) + ' mm' : 'unknown') +
-                ' | Orientation: ' + orientation;
-
-            heightInput.value = Number.isFinite(height) && height > 0
-                ? String(height) : '';
-        } catch (error) {
-            details.textContent = 'Parent archive unavailable: ' + error.message;
-        }
-    };
-}
 
 async function loadLibraryTypes() {
     const response = await fetch('library-types');
     if (!response.ok) throw new Error('Could not load library type definitions.');
     libraryTypes = await response.json();
+    delete libraryTypes.sample_cut;
 }
 
 
@@ -495,6 +271,7 @@ function renderTypeTabs() {
     const box = document.getElementById('typeTabs');
     box.innerHTML = '';
     Object.entries(libraryTypes).forEach(function([key, def]) {
+        if (key === 'sample_cut') return;
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'type-tab' + (key === currentType ? ' active' : '');
@@ -597,21 +374,18 @@ function createRowLabel() {
     if (currentType === 'processing_recipe') return '+ Create new ' + currentDefinition().label.toLowerCase() + ' recipe';
     if (currentType === 'holder') return '+ Create new holder';
     if (currentType === 'insert') return '+ Create new insert';
-    if (currentType === 'sample_cut') return '+ Create new Sample Cut';
     return '+ Create new item';
 }
 
 function renderLibrary() {
     const list = document.getElementById('libraryList');
     const status = document.getElementById('libraryStatus');
-    const items = currentType === 'sample_cut' ? [] : filteredItems();
+    const items = filteredItems();
 
-    status.textContent = currentType === 'sample_cut'
-        ? 'Create a new Sample Cut. Previous cuts remain stored in NOMAD.'
-        : items.length + ' of ' + currentItems.length + ' ' + currentLabel().toLowerCase() + ' shown.';
+    status.textContent = items.length + ' of ' + currentItems.length + ' ' + currentLabel().toLowerCase() + ' shown.';
     list.innerHTML = '';
 
-    if (!items.length && currentType !== 'sample_cut') {
+    if (!items.length) {
         const empty = document.createElement('div');
         empty.className = 'empty-state';
         empty.textContent = 'No matching library items.';
@@ -667,11 +441,7 @@ function renderLibrary() {
         duplicate.textContent = 'Duplicate';
         duplicate.addEventListener('click', function() { openEditor('duplicate', item); });
 
-        if (currentType === 'sample_cut') {
-            actions.append(view);
-        } else {
-            actions.append(view, edit, duplicate);
-        }
+        actions.append(view, edit, duplicate);
         row.append(identity, type, detail, actions);
         list.appendChild(row);
     });
@@ -4071,18 +3841,10 @@ function populateEditor(data) {
     restoreTargetUploadFields();
     restoreProcessingTemplateBlock();
     data = data || {};
-    ['processingFields','sampleCutFields','holderFields','insertFields'].forEach(function(id) {
+    ['processingFields','holderFields','insertFields'].forEach(function(id) {
         document.getElementById(id).classList.add('hidden');
     });
 
-    if (currentType === 'sample_cut') {
-        document.getElementById('sampleCutFields').classList.remove('hidden');
-        document.getElementById('cutProcessName').value = '';
-        document.getElementById('cutLocation').value = '';
-        document.getElementById('cutLocationOther').value = '';
-        document.getElementById('cutLocationOtherWrapper').classList.add('hidden');
-        document.getElementById('cutDescription').value = '';
-    }
 
     if (currentType === 'processing_recipe') {
         document.getElementById('processingFields').classList.remove('hidden');
@@ -4164,14 +3926,12 @@ function entityNoun() {
     if (currentType === 'processing_recipe') return 'recipe';
     if (currentType === 'holder') return 'holder';
     if (currentType === 'insert') return 'insert';
-    if (currentType === 'sample_cut') return 'Sample Cut';
     return 'item';
 }
 
 async function openEditor(mode, item) {
-    if (currentType === 'sample_cut' && mode !== 'create') {
-        window.alert('Editing existing Sample Cuts is not yet enabled.');
-        return;
+    if (currentType === 'sample_cut') {
+        throw new Error('Use Substrate Processing for Sample Cut.');
     }
 
     if (mode === 'edit' && item) {
@@ -4193,14 +3953,6 @@ async function openEditor(mode, item) {
 
     populateEditor(item ? JSON.parse(JSON.stringify(item.data || {})) : {});
 
-    if (currentType === 'sample_cut') {
-        try {
-            await loadSampleCutParents();
-        } catch (error) {
-            document.getElementById('cutParentDetails').textContent =
-                'Could not load substrates: ' + error.message;
-        }
-    }
 
     const target = document.getElementById('targetUploadFields');
     target.classList.toggle('hidden', mode === 'edit');
@@ -4555,303 +4307,9 @@ function readAnnealingFields(data) {
 }
 
 
-function sampleCutArchiveData() {
-    if (editorMode !== 'create')
-        throw new Error('Sample Cut editing is disabled.');
 
-    const select = document.getElementById('cutParentSample');
-    const parent = sampleCutParents.find(x => x.entryId === select.value);
-
-    if (!parent || !parent.data || !parent.uploadId || !parent.entryId ||
-        parent.data.m_def !== 'pdi_nomad_plugin.mbe.materials.SubstrateMbe') {
-        throw new Error('Select a fully loaded individual parent substrate.');
-    }
-
-    const fullId = String(parent.data.lab_id || '').trim();
-    if (!fullId) throw new Error('Parent lab_id is missing.');
-
-    const name = document.getElementById('cutProcessName').value.trim();
-    if (!name) throw new Error('Process name is missing.');
-
-    const count = Number(document.getElementById('cutChildCount').value);
-    if (!Number.isSafeInteger(count) || count < 1 || count > 100) {
-        throw new Error('Child count must be an integer from 1 to 100.');
-    }
-
-    const dim = (id, fallback) => {
-        const raw = document.getElementById(id).value.trim();
-        const value = raw ? Number(raw) : fallback;
-        if (!Number.isFinite(value) || value <= 0) {
-            throw new Error('Invalid positive dimension: ' + id);
-        }
-        return value;
-    };
-
-    const pg = parent.data.geometry || {};
-    const pw = mm(pg.width);
-    const pl = mm(pg.length) ?? pw;
-    const pr = mm(pg.radius);
-    const ph = mm(pg.height);
-
-    let parentArea;
-
-    if (Number.isFinite(pw) && Number.isFinite(pl) && pw > 0 && pl > 0) {
-        parentArea = pw * pl;
-    } else if (Number.isFinite(pr) && pr > 0) {
-        const angle = pg.central_angle == null
-            ? 360 : Number(pg.central_angle);
-        if (!(angle > 0 && angle <= 360))
-            throw new Error('Invalid parent sector angle.');
-        parentArea = Math.PI * pr * pr * angle / 360;
-    } else {
-        throw new Error('Parent geometry missing or unsupported.');
-    }
-
-    const height = dim('cutChildHeight', ph);
-
-    if (Number.isFinite(ph) && height > ph + 1e-8) {
-        throw new Error('Child thickness exceeds parent thickness.');
-    }
-
-    const shape = document.getElementById('cutChildShape').value;
-    let geometry;
-    let area;
-
-    if (shape === 'rectangle') {
-        const w = dim('cutChildWidth');
-        const l = dim('cutChildLength');
-        area = w * l;
-
-        geometry = Math.abs(w - l) < 1e-8
-            ? {
-                m_def: 'nomad_material_processing.general.SquareCuboid',
-                width: w / 1000,
-                height: height / 1000
-            }
-            : {
-                m_def: 'nomad_material_processing.general.RectangleCuboid',
-                width: w / 1000,
-                length: l / 1000,
-                height: height / 1000
-            };
-
-        if (Number.isFinite(pw) && Number.isFinite(pl)) {
-            const grid = (a, b) =>
-                Math.floor((pw + 1e-8) / a) *
-                Math.floor((pl + 1e-8) / b);
-
-            if (Math.max(grid(w, l), grid(l, w)) < count) {
-                throw new Error(
-                    'Children cannot fit in a rectangular grid.'
-                );
-            }
-        } else if (Number.isFinite(pr) &&
-                   Math.hypot(w, l) > 2 * pr + 1e-8) {
-            throw new Error(
-                'Child rectangle exceeds parent diameter.'
-            );
-        }
-
-    } else if (shape === 'circle' || shape === 'circular_sector') {
-        const radius = dim('cutChildRadius');
-        const angle = shape === 'circle'
-            ? 360 : dim('cutChildAngle');
-
-        if (angle > 360)
-            throw new Error('Central angle exceeds 360 degrees.');
-
-        area = Math.PI * radius * radius * angle / 360;
-
-        geometry = {
-            m_def: shape === 'circle'
-                ? 'nomad_material_processing.general.Cylinder'
-                : 'nomad_material_processing.general.CylinderSector',
-            radius: radius / 1000,
-            height: height / 1000
-        };
-
-        if (shape === 'circular_sector')
-            geometry.central_angle = angle;
-
-        if (Number.isFinite(pr) && radius > pr + 1e-8)
-            throw new Error('Child radius exceeds parent radius.');
-
-        if (Number.isFinite(pw) && Number.isFinite(pl) &&
-            shape === 'circle' &&
-            (2 * radius > pw + 1e-8 || 2 * radius > pl + 1e-8)) {
-            throw new Error(
-                'Child circle exceeds parent dimensions.'
-            );
-        }
-
-    } else {
-        throw new Error('Unsupported child geometry.');
-    }
-
-    if (area * count > parentArea * (1 + 1e-8)) {
-        throw new Error(
-            'Total child area (' + (area * count).toFixed(2) +
-            ' mm²) exceeds parent area (' +
-            parentArea.toFixed(2) + ' mm²).'
-        );
-    }
-
-    // Cutting losses and general 2D packing are not modeled.
-    const locationChoice = document.getElementById('cutLocation').value;
-    const location = locationChoice === 'Elsewhere'
-        ? document.getElementById('cutLocationOther').value.trim()
-        : locationChoice;
-
-    if (locationChoice === 'Elsewhere' && !location)
-        throw new Error('Specify the Elsewhere location.');
-
-    const data = {
-        m_def: 'pdi_nomad_plugin.general.schema.SampleCutPDI',
-        lab_id: 'CUT_' + safeFilenamePart(fullId) + '_' + timestampPart(),
-        name: name,
-        datetime: new Date().toISOString(),
-        number_of_samples: count,
-        parent_sample: {
-            reference: '../uploads/' + parent.uploadId +
-                '/archive/' + parent.entryId + '#/data'
-        },
-        children_geometry: geometry,
-        trigger_cut_sample: true
-    };
-
-    if (location) data.location = location;
-
-    const notes = document.getElementById('cutDescription').value.trim();
-    if (notes) data.description = notes;
-
-    return data;
-}
-
-async function verifySampleCutChildren(uploadId, filename, original) {
-    const cuts = await queryEntriesBySchema(
-        'pdi_nomad_plugin.general.schema.SampleCutPDI'
-    );
-
-    const cut = cuts.find(x =>
-        x.uploadId === uploadId &&
-        (x.mainfile === filename ||
-         String(x.mainfile || '').endsWith('/' + filename))
-    );
-
-    if (!cut || !cut.entryId) {
-        throw new Error(
-            'Saved cut not indexed yet. Check NOMAD before retrying.'
-        );
-    }
-
-    async function read(id) {
-        const response = await fetch(
-            nomadApiBase() + '/entries/' +
-            encodeURIComponent(id) + '/archive'
-        );
-
-        if (!response.ok)
-            throw new Error(
-                'Cannot read archive ' + id +
-                ': HTTP ' + response.status
-            );
-
-        const obj = await response.json();
-        const wrapper = obj.data || obj.archive || obj;
-        const archive = wrapper.archive || wrapper;
-        return archive.data || archive;
-    }
-
-    const processed = await read(cut.entryId);
-
-    if (processed.m_def !== original.m_def ||
-        processed.lab_id !== original.lab_id ||
-        processed.number_of_samples !== original.number_of_samples ||
-        processed.trigger_cut_sample === true) {
-        throw new Error('Processed Sample Cut archive is inconsistent.');
-    }
-
-    const children = processed.children_samples || [];
-
-    if (children.length !== original.number_of_samples) {
-        throw new Error(
-            'Found ' + children.length + ' of ' +
-            original.number_of_samples + ' child references.'
-        );
-    }
-
-    const parentEntryId = original.parent_sample.reference
-        .split('/archive/')[1].split('#')[0];
-
-    const parent = sampleCutParents.find(
-        x => x.entryId === parentEntryId
-    );
-
-    if (!parent || !parent.data || !parent.data.lab_id)
-        throw new Error('Parent ID unavailable for verification.');
-
-    const seen = new Set();
-
-    await Promise.all(children.map(async (child, i) => {
-        const ref = String(child.reference || '');
-        const match = ref.match(/\/archive\/([^#?/]+)/);
-
-        if (!match || seen.has(match[1]) ||
-            !ref.includes('/uploads/' + uploadId + '/archive/')) {
-            throw new Error(
-                'Invalid, duplicate or wrong-upload child reference.'
-            );
-        }
-
-        seen.add(match[1]);
-
-        const created = await read(match[1]);
-        const expected = parent.data.lab_id + '.' + (i + 1);
-
-        if (created.lab_id !== expected || created.name !== expected) {
-            throw new Error(
-                'Child ID mismatch: expected ' + expected
-            );
-        }
-
-        const parentRef = String(
-            created.parent_sample?.reference || ''
-        );
-
-        if (!parentRef.includes('/archive/' + parentEntryId)) {
-            throw new Error(
-                'Missing parent reference for ' + expected
-            );
-        }
-
-        if (!created.geometry ||
-            created.geometry.m_def !== original.children_geometry.m_def) {
-            throw new Error(
-                'Child geometry schema mismatch for ' + expected
-            );
-        }
-
-        for (const key of [
-            'width', 'length', 'height', 'radius', 'central_angle'
-        ]) {
-            if (original.children_geometry[key] !== undefined &&
-                (!Number.isFinite(Number(created.geometry[key])) ||
-                 Math.abs(
-                     Number(created.geometry[key]) -
-                     original.children_geometry[key]
-                 ) > 1e-8)) {
-                throw new Error(
-                    'Child geometry mismatch: ' + key
-                );
-            }
-        }
-    }));
-
-    return children.length;
-}
 
 function editorArchiveData() {
-    if (currentType === 'sample_cut') return sampleCutArchiveData();
     const existing = editorItem && editorMode === 'edit'
         ? JSON.parse(JSON.stringify(editorItem.data || {}))
         : {};
@@ -5046,7 +4504,7 @@ function editorArchiveData() {
                         );
                     }
 
-                    return {
+                    const nextPosition = {
                         ...(previous || {}),
                         name,
                         x_position: (rho / 1000) * Math.cos(theta * Math.PI / 180),
@@ -5054,12 +4512,16 @@ function editorArchiveData() {
                         rho: rho / 1000,
                         theta: theta,
                         slot_geometry: {
-                            ...previousGeometry,
-                            m_def: squareDef,
                             width: size / 1000,
                             length: size / 1000
                         }
                     };
+                    nextPosition.slot_geometry = {
+                        ...previousGeometry,
+                        ...nextPosition.slot_geometry,
+                        m_def: squareDef
+                    };
+                    return nextPosition;
                 }
             );
 
@@ -5153,36 +4615,12 @@ function showLibraryFeedback(level, message) {
     notice.textContent = (success ? '✓ ' : '✕ ') + message;
 }
 
-function showSampleCutSuccess(count) {
-    document.getElementById('sampleCutSuccessNotice')?.remove();
-
-    const banner = document.createElement('div');
-    banner.id = 'sampleCutSuccessNotice';
-    banner.setAttribute('role', 'status');
-    banner.setAttribute('aria-live', 'polite');
-
-    banner.textContent =
-        '✓ Sample Cut successful — ' +
-        count + ' child samples created and verified.';
-
-    banner.style.position = 'sticky';
-    banner.style.top = '0';
-    banner.style.zIndex = '1000';
-    banner.style.padding = '12px 16px';
-    banner.style.margin = '0 0 12px';
-    banner.style.background = '#eaf6eb';
-    banner.style.color = '#173b22';
-    banner.style.border = '1px solid #6da778';
-    banner.style.borderRadius = '8px';
-
-    document.body.insertBefore(banner, document.body.firstChild);
-
-    document.addEventListener('click', function dismiss() {
-        banner.remove();
-    }, {capture: true, once: true});
-}
 
 async function saveEditor(event) {
+    if (currentType === 'sample_cut') {
+        event.preventDefault();
+        throw new Error('Sample Cut is only available in Substrate Processing.');
+    }
     event.preventDefault();
     const button = document.getElementById('saveEditorButton');
     const status = document.getElementById('editorStatus');
@@ -5215,8 +4653,6 @@ async function saveEditor(event) {
     button.disabled = true;
     status.style.color = '';
     let uploadAccepted = false;
-    let cutWriteAttempted = false;
-    let verifiedChildren = null;
     try {
         // Original NOMAD sections without a verified EntryArchive.data root
         // must never reach the HTTP PUT path. This is an app-level safety
@@ -5293,45 +4729,16 @@ async function saveEditor(event) {
                 currentItems = latestItems;
             }
             assertUniqueGeneratedId(data.lab_id);
-            if (currentType === 'sample_cut') {
-                const parentId = data.parent_sample.reference
-                    .split('/archive/')[1].split('#')[0];
-
-                if (latestItems.some(x => {
-                    const ref = String(
-                        x.data?.parent_sample?.reference || ''
-                    );
-                    return (ref.split('/archive/')[1] || '')
-                        .split('#')[0] === parentId;
-                })) {
-                    throw new Error(
-                        'Parent already cut. Reload the sample list.'
-                    );
-                }
-            }
-
             uploadId = document.getElementById('targetUpload').value;
             if (!uploadId) throw new Error('Select a target upload first.');
             filename = safeFilenamePart(data.lab_id) + '_' + timestampPart() + '.archive.yaml';
             status.textContent = 'Creating new ' + entityNoun() + '...';
         }
 
-        if (currentType === 'sample_cut') cutWriteAttempted = true;
 
         await uploadArchive(uploadId, filename, data, overwrite);
         uploadAccepted = true;
-
-        if (currentType === 'sample_cut') {
-            status.textContent = 'Checking generated child archives...';
-            const n = await verifySampleCutChildren(
-                uploadId, filename, data
-            );
-            verifiedChildren = n;
-            status.textContent =
-                'Verified ' + n + ' child substrates.';
-        } else {
-            status.textContent = 'Saved successfully.';
-        }
+        status.textContent = 'Saved successfully.';
 
         if (currentType === 'processing_recipe') {
             allProcessingCatalogs[currentSubtype] = await queryEntriesBySchema(currentSchema());
@@ -5371,19 +4778,14 @@ async function saveEditor(event) {
             );
         }
 
-        if (currentType === 'sample_cut' && verifiedChildren !== null) {
-            showSampleCutSuccess(verifiedChildren);
-        }
     } catch (error) {
         status.style.color = '#a31919';
-        status.textContent = (cutWriteAttempted
-            ? 'Cut upload attempted. Do not retry before checking NOMAD: '
-            : uploadAccepted
-                ? 'Saved to NOMAD, but a subsequent operation failed: '
-                : 'Upload failed: ') + error.message;
+        status.textContent = (uploadAccepted
+            ? 'Saved to NOMAD, but a subsequent operation failed: '
+            : 'Upload failed: ') + error.message;
         showLibraryFeedback('error', status.textContent);
     } finally {
-        button.disabled = cutWriteAttempted;
+        button.disabled = false;
     }
 }
 

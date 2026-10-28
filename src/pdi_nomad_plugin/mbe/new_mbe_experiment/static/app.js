@@ -128,9 +128,10 @@ async function loadTreatmentRecipes() {
         {type:'annealing', schema:'nomad_material_processing.general.AnnealingRecipe'},
         {type:'etching', schema:'nomad_material_processing.general.EtchingRecipe'}
     ];
+    const recipeQuery = {owner: 'visible'};
     const recipes = [];
     for (const type of types) {
-        const entries = await queryEntriesBySchema(type.schema, 500, ['entry_id','entry_name','data']);
+        const entries = await queryEntriesBySchema(type.schema, 500, ['entry_id','entry_name','data'], recipeQuery);
         entries.forEach(function(entry) {
             const data = entry.data || {};
             recipes.push({
@@ -150,7 +151,7 @@ async function loadTreatmentRecipes() {
 // /entries/archive/query instead and returns the same entry shape.
 async function loadSubstrates() {
     const schema = 'pdi_nomad_plugin.mbe.materials.SubstrateMbe';
-    const entries = await queryEntriesBySchema(schema, 1000, ['entry_id','upload_id','entry_name','data']);
+    const entries = await queryEntriesBySchema(schema, 1000, ['entry_id','upload_id','entry_name','data','data.parent_sample','data.geometry']);
     return entries.filter(function(entry) { return entry.data && entry.data.m_def === schema; });
 }
 
@@ -296,8 +297,45 @@ function updateSubstrateFilters() {
 }
 
 
+function cutParentEntryIds() {
+    const parentIds = new Set();
+
+    substrateCatalogState.forEach(
+        function(substrate) {
+            const parentEntryId =
+                referenceEntryId(
+                    substrate.parentSample
+                );
+
+            if (parentEntryId) {
+                parentIds.add(
+                    parentEntryId
+                );
+            }
+        }
+    );
+
+    return parentIds;
+}
+
+
+function substrateHasBeenCut(substrate) {
+    if (
+        !substrate ||
+        !substrate.entryId
+    ) {
+        return false;
+    }
+
+    return cutParentEntryIds().has(
+        substrate.entryId
+    );
+}
+
+
 function filteredSubstrates() {
 
+    const cutParents = cutParentEntryIds();
     const search =
         document.getElementById(
             'substrateSearch'
@@ -340,7 +378,7 @@ function filteredSubstrates() {
         function(substrate) {
 
             // Grown substrates cannot be assigned to a new MBE holder.
-            if (substrate.grown) return false;
+            if (substrate.grown || cutParents.has(substrate.entryId)) return false;
 
             const searchable = [
                 substrate.labId,
@@ -435,6 +473,13 @@ function selectSubstrate(
         return;
     }
 
+
+    if (substrateHasBeenCut(substrate)) {
+        throw new Error(
+            'Substrate ' + (substrate.labId || substrate.entryId) +
+            ' has been cut into child samples and is no longer physically available.'
+        );
+    }
 
     const oldEntryId =
         position.substrate
@@ -586,6 +631,9 @@ function assertUniqueHolderAssignments() {
             }
             if (position.insertReduction && !insertId) {
                 throw new Error('Missing insert entry ID at ' + name);
+            }
+            if (substrateId && substrateHasBeenCut({entryId: substrateId})) {
+                throw new Error('Cut parent substrate cannot be assigned: ' + name);
             }
             if (substrateId && reserved.substrates.has(String(substrateId))) {
                 throw new Error('Substrate already assigned elsewhere: ' + name);
@@ -817,53 +865,14 @@ async function initialiseSubstrates() {
     try {
         const entries = await loadSubstrates();
 
-        // Exclude consumed parent substrates using persisted SampleCutPDI archives.
-        const cuts = await queryEntriesBySchema(
-            'pdi_nomad_plugin.general.schema.SampleCutPDI',
-            500,
-            ['entry_id', 'upload_id', 'data']
-        );
-
-        const entryIds = new Set(entries.map(entry => entry.entry_id));
-        const consumedParentIds = new Set();
-
-        cuts.forEach(function(cut) {
-            const parent = (cut.data || {}).parent_sample || {};
-            const reference = parent.reference;
-
-            if (!reference) return;
-
-            if (typeof reference !== 'string') {
-                throw new Error('Invalid SampleCut parent reference: ' + cut.entry_id);
-            }
-
-            const match = reference.match(
-                /(?:^|\/)(?:archive|entries)\/([^\/?#]+)/
-            );
-
-            const parentId = match
-                ? decodeURIComponent(match[1])
-                : (entryIds.has(reference) ? reference : null);
-
-            if (!parentId) {
-                throw new Error('Unresolved SampleCut parent: ' + reference);
-            }
-
-            consumedParentIds.add(parentId);
-        });
-
-        const selectableEntries = entries.filter(function(entry) {
-            return !consumedParentIds.has(entry.entry_id);
-        });
-
-        substrateCatalogState = selectableEntries.map(function(entry) {
+        substrateCatalogState = entries.map(function(entry) {
             const data = entry.data || {};
             const fields = originalMbeSubstrateFields(data);
             return {
                 entryId:entry.entry_id, uploadId:entry.upload_id,
                 entryName:entry.entry_name || entry.entry_id,
                 labId:data.lab_id || data.name || entry.entry_name || entry.entry_id,
-                parentSample:null, material:fields.material, formula:fields.formula,
+                parentSample:data.parent_sample || null, material:fields.material, formula:fields.formula,
                 supplierId:data.supplier_id || '', crystalId:fields.crystalId, chargeId:fields.chargeId,
                 polishing:'', orientation:fields.orientation, offcut:fields.offcut,
                 offcutDirection:fields.offcutDirection,
@@ -2498,7 +2507,11 @@ let insertCatalogState = [];
 // entries go under required.data, everything else (entry_name, mainfile,
 // published, ...) goes under required.metadata. The returned objects keep
 // the exact same shape callers already expect (entry.data.x, entry.entry_name, ...).
-async function queryEntriesBySchema(schema, pageSize, include) {
+async function queryEntriesBySchema(schema, pageSize, include, options) {
+    if (options && options.owner !== undefined && options.owner !== 'visible') {
+        throw new Error('Only visible NOMAD entries are supported.');
+    }
+
     const fields = include || ['entry_id', 'upload_id', 'entry_name'];
     const metadataRequired = {};
     const dataRequired = {};
@@ -2564,6 +2577,52 @@ async function queryEntriesBySchema(schema, pageSize, include) {
     });
 }
 
+
+async function queryExperimentHolderReferences() {
+    const response = await fetch(
+        nomadApiBase() + '/entries/archive/query',
+        {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                // FIX: without an explicit owner NOMAD defaults to owner="public",
+                // which only returns PUBLISHED entries. Lab data lives in unpublished
+                // uploads, so every query came back empty. "visible" = public + everything
+                // the logged-in user can see (login is sent automatically via cookie).
+                owner: 'visible',
+                query: {
+                    'section_defs.definition_qualified_name':
+                        'pdi_nomad_plugin.mbe.processes.ExperimentMbePDI'
+                },
+                pagination: {page_size: 1000},
+                required: {
+                    data: {
+                        substrate_holder: {
+                            reference: '*'
+                        }
+                    }
+                }
+            })
+        }
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            'Experiment holder-reference query failed: ' +
+            response.status
+        );
+    }
+
+    const result = await response.json();
+    return (result.data || []).map(function(entry) {
+        const archive = entry.archive || {};
+        return {
+            entry_id: entry.entry_id,
+            upload_id: entry.upload_id,
+            data: archive.data || {}
+        };
+    });
+}
 
 function entryIdFromReference(reference) {
     if (!reference) return null;
@@ -2724,6 +2783,7 @@ async function loadHolderCatalogV2() {
             )
         ]);
 
+    const experiments = await queryExperimentHolderReferences();
     const physicalCandidates =
         holdersRaw.filter(
             function(entry) {
@@ -2858,7 +2918,7 @@ async function loadHolderCatalogV2() {
         empty: holders,
 
         filled: filled,
-        experiments: [],
+        experiments: experiments,
         current: current,
         currentByPhysical:
             canonicalCurrentByPhysical
@@ -2872,7 +2932,7 @@ async function loadHolderCatalogV2() {
 async function loadInsertCatalogV2() {
     const schema = 'pdi_nomad_plugin.mbe.instrument.InsertReductionPDI';
     const entries = await queryEntriesBySchema(
-        schema, 500, ['entry_id', 'upload_id', 'entry_name', 'data']
+        schema, 500, ['entry_id', 'upload_id', 'entry_name', 'data', 'data.inner_geometry', 'data.outer_geometry']
     );
     insertCatalogState = entries
         .filter(entry => entry.data && entry.data.m_def === schema)
@@ -3593,7 +3653,7 @@ function effectivePositionGeometry(position) {
 }
 
 
-function geometryMatchesSlot(candidate, opening) {
+function geometryMatches(candidate, opening) {
     const a = substrateFootprint(candidate);
     const b = substrateFootprint(opening);
     if (!a || !b || a.shape !== b.shape) return false;
@@ -3620,6 +3680,16 @@ function geometryMatchesSlot(candidate, opening) {
     return false;
 }
 
+function insertFitsPosition(insert, position) {
+    if (!insert || !position) return false;
+    const slot = positionSlotGeometry(position);
+    if (!geometryMatches(insert.outerGeometry, slot)) return false;
+    if (!substrateFootprint(insert.innerGeometry)) return false;
+    if (!geometryFits(insert.innerGeometry, insert.outerGeometry)) return false;
+    return !position.substrate ||
+        geometryFits(position.substrate.geometry, insert.innerGeometry);
+}
+
 function substrateFitsPosition(substrate, position) {
     if (!substrate || !position) {
         return false;
@@ -3640,7 +3710,7 @@ function substrateFitsPosition(substrate, position) {
     // Insert openings retain their existing fit validation.
     return position.insertReduction
         ? geometryFits(substrate.geometry, target)
-        : geometryMatchesSlot(substrate.geometry, target);
+        : geometryMatches(substrate.geometry, target);
 }
 
 
@@ -3723,6 +3793,28 @@ function renderHolder() {
             '<span class="holder-slot-name">' + escapeHtml(item.name) + '</span>' +
             '<span class="holder-slot-state">' + escapeHtml(positionDisplayState(position)) + '</span>';
 
+        if (position.insertReduction) {
+            const inner = substrateFootprint(position.insertReduction.innerGeometry);
+            const outer = substrateFootprint(position.insertReduction.outerGeometry);
+            if (inner && outer && inner.shape === outer.shape &&
+                (inner.shape === 'rectangle' || inner.shape === 'circle')) {
+                const dimensions = f => f.shape === 'rectangle'
+                    ? [f.width, f.length] : [2 * f.radius, 2 * f.radius];
+                const a = dimensions(inner), b = dimensions(outer);
+                if (b[0] > 0 && b[1] > 0) {
+                    const windowElement = document.createElement('span');
+                    windowElement.className = 'holder-insert-window';
+                    windowElement.style.width =
+                        (100 * Math.min(1, a[0] / b[0])) + '%';
+                    windowElement.style.height =
+                        (100 * Math.min(1, a[1] / b[1])) + '%';
+                    if (inner.shape === 'circle') {
+                        windowElement.style.borderRadius = '50%';
+                    }
+                    slot.appendChild(windowElement);
+                }
+            }
+        }
         slot.addEventListener('click', function() {
             selectHolderPosition(item.name);
         });
@@ -3794,18 +3886,7 @@ function renderHolder() {
         option.value = insert.entryId;
         option.textContent = insert.name;
 
-        const outerFits = Boolean(
-            slotGeometry && insert.outerGeometry &&
-            geometryFits(insert.outerGeometry, slotGeometry)
-        );
-        const innerValid = Boolean(insert.innerGeometry);
-        const substrateFits = !position.substrate || Boolean(
-            position.substrate.geometry &&
-            innerValid &&
-            geometryFits(position.substrate.geometry, insert.innerGeometry)
-        );
-
-        option.disabled = !(outerFits && innerValid && substrateFits);
+        option.disabled = !insertFitsPosition(insert, position);
         if (option.disabled) {
             option.textContent += ' (geometry not verified)';
         }
@@ -3849,12 +3930,7 @@ function renderHolder() {
             return;
         }
 
-        if (next && (
-            !slotGeometry ||
-            !next.outerGeometry ||
-            !next.innerGeometry ||
-            !geometryFits(next.outerGeometry, slotGeometry)
-        )) {
+        if (next && !insertFitsPosition(next, candidatePosition)) {
             window.alert('Insert geometry does not fit or cannot be verified.');
             insertSelect.value = currentInsertId;
             return;
@@ -3917,6 +3993,12 @@ function setPositionUsage(positionName, usage) {
 
 const selectSubstrateOriginal = selectSubstrate;
 selectSubstrate = function(substrate) {
+    if (!substrate || substrateHasBeenCut(substrate)) {
+        window.alert(
+            'This substrate has been cut into child samples and is no longer physically available.'
+        );
+        return;
+    }
     if (substrate.grown) {
         window.alert('This substrate has already been grown.');
         return;

@@ -27,6 +27,12 @@ PROCESS_TYPES = {
         'schema': 'pdi_nomad_plugin.general.schema.BackSideCoatingRecipePDI',
         'processSchema': 'pdi_nomad_plugin.general.schema.BackSideCoatingPDI',
     },
+    'sample_cut': {
+        'label': 'Sample Cut',
+        'schema': None,
+        'processSchema': 'pdi_nomad_plugin.general.schema.SampleCutPDI',
+        'kind': 'sample_cut',
+    },
 }
 
 # No verified upstream SampleCut or BackSideCoating process in the
@@ -46,7 +52,11 @@ async def validate_process(payload: dict):
         validate_original_process,
     )
 
-    allowed = {definition['processSchema'] for definition in PROCESS_TYPES.values()}
+    allowed = {
+        definition['processSchema']
+        for definition in PROCESS_TYPES.values()
+        if definition.get('kind') != 'sample_cut'
+    }
     try:
         return validate_original_process(payload.get('data'), allowed)
     except OriginalProcessValidationError as exc:
