@@ -17,7 +17,10 @@ from nomad.metainfo import (
 )
 from nomad_material_processing.general import (
     CrystallineSubstrate,
+    Dopant,
+    ElectronicProperties,
     Geometry,
+    SubstrateCrystalProperties,
     SubstrateReference,
     ThinFilm,
     ThinFilmStack,
@@ -490,6 +493,23 @@ class ThinFilmMbe(SystemPDI, ThinFilm, EntryData):
         a_eln=ELNAnnotation(
             component='StringEditQuantity',
         ),
+    )
+    # Same sections CrystallineSubstrate gives SubstrateMbe, so a grown film
+    # can record its orientation, electronic properties and dopants too.
+    crystal_properties = SubSection(
+        section_def=SubstrateCrystalProperties,
+        description='Section containing the crystal properties of the thin film.',
+    )
+    electronic_properties = SubSection(
+        section_def=ElectronicProperties,
+        description='Section containing the electronic properties of the thin film.',
+    )
+    dopants = SubSection(
+        section_def=Dopant,
+        repeats=True,
+        description="""
+        Repeating section containing information on any dopants in the thin film.
+        """,
     )
 
 
