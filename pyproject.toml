@@ -47,6 +47,13 @@ epic_scraper = { git = "https://github.com/PDI-Berlin/EPIC_scraper.git", rev = "
 dev = ["ruff", "pytest", "structlog"]
 
 
+
+ci = [
+    "fastapi",
+    "httpx",
+    "quickjs",
+    "tomli; python_version < '3.11'",
+]
 [tool.ruff]
 # Exclude a variety of commonly ignored directories.
 exclude = [
@@ -132,5 +139,39 @@ instrument_schema = "pdi_nomad_plugin.mbe:instrument_schema"
 processes_schema = "pdi_nomad_plugin.mbe:processes_schema"
 epic_mbe_parser = "pdi_nomad_plugin.mbe.epic_parser:epic_parser"
 mbe_app = "pdi_nomad_plugin.mbe.mbe_app:substrateapp"
+substrate_intake = "pdi_nomad_plugin.mbe.substrate_intake:substrate_intake"
+new_mbe_experiment = "pdi_nomad_plugin.mbe.new_mbe_experiment:new_mbe_experiment"
+processing = "pdi_nomad_plugin.mbe.processing:processing"
+lab_library = "pdi_nomad_plugin.mbe.lab_library:lab_library"
+pdi_lab = "pdi_nomad_plugin.mbe.pdi_lab:pdi_lab"
+
+
+[tool.setuptools.package-data]
+"pdi_nomad_plugin.mbe.substrate_intake" = [
+    "static/*",
+]
+"pdi_nomad_plugin.mbe.new_mbe_experiment" = [
+    "templates/*.html",
+    "static/*",
+]
+"pdi_nomad_plugin.mbe.processing" = [
+    "templates/*.html",
+    "static/*",
+]
+"pdi_nomad_plugin.mbe.lab_library" = [
+    "templates/*.html",
+    "static/*",
+]
+
+"pdi_nomad_plugin.mbe.pdi_lab" = [
+    "templates/*.html",
+    "static/*",
+]
 
 [tool.setuptools_scm]
+
+[tool.ruff.lint.extend-per-file-ignores]
+"src/pdi_nomad_plugin/mbe/lab_library/original_preflight.py" = ["E501"]
+"src/pdi_nomad_plugin/mbe/new_mbe_experiment/ui_options.py" = ["E501"]
+"src/pdi_nomad_plugin/mbe/processing/original_process_preflight.py" = ["E501"]
+"src/pdi_nomad_plugin/mbe/substrate_intake/app.py" = ["E501"]

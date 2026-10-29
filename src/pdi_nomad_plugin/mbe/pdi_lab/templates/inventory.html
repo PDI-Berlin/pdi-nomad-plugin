@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PDI Lab · Inventory</title>
+<style>
+:root{font-family:system-ui,Segoe UI,sans-serif;color:#241931;background:#faf8fc}
+*{box-sizing:border-box}
+body{margin:0;padding:22px}
+h1{font-size:25px;margin:0}
+h2{font-size:18px;margin:22px 0 12px}
+.muted{color:#776c7f;font-size:13px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+button,select,input{font:inherit;padding:9px;border:1px solid #d8cce1;border-radius:8px;background:white}
+button{cursor:pointer}
+.summary{display:grid;grid-template-columns:repeat(4,minmax(110px,1fr));gap:12px;margin:20px 0}
+.tile,.material{background:white;border:1px solid #e7deeb;border-radius:12px;padding:15px}
+.tile strong{display:block;font-size:27px;margin-top:5px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
+.matheader{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.matheader strong{font-size:18px}
+.matcounts{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:13px 0}
+.metric{background:#f8f4fb;border-radius:8px;padding:8px}
+.metric b{display:block;font-size:19px}
+.metric span{font-size:11px;color:#6e6177}
+details summary{cursor:pointer;color:#734797}
+.list{max-height:230px;overflow-y:auto;margin-top:8px;border-top:1px solid #eee}
+.list a{display:block;padding:7px 0;color:#653c8a;text-decoration:none;font-size:13px}
+.bar{display:flex;gap:9px;margin-bottom:12px;flex-wrap:wrap}
+.bar input{flex:1;min-width:170px}
+.tablewrap{height:475px;overflow:auto;border:1px solid #e7deeb;border-radius:10px;background:white}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:11px;border-bottom:1px solid #eee8f0}
+th{position:sticky;top:0;background:#f4eef9}
+td a{color:#653c8a;text-decoration:none}
+#error{color:#aa2444}
+@media(max-width:650px){
+.summary{grid-template-columns:repeat(2,1fr)}
+.grid{grid-template-columns:1fr}
+.matcounts{grid-template-columns:repeat(4,1fr)}
+}
+</style>
+</head>
+<body>
+<div class="top">
+ <div><h1>Inventory Overview</h1>
+ <div class="muted">Available substrates · PDI Lab</div></div>
+ <button id="refresh" type="button">↻ Refresh NOMAD</button>
+</div>
+<p id="status" role="status">Loading NOMAD inventory…</p>
+<p id="error" role="alert"></p>
+<section class="summary">
+ <div class="tile"><div class="muted">Total substrates</div><strong id="total">—</strong></div>
+ <div class="tile"><div class="muted">Processed</div><strong id="processed">—</strong></div>
+ <div class="tile"><div class="muted">10 × 10 mm</div><strong id="size10">—</strong></div>
+ <div class="tile"><div class="muted">5 × 5 mm</div><strong id="size5">—</strong></div>
+</section>
+<h2>Substrates by material</h2>
+<div id="materials" class="grid">Loading materials…</div>
+<h2>Recent NOMAD entries</h2>
+<div class="bar">
+ <select id="entryType"><option value="">All entry types</option></select>
+ <input id="entrySearch" type="search" placeholder="Search name, type, upload ID…">
+</div>
+<p id="recentCount" class="muted"></p>
+<div class="tablewrap">
+<table>
+<thead><tr><th>Uploaded</th><th>Name</th><th>Type</th><th>Upload ID</th></tr></thead>
+<tbody id="recentRows"><tr><td colspan="4">Loading…</td></tr></tbody>
+</table>
+</div>
+<script src="static/inventory.js"></script>
+</body>
+</html>
