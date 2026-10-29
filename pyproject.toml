@@ -21,9 +21,9 @@ readme = "README.md"
 requires-python = ">=3.10"
 authors = [
     { name = "Andrea Albino", email = "andrea.albino@physik.hu-berlin.de" },
-    { name = "Hampus NÃ¤sstrÃ¶m", email = "hampus.naesstroem@physik.hu-berlin.de" },
+    { name = "Hampus Näsström", email = "hampus.naesstroem@physik.hu-berlin.de" },
     { name = "Sarthak Kapoor", email = "sarthak.kapoor@physik.hu-berlin.de" },
-    { name = "Sebastian BrÃ¼ckner", email = "sebastian.brueckner@ikz-berlin.de" },
+    { name = "Sebastian Brückner", email = "sebastian.brueckner@ikz-berlin.de" },
 ]
 maintainers = [
     { name = "Andrea Albino", email = "andrea.albino@physik.hu-berlin.de" },
@@ -171,27 +171,7 @@ pdi_lab = "pdi_nomad_plugin.mbe.pdi_lab:pdi_lab"
 [tool.setuptools_scm]
 
 [tool.ruff.lint.extend-per-file-ignores]
-".pdi_app_scope_test_backup_20261016/tests/schema_compliance/test_app_schema_policy.py" = ["E501"]
-".pdi_app_scope_test_backup_20261016/tests/schema_compliance/test_original_only_repository_hard.py" = ["E501"]
-".pdi_originalschema_real_backup_20261016_224357/src/pdi_nomad_plugin/mbe/lab_library/original_preflight.py" = ["E501"]
-".pdi_originalschema_real_backup_20261016_224357/src/pdi_nomad_plugin/mbe/processing/original_process_preflight.py" = ["E501"]
-".pdi_originalschema_real_backup_20261016_224357/src/pdi_nomad_plugin/mbe/substrate_intake/app.py" = ["E501"]
-".pdi_schema_prune_backup_20261016_225945/src/pdi_nomad_plugin/mbe/substrate_intake/app.py" = ["E501"]
-"_mbe_patch_backup_20261016_201202/tests/schema_compliance/test_new_mbe_no_generic_pvd_stage7c.py" = ["E501"]
-"_original_preflight_backup_20261016_210444/src/pdi_nomad_plugin/mbe/substrate_intake/app.py" = ["E501"]
 "src/pdi_nomad_plugin/mbe/lab_library/original_preflight.py" = ["E501"]
 "src/pdi_nomad_plugin/mbe/new_mbe_experiment/ui_options.py" = ["E501"]
 "src/pdi_nomad_plugin/mbe/processing/original_process_preflight.py" = ["E501"]
 "src/pdi_nomad_plugin/mbe/substrate_intake/app.py" = ["E501"]
-"tests/**/*.py" = ["PLR2004"]
-"tests/lab_library_original_preflight/test_original_annealing_stage2.py" = ["E501"]
-"tests/lab_library_original_preflight/test_original_recipe_stage1.py" = ["E501"]
-"tests/schema_compliance/original_contract.py" = ["E501"]
-"tests/schema_compliance/test_app_schema_policy.py" = ["E501"]
-"tests/schema_compliance/test_native_substrates_original_stage6.py" = ["E501"]
-"tests/schema_compliance/test_new_mbe_original_catalog_stage7a.py" = ["E501"]
-"tests/schema_compliance/test_original_only_repository_hard.py" = ["E501"]
-"tests/schema_compliance/test_original_runtime_contract.py" = ["E501"]
-"tests/schema_compliance/test_processing_mdef_allowlist_production.py" = ["E501"]
-"tests/test_dashboard_api_contracts.py" = ["E501"]
-"tests/test_lab_library_gui_integration.py" = ["E501"]
