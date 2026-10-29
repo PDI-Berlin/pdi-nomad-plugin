@@ -593,6 +593,61 @@ def set_sample_status(
         )
 
 
+# Workflow tags on FilledSubstrateHolderPDI. A newly filled holder is FRESH;
+# once an ExperimentMbePDI grows on it, it becomes GROWN.
+HOLDER_TAG_FRESH = 'fresh'
+HOLDER_TAG_GROWN = 'grown'
+
+
+def set_holder_tags(holder_reference, logger):
+    """
+    Marks a FilledSubstrateHolderPDI as grown on: removes the HOLDER_TAG_FRESH
+    tag and adds HOLDER_TAG_GROWN in the holder's own archive file, then
+    reprocesses it. Works like set_sample_status, which does the same for
+    substrates. Does nothing if the holder is already tagged as grown.
+    """
+    if not holder_reference:
+        logger.warning(
+            f'Substrate holder {holder_reference} is not a valid reference. '
+            f'Upload and reprocess to set the holder tags.'
+        )
+        return
+
+    from nomad.app.v1.routers.uploads import get_upload_with_read_access
+    from nomad.datamodel.context import ServerContext
+    from nomad.datamodel.data import User
+
+    metadata = holder_reference.m_parent.metadata
+    context = ServerContext(
+        get_upload_with_read_access(
+            metadata.m_context.upload_id,
+            User(user_id=metadata.main_author.user_id),
+            include_others=True,
+        )
+    )
+    filename = metadata.mainfile
+    is_json = filename.split('.')[-1] == 'json'
+
+    with context.raw_file(filename, 'r') as file:
+        holder_dict = json.load(file) if is_json else yaml.safe_load(file)
+
+    tags = list(holder_dict['data'].get('tags') or [])
+    if HOLDER_TAG_GROWN in tags and HOLDER_TAG_FRESH not in tags:
+        return  # already marked; avoid reprocessing the holder every time
+
+    tags = [tag for tag in tags if tag != HOLDER_TAG_FRESH]
+    if HOLDER_TAG_GROWN not in tags:
+        tags.append(HOLDER_TAG_GROWN)
+    holder_dict['data']['tags'] = tags
+
+    with context.raw_file(filename, 'w') as newfile:
+        if is_json:
+            json.dump(holder_dict, newfile)
+        else:
+            yaml.dump(holder_dict, newfile)
+    context.upload.process_updated_raw_file(filename, allow_modify=True)
+
+
 def epiclog_read_handle_empty(folder_path, dataframe, column_header):
     """
     Wrapper to epic_log method that accepts a dataframe cell containing the filename

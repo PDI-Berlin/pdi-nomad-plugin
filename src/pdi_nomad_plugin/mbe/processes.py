@@ -95,6 +95,7 @@ from pdi_nomad_plugin.utils import (
     link_growth_process,
     read_fitting,
     read_shutters,
+    set_holder_tags,
     set_sample_status,
     xlsx_to_dict,
 )
@@ -1617,6 +1618,8 @@ class ExperimentMbePDI(Experiment, EntryData):
                             else False,
                             grown=True,
                         )
+                # the linked holder has now been grown on: fresh -> grown
+                set_holder_tags(self.substrate_holder.reference, logger)
 
         # create samples archives
         if (
