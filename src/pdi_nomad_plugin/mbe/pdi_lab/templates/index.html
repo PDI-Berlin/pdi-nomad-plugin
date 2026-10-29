@@ -37,14 +37,18 @@
                 <span>New MBE Experiment</span>
             </button>
 
-            <button class="nav-item" data-app="library" type="button">
+            <button class="nav-item" data-app="sample_database" type="button">
                 <span class="nav-index">05</span>
+                <span>Sample Database</span>
+            </button>
+            <button class="nav-item" data-app="library" type="button">
+                <span class="nav-index">06</span>
                 <span>Lab Library</span>
             </button>
         </nav>
 
         <div class="sidebar-footer">
-            PDI laboratory workflow
+            <img class="sidebar-logo" src="static/pdi-lab-logo-420.png" alt="PDI Lab logo">
         </div>
     </aside>
 
@@ -58,7 +62,7 @@
                 >
                     Full page
                 </button>
-                <div id="workspaceStep" class="step-badge">01 / 05</div>
+                <div id="workspaceStep" class="step-badge">01 / 06</div>
             </div>
         </header>
 
@@ -90,6 +94,8 @@
                 src="about:blank"
             ></iframe>
 
+            <iframe class="app-frame" data-app="sample_database"
+                title="Sample Database" src="about:blank"></iframe>
             <iframe
                 class="app-frame"
                 data-app="library"

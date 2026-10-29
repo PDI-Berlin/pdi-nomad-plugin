@@ -608,3 +608,90 @@ html, body {
         min-height: 0;
     }
 }
+
+/* PDI Lab sidebar logo */
+.sidebar-footer {
+    margin-top: auto;
+    padding: 8px 4px 2px;
+    min-height: 0;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+}
+
+.sidebar-logo {
+    display: block;
+    width: 100%;
+    max-width: 175px;
+    max-height: 22dvh;
+    height: auto;
+    object-fit: contain;
+    flex-shrink: 1;
+}
+
+/* Match PDI Lab background to the white logo background */
+html,
+body,
+.workspace-shell,
+.sidebar,
+.sidebar-footer {
+    background: #ffffff !important;
+}
+
+.sidebar-logo {
+    background: #ffffff;
+    border: none;
+    box-shadow: none;
+}
+
+/* PDI Lab purple menu progression */
+.nav-item[data-app="inventory"] {
+    background: #FAF4FD;
+    color: #765A87;
+}
+.nav-item[data-app="inventory"] .nav-index {
+    color: #9674A7;
+}
+.nav-item[data-app="sample_database"] {
+    background: #E2CEEC;
+    color: #603573;
+}
+.nav-item[data-app="sample_database"] .nav-index {
+    color: #70418A;
+}
+.nav-item[data-app="inventory"].active {
+    background: #F3E5FA;
+}
+.nav-item[data-app="sample_database"].active {
+    background: #E2CEEC;
+}
+
+/* PDI Lab: progressively darker purple navigation */
+.nav-item[data-app="inventory"]       { background: #F7EEFC; color: #51266B; }
+.nav-item[data-app="intake"]          { background: #EAD5F3; color: #51266B; }
+.nav-item[data-app="processing"]      { background: #D1A7E6; color: #51266B; }
+.nav-item[data-app="experiment"]      { background: #AD75CB; color: #FFFFFF; }
+.nav-item[data-app="sample_database"] { background: #8345AC; color: #FFFFFF; }
+.nav-item[data-app="library"]         { background: #562879; color: #FFFFFF; }
+
+.nav-item .nav-index {
+    color: inherit !important;
+    opacity: 0.85;
+}
+
+.nav-item.active {
+    outline: 2px solid #3D165B;
+    outline-offset: -2px;
+    font-weight: 700;
+}
+
+.nav-item.active[data-app] {
+    color: inherit;
+}
+
+.nav-item.active[data-app="inventory"]       { background: #E9CDF7; color: #51266B; }
+.nav-item.active[data-app="intake"]          { background: #D9B1EE; color: #51266B; }
+.nav-item.active[data-app="processing"]      { background: #BB81DA; color: #51266B; }
+.nav-item.active[data-app="experiment"]      { background: #9856BB; color: #FFFFFF; }
+.nav-item.active[data-app="sample_database"] { background: #713394; color: #FFFFFF; }
+.nav-item.active[data-app="library"]         { background: #451B66; color: #FFFFFF; }

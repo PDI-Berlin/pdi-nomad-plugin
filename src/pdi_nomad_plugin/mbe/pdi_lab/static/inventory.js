@@ -35,9 +35,11 @@ function refId(ref) {
     return String(value || '').match(/\/archive\/([^/#?]+)/)?.[1] || '';
 }
 
-function entryUrl(id) {
+function entryUrl(id, uploadId) {
+    if (!id || !uploadId) return '';
     return API.replace(/\/api\/v1$/, '') +
-        '/gui/entry/' + encodeURIComponent(id);
+        '/gui/user/uploads/upload/id/' + encodeURIComponent(uploadId) +
+        '/entry/id/' + encodeURIComponent(id);
 }
 
 async function post(path, body) {
@@ -63,7 +65,7 @@ async function archives(schema) {
             owner: 'visible',
             query: {'section_defs.definition_qualified_name': schema},
             pagination,
-            required: {metadata: {entry_name: '*'}, data: '*'}
+            required: {metadata: {entry_name: '*', upload_id: '*'}, data: '*'}
         });
 
         for (const item of result.data || []) {
@@ -200,12 +202,13 @@ function renderMaterial(name, samples) {
             <div class="list">
                 ${samples.sort((a,b) =>
                     a.name.localeCompare(b.name,undefined,{numeric:true})
-                ).map(s => `
-                    <a href="${entryUrl(s.id)}" target="_blank" rel="noopener">
-                        ${safe(s.name)} · ${s.size}
-                        ${s.processed ? ' · processed' : ''}
-                    </a>
-                `).join('')}
+                ).map(s => {
+                    const label = `${safe(s.name)} · ${safe(s.size)}${s.processed ? ' · processed' : ''}`;
+                    const url = entryUrl(s.id, s.uploadId);
+                    return url
+                        ? `<a href="${safe(url)}" target="_blank" rel="noopener">${label}</a>`
+                        : `<span title="Upload ID missing">${label}</span>`;
+                }).join('')}
             </div>
         </details>`;
     return card;
@@ -235,10 +238,15 @@ function renderRecent() {
         const name = document.createElement('td');
         const link = document.createElement('a');
         link.textContent = r.name;
-        link.href = entryUrl(r.id);
-        link.target = '_blank';
-        link.rel = 'noopener';
-        name.appendChild(link);
+        const url = entryUrl(r.id, r.upload);
+        if (url) {
+            link.href = url;
+            link.target = '_blank';
+            link.rel = 'noopener';
+            name.appendChild(link);
+        } else {
+            name.textContent = r.name;
+        }
 
         const typeCell = document.createElement('td');
         typeCell.textContent = r.type;
@@ -275,6 +283,11 @@ async function refresh() {
             schemas.map((schema,index) => [schema,results[index]])
         );
 
+        const uploadByEntry = new Map(
+            results[results.length - 1]
+                .filter(r => r.entry_id && r.upload_id)
+                .map(r => [r.entry_id, r.upload_id])
+        );
         const parents = new Map();
         const cutParents = new Set();
 
@@ -322,6 +335,8 @@ async function refresh() {
                 }
                 return {
                     id: sub.id,
+                    uploadId: sub.metadata.upload_id ||
+                        uploadByEntry.get(sub.id) || '',
                     name: String(sub.data.lab_id || sub.data.name ||
                         sub.metadata.entry_name || sub.id),
                     material: materialOf(sub.data),

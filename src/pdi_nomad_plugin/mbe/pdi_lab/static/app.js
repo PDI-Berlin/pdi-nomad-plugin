@@ -39,9 +39,16 @@ const apps = {
         accentSoft: '#E7D7F0',
         url: base + '/dashboards/new-mbe-experiment/'
     },
+    sample_database: {
+        title: 'Sample Database',
+        step: '05',
+        accent: '#8150A1',
+        accentSoft: '#E2CEEC',
+        url: 'about:blank'
+    },
     library: {
         title: 'Lab Library',
-        step: '05',
+        step: '06',
         accent: '#6F3F92',
         accentSoft: '#DDC5E9',
         url: base + '/dashboards/lab-library/'
@@ -138,7 +145,34 @@ function ensureFrameLoaded(key) {
     if (frame.dataset.started !== 'true') {
         loadingState.classList.remove('hidden');
         frame.dataset.started = 'true';
-        if (key === 'inventory') {
+        if (key === 'sample_database') {
+            frame.srcdoc = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+* { box-sizing: border-box; }
+html,body { margin:0; min-height:100%; }
+body {
+    display:grid; place-items:center;
+    min-height:100dvh; padding:24px;
+    background:#fbf8fd;
+    font-family:Inter,"Segoe UI",Arial,sans-serif;
+    color:#573068;
+}
+main { text-align:center; }
+h1 { font-size:clamp(24px,3vw,36px); margin:0 0 16px; }
+p {
+    color:#8150a1; font-size:18px;
+    background:#efe3f5; padding:13px 28px;
+    border-radius:14px;
+}
+</style>
+</head>
+<body><main><h1>Sample Database</h1><p>Coming soon</p></main></body>
+</html>`;
+        } else if (key === 'inventory') {
             frame.srcdoc = window.PDI_LAB_INVENTORY_SRCDOC;
         } else {
             frame.src = applicationUrl(key);
@@ -182,7 +216,7 @@ function selectApp(key, updateHistory = true) {
     shell.style.setProperty('--accent', config.accent);
     shell.style.setProperty('--accent-soft', config.accentSoft);
 
-    step.textContent = config.step + ' / 05';
+    step.textContent = config.step + ' / 06';
 
     ensureFrameLoaded(key);
 

@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.responses import FileResponse, HTMLResponse
 from nomad.config import config
 
@@ -32,7 +32,8 @@ async def index():
 
     base = config.services.api_base_path.rstrip('/')
     injected = (
-        '<script>window.PDI_LAB_BASE = ' + json.dumps(base)
+        '<script>window.PDI_LAB_BASE = '
+        + json.dumps(base)
         + ';window.PDI_LAB_INVENTORY_SRCDOC = '
         + json.dumps(inventory).replace('</', '<\\/')
         + ';</script>'
@@ -43,8 +44,6 @@ async def index():
     return shell.replace(marker, injected + marker, 1)
 
 
-
-
 @app.get('/inventory', response_class=HTMLResponse)
 async def inventory():
     html = (TEMPLATE_DIR / 'inventory.html').read_text()
@@ -52,9 +51,21 @@ async def inventory():
     injection = '<script>window.NOMAD_API_BASE = ' + json.dumps(api) + ';</script>'
     return html.replace('</head>', injection + '</head>', 1)
 
+
+@app.get('/static/pdi-lab-logo-420.png')
+async def sidebar_logo():
+    return FileResponse(
+        STATIC_DIR / 'pdi-lab-logo-420.png',
+        media_type='image/png',
+    )
+
+
 @app.get('/static/inventory.js')
 async def inventory_js():
-    return FileResponse(STATIC_DIR / 'inventory.js', media_type='application/javascript')
+    return FileResponse(
+        STATIC_DIR / 'inventory.js', media_type='application/javascript'
+    )
+
 
 @app.get('/static/styles.css')
 async def styles():
