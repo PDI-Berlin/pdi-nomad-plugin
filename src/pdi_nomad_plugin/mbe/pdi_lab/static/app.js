@@ -13,30 +13,35 @@ function deploymentBase() {
 const base = typeof window.PDI_LAB_BASE === 'string' ? window.PDI_LAB_BASE : deploymentBase();
 
 const apps = {
+    inventory: {
+        title: 'Inventory Overview', step: '01',
+        accent: '#8551A7', accentSoft: '#F1E9F7',
+        url: 'about:blank'
+    },
     intake: {
         title: 'Substrate Check-in',
-        step: '01',
+        step: '02',
         accent: '#B78ACF',
         accentSoft: '#F2EAF7',
         url: base + '/dashboards/substrate-intake/'
     },
     processing: {
         title: 'Substrate Processing',
-        step: '02',
+        step: '03',
         accent: '#A774C3',
         accentSoft: '#EDE1F4',
         url: base + '/dashboards/processing/'
     },
     experiment: {
         title: 'New MBE Experiment',
-        step: '03',
+        step: '04',
         accent: '#9460B5',
         accentSoft: '#E7D7F0',
         url: base + '/dashboards/new-mbe-experiment/'
     },
     library: {
         title: 'Lab Library',
-        step: '04',
+        step: '05',
         accent: '#6F3F92',
         accentSoft: '#DDC5E9',
         url: base + '/dashboards/lab-library/'
@@ -133,7 +138,11 @@ function ensureFrameLoaded(key) {
     if (frame.dataset.started !== 'true') {
         loadingState.classList.remove('hidden');
         frame.dataset.started = 'true';
-        frame.src = applicationUrl(key);
+        if (key === 'inventory') {
+            frame.srcdoc = window.PDI_LAB_INVENTORY_SRCDOC;
+        } else {
+            frame.src = applicationUrl(key);
+        }
         return;
     }
 
@@ -173,7 +182,7 @@ function selectApp(key, updateHistory = true) {
     shell.style.setProperty('--accent', config.accent);
     shell.style.setProperty('--accent-soft', config.accentSoft);
 
-    step.textContent = config.step + ' / 04';
+    step.textContent = config.step + ' / 05';
 
     ensureFrameLoaded(key);
 
@@ -321,6 +330,61 @@ document.querySelectorAll('.nav-item').forEach(function(button) {
 
 const initialKey = window.location.hash.slice(1);
 selectApp(
-    apps[initialKey] ? initialKey : 'intake',
+    apps[initialKey] ? initialKey : 'inventory',
     false
 );
+
+
+
+/* Fit PDI Lab to the available NOMAD dashboard viewport. */
+(function () {
+    function fitWorkspace() {
+        try {
+            const host = window.frameElement;
+            if (!host) return;
+
+            const parentWindow = window.parent;
+
+            // Remove width caps only from ancestors of this dashboard.
+            for (
+                let element = host.parentElement;
+                element && element !== parentWindow.document.body;
+                element = element.parentElement
+            ) {
+                const max = parseFloat(
+                    parentWindow.getComputedStyle(element).maxWidth
+                );
+                if (
+                    Number.isFinite(max) &&
+                    max >= 900 &&
+                    max < parentWindow.innerWidth - 80
+                ) {
+                    element.style.setProperty('max-width', 'none', 'important');
+                    element.style.setProperty('width', '100%', 'important');
+                }
+            }
+
+            const available = Math.max(
+                360,
+                Math.floor(
+                    parentWindow.innerHeight -
+                    host.getBoundingClientRect().top - 8
+                )
+            );
+
+            host.style.setProperty('height', available + 'px', 'important');
+            host.style.setProperty('min-height', '0', 'important');
+
+        } catch (error) {
+            console.warn('NOMAD parent layout unavailable:', error);
+        }
+    }
+
+    window.addEventListener('resize', fitWorkspace);
+    try {
+        window.parent.addEventListener('resize', fitWorkspace);
+    } catch (error) {
+        // Parent may be cross-origin.
+    }
+    fitWorkspace();
+})();

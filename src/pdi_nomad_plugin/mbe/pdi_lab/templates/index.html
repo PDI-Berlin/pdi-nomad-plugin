@@ -18,23 +18,27 @@
         </div>
 
         <nav class="workflow-nav" aria-label="PDI Lab workflow">
-            <button class="nav-item" data-app="intake" type="button">
+            <button class="nav-item" data-app="inventory" type="button">
                 <span class="nav-index">01</span>
+                <span>Inventory Overview</span>
+            </button>
+            <button class="nav-item" data-app="intake" type="button">
+                <span class="nav-index">02</span>
                 <span>Substrate Check-in</span>
             </button>
 
             <button class="nav-item" data-app="processing" type="button">
-                <span class="nav-index">02</span>
+                <span class="nav-index">03</span>
                 <span>Substrate Processing</span>
             </button>
 
             <button class="nav-item" data-app="experiment" type="button">
-                <span class="nav-index">03</span>
+                <span class="nav-index">04</span>
                 <span>New MBE Experiment</span>
             </button>
 
             <button class="nav-item" data-app="library" type="button">
-                <span class="nav-index">04</span>
+                <span class="nav-index">05</span>
                 <span>Lab Library</span>
             </button>
         </nav>
@@ -54,7 +58,7 @@
                 >
                     Full page
                 </button>
-                <div id="workspaceStep" class="step-badge">01 / 04</div>
+                <div id="workspaceStep" class="step-badge">01 / 05</div>
             </div>
         </header>
 
@@ -63,6 +67,8 @@
                 Loading workspace...
             </div>
 
+            <iframe class="app-frame" data-app="inventory"
+                title="Inventory Overview" src="about:blank"></iframe>
             <iframe
                 class="app-frame"
                 data-app="intake"
