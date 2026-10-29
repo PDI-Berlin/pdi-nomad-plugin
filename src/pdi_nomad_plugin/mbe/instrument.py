@@ -52,6 +52,8 @@ from pdi_nomad_plugin.general.schema import (
     PDIMBECategory,
 )
 from pdi_nomad_plugin.utils import (
+    HOLDER_TAG_FRESH,
+    HOLDER_TAG_GROWN,
     _not_equal,
 )
 
@@ -886,6 +888,16 @@ class FilledSubstrateHolderPDI(SubstrateHolderPDI, EntryData):
     )
 
     def normalize(self, archive, logger):
+        # A filled holder is FRESH until an MBE experiment grows on it
+        # (set_holder_tags then swaps the tag to GROWN). Set before
+        # super().normalize(), which copies tags into the search index.
+        tags = list(self.tags or [])
+        if HOLDER_TAG_GROWN in tags:
+            tags = [tag for tag in tags if tag != HOLDER_TAG_FRESH]
+        elif HOLDER_TAG_FRESH not in tags:
+            tags.append(HOLDER_TAG_FRESH)
+        self.tags = tags
+
         super().normalize(archive, logger)
         if len(self.positions) > 0 and self.substrate_holder is None:
             logger.error(
