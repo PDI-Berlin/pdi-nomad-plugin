@@ -693,10 +693,61 @@ function populateFilter(id, values) {
     if (Array.from(select.options).some(function(option) { return option.value === previous; })) select.value = previous;
 }
 
+
+// Sample dimensions are read from existing NOMAD Geometry quantities.
+// Linear dimensions in NOMAD are stored in metres.
+function substrateSampleSize(geometry) {
+    if (!geometry || typeof geometry !== 'object') return '';
+
+    const positive = value => {
+        const raw = value && typeof value === 'object'
+            ? value.magnitude : value;
+        const n = Number(raw);
+        return Number.isFinite(n) && n > 0 ? n : null;
+    };
+
+    const mm = value => String(Number((value * 1000).toFixed(3)));
+    const type = String(geometry.m_def || '').split('.').pop();
+    const shape = String(geometry.shape || '').toLowerCase();
+    const height = positive(geometry.height);
+
+    if (['SquareCuboid', 'RectangleCuboid', 'Parallelepiped']
+            .includes(type) ||
+        (!type && ['rectangle', 'square'].includes(shape))) {
+        const width = positive(geometry.width);
+        const length = positive(geometry.length) ||
+            (type === 'SquareCuboid' || shape === 'square' ? width : null);
+
+        if (!width || !length) return '';
+
+        const sides = [width, length].sort((a, b) => b - a);
+        if (height) sides.push(height);
+        return sides.map(mm).join(' × ') + ' mm';
+    }
+
+    if (type === 'Cylinder' || shape === 'circle') {
+        const radius = positive(geometry.radius);
+        if (!radius) return '';
+        return 'Ø ' + mm(2 * radius) +
+            (height ? ' × ' + mm(height) : '') + ' mm';
+    }
+
+    if (type === 'CylinderSector' || shape === 'circular_sector') {
+        const radius = positive(geometry.radius);
+        const angle = positive(geometry.central_angle);
+        if (!radius || !angle || angle > 360) return '';
+        return 'Sector R ' + mm(radius) + ' mm · ' +
+            angle + '°' +
+            (height ? ' · thickness ' + mm(height) + ' mm' : '');
+    }
+
+    return '';
+}
+
 function filteredSubstrates() {
     const search = document.getElementById('substrateSearch').value.trim().toLowerCase();
     const material = document.getElementById('materialFilter').value;
-    const batch = document.getElementById('batchFilter').value;
+    const sampleSize = document.getElementById('sampleSizeFilter').value;
     const orientation = document.getElementById('orientationFilter').value;
     const status = document.getElementById('statusFilter').value;
     return substrates.filter(function(substrate) {
@@ -704,7 +755,7 @@ function filteredSubstrates() {
             .filter(Boolean).join(' ').toLowerCase();
         return (!search || searchable.includes(search)) &&
             (!material || substrate.material === material) &&
-            (!batch || substrate.crystalId === batch || substrate.chargeId === batch) &&
+            (!sampleSize || substrateSampleSize(substrate.geometry) === sampleSize) &&
             (!orientation || substrate.orientation === orientation) &&
             (!status || substrateStatus(substrate) === status);
     });
@@ -716,7 +767,8 @@ function renderSubstrates() {
     container.innerHTML = '';
 
     visible.forEach(function(substrate) {
-        const history = treatmentHistoryForSubstrate(substrate);
+        const history = treatmentHistoryForSubstrate(substrate)
+            .filter(row => row.treatment.type !== 'sample_cut');
         const cutHistory =
             processingCutHistoryByEntry.get(substrate.entryId) || [];
         const historyCount = history.length + cutHistory.length;
@@ -1552,7 +1604,7 @@ function refreshProcessingData(options) {
             substrates.map(function(item) { return item.material; })
         );
         populateFilter(
-            'batchFilter',
+            'sampleSizeFilter',
             substrates.flatMap(function(item) {
                 return [item.crystalId, item.chargeId];
             })
@@ -1651,7 +1703,7 @@ async function initialise() {
 
         window.processingCatalogErrors = catalogErrors;
         populateFilter('materialFilter', substrates.map(function(s) { return s.material; }));
-        populateFilter('batchFilter', substrates.flatMap(function(s) { return [s.crystalId, s.chargeId]; }));
+        populateFilter('sampleSizeFilter', substrates.map(s => substrateSampleSize(s.geometry)));
         populateFilter('orientationFilter', substrates.map(function(s) { return s.orientation; }));
         applyIncomingSelection();
         renderSubstrates();
@@ -1692,7 +1744,7 @@ async function initialise() {
 }
 
 ['substrateSearch'].forEach(function(id) { document.getElementById(id).addEventListener('input', renderSubstrates); });
-['materialFilter', 'batchFilter', 'orientationFilter', 'statusFilter'].forEach(function(id) { document.getElementById(id).addEventListener('change', renderSubstrates); });
+['materialFilter', 'sampleSizeFilter', 'orientationFilter', 'statusFilter'].forEach(function(id) { document.getElementById(id).addEventListener('change', renderSubstrates); });
 document.getElementById('selectAllButton').addEventListener('click', function() {
     filteredSubstrates().forEach(function(substrate) {
         if (!processingCutUnavailable(substrate)) {
@@ -2614,6 +2666,7 @@ function initializeProcessChoiceButtons() {
     const syncExecutionButtons = function() {
         const cutActive = getComputedStyle(cutPanel).display !== 'none';
         saveAll.style.display = cutActive ? 'none' : '';
+        add.style.display = cutActive ? 'none' : '';
     };
     new MutationObserver(syncExecutionButtons).observe(
         cutPanel, {attributes: true, attributeFilter: ['style']}

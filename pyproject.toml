@@ -148,7 +148,12 @@ pdi_lab = "pdi_nomad_plugin.mbe.pdi_lab:pdi_lab"
 
 [tool.setuptools.package-data]
 "pdi_nomad_plugin.mbe.substrate_intake" = [
+    "templates/*.html",
     "static/*",
+    "static/ocr/*",
+    "static/ocr/core/*",
+    "static/ocr/lang/*",
+    "static/ocr/licenses/*",
 ]
 "pdi_nomad_plugin.mbe.new_mbe_experiment" = [
     "templates/*.html",

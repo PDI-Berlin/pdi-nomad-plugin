@@ -3217,13 +3217,117 @@ function resolveInsertFromFilled(position) {
 }
 
 
+
+/*
+ * The installed NOMAD schema does not expose position_usage.
+ * Restore this existing raw JSON field for GUI display only.
+ * Never alter normalized substrate references or NOMAD archives.
+ */
+async function restoreFilledPositionUsage(archive, filledEntryId, physicalEntryId) {
+    const processed = archive.data || {};
+    const metadata = archive.metadata || {};
+    const uploadId = metadata.upload_id;
+    const mainfile = metadata.mainfile;
+    const expectedDef =
+        'pdi_nomad_plugin.mbe.instrument.FilledSubstrateHolderPDI';
+
+    if (!uploadId || !mainfile) {
+        throw new Error('Filled Holder has no upload ID or mainfile.');
+    }
+    if (metadata.entry_id && metadata.entry_id !== filledEntryId) {
+        throw new Error('Filled Holder entry ID mismatch.');
+    }
+    if (processed.m_def !== expectedDef ||
+        entryIdFromReference(filledPhysicalReference(processed)) !== physicalEntryId) {
+        throw new Error('Processed Filled Holder does not match physical holder.');
+    }
+
+    const path = mainfile.split('/').map(encodeURIComponent).join('/');
+    const url = nomadApiBase() + '/uploads/' +
+        encodeURIComponent(uploadId) + '/raw/' + path;
+
+    const response = await fetch(url, {cache: 'no-store'});
+    if (!response.ok) {
+        throw new Error('Cannot read original Filled Holder JSON: HTTP ' +
+            response.status);
+    }
+
+    const raw = await response.json();
+    const source = raw.data || {};
+
+    if (source.m_def !== expectedDef ||
+        entryIdFromReference(filledPhysicalReference(source)) !== physicalEntryId ||
+        source.lab_id !== processed.lab_id) {
+        throw new Error('Raw Filled Holder does not match processed archive.');
+    }
+
+    const rawPositions = Array.isArray(source.positions) ? source.positions : [];
+    const processedPositions =
+        Array.isArray(processed.positions) ? processed.positions : [];
+
+    const byName = new Map();
+    for (const position of rawPositions) {
+        if (!position.name || byName.has(position.name)) {
+            throw new Error('Missing or duplicate raw holder position.');
+        }
+        byName.set(position.name, position);
+    }
+
+    if (byName.size !== processedPositions.length) {
+        throw new Error('Raw and processed holder position counts differ.');
+    }
+
+    const valid = ['substrate', 'si_dummy', 'sapphire_dummy'];
+    const seen = new Set();
+
+    const positions = processedPositions.map(function(position) {
+        if (!position.name || seen.has(position.name) ||
+            !byName.has(position.name)) {
+            throw new Error('Holder position mismatch: ' + position.name);
+        }
+        seen.add(position.name);
+
+        const original = byName.get(position.name);
+        const usage = original.position_usage;
+
+        if (usage !== undefined && usage !== null) {
+            if (!valid.includes(usage)) {
+                throw new Error('Invalid position_usage at ' + position.name);
+            }
+            if ((usage === 'substrate') !== Boolean(position.substrate)) {
+                throw new Error('Substrate occupancy mismatch at ' + position.name);
+            }
+            if (position.position_usage &&
+                position.position_usage !== usage) {
+                throw new Error('Conflicting position_usage at ' + position.name);
+            }
+        }
+
+        // Preserve references, geometry and all normalized fields.
+        return Object.assign({}, position,
+            usage ? {position_usage: usage} : {});
+    });
+
+    console.info('[MBE] Restored holder positions from original JSON:',
+        positions.map(p => p.name + '=' +
+            (p.position_usage || 'unspecified')).join(', '));
+
+    return Object.assign({}, processed, {positions});
+}
+
 function applyFilledOverlay(filledData) {
     const filledPositions = Array.isArray(filledData.positions) ? filledData.positions : [];
     filledPositions.forEach(function(item) {
         if (!item.name || !experimentState.positions[item.name]) return;
         const target = experimentState.positions[item.name];
         // An insert alone is not evidence of a substrate or dummy.
-        target.position_usage = item.substrate ? 'substrate' : null;
+        const usage = item.position_usage ||
+            (item.substrate ? 'substrate' : null);
+        if (usage && !['substrate', 'si_dummy', 'sapphire_dummy']
+                .includes(usage)) {
+            throw new Error('Unknown holder position usage: ' + usage);
+        }
+        target.position_usage = usage;
         target.substrate = resolveSubstrateFromFilled(item);
         target.insertReduction = resolveInsertFromFilled(item);
     });
@@ -3324,7 +3428,9 @@ async function selectHolder() {
                 );
 
             const filledData =
-                filledArchive.data || {};
+                await restoreFilledPositionUsage(
+                    filledArchive, filledEntryId, entryId
+                );
 
             const filledMetadata =
                 filledArchive.metadata || {};

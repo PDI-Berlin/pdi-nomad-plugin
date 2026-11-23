@@ -54,6 +54,10 @@
                 m_def: POSITION,
                 name: name
             };
+            if (['substrate', 'si_dummy', 'sapphire_dummy']
+                    .includes(position.position_usage)) {
+                positionData.position_usage = position.position_usage;
+            }
             const coords = xyFromPosition(position, name);
             Object.assign(positionData, coords);
             const slot = position.slotGeometry || position.slot_geometry;
@@ -86,10 +90,6 @@
                     throw new Error('Position ' + name + ': substrate lacks a NOMAD archive reference.');
                 }
                 positionData.substrate = {m_def: SAMPLE_REF, reference: sampleRef};
-            } else if (position.position_usage === 'si_dummy' ||
-                       position.position_usage === 'sapphire_dummy') {
-                warnings.push('Position ' + name + ': dummy is GUI-only; no ' +
-                    'original CompositeSystem reference is available.');
             }
             filledPositions.push(positionData);
             localPositions.push({name: name, usage: position.position_usage || 'empty'});
