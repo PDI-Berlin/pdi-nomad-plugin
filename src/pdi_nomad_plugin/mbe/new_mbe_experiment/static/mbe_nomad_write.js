@@ -131,8 +131,229 @@
             });
             return writeNewArchive(uploadId, filename, data);
         }
+
+        async function fillFilm(entryId, expected, model) {
+            const before = await waitForArchive(entryId,FILM);
+            if (before.data.lab_id !== expected.lab_id) {
+                throw new Error('Layer identity mismatch.');
+            }
+
+            const edits = [];
+            for (const k of ['geometry','components','description']) {
+                if (
+                    expected[k] === undefined ||
+                    model.includesFields(before.data[k],expected[k])
+                ) continue;
+
+                const old = before.data[k];
+                if (
+                    old !== undefined && old !== null && old !== '' &&
+                    !(Array.isArray(old) && !old.length)
+                ) {
+                    throw new Error(
+                        'Existing '+k+' differs in '+expected.lab_id+
+                        '; manual review required.'
+                    );
+                }
+
+                edits.push({
+                    path:'data/'+k,
+                    action:'upsert',
+                    new_value:expected[k]
+                });
+            }
+
+            if (edits.length) {
+                const fresh = await getArchive(entryId);
+                for (const edit of edits) {
+                    const k = edit.path.slice(5);
+                    if (
+                        JSON.stringify(fresh.data[k]) !==
+                        JSON.stringify(before.data[k])
+                    ) {
+                        throw new Error(
+                            'Layer changed concurrently: '+expected.lab_id
+                        );
+                    }
+                }
+
+                const response = await fetcher(
+                    apiBase+'/entries/'+encodeURIComponent(entryId)+'/edit',
+                    {
+                        method:'POST',
+                        headers:{'Content-Type':'application/json'},
+                        body:JSON.stringify({changes:edits})
+                    }
+                );
+                if (!response.ok) {
+                    await responseError(
+                        response,'Thin-film edit failed'
+                    );
+                }
+            }
+
+            for (let i=0;i<20;i++) {
+                const after = await getArchive(entryId);
+                if (
+                    ['geometry','components','description'].every(
+                        k=>expected[k]===undefined ||
+                            model.includesFields(after.data[k],expected[k])
+                    )
+                ) return;
+                await wait(500);
+            }
+            throw new Error(
+                'Layer fields not persisted: '+expected.lab_id
+            );
+        }
+
+
+        // Film-only chemistry for the stack.
+        // Substrate and layer references remain unchanged.
+        async function syncStackFilmElements(entryId) {
+            const stack = await waitForArchive(entryId, STACK);
+            const layers = stack.data.layers || [];
+
+            if (!layers.length) {
+                throw new Error(
+                    'Cannot derive stack elements: no layers.'
+                );
+            }
+
+            const elements = [];
+
+            for (const layer of layers) {
+                const identity = refIdentity(layer);
+
+                if (!identity) {
+                    throw new Error(
+                        'Invalid layer reference: ' +
+                        (layer.name || entryId)
+                    );
+                }
+
+                let layerElements = [];
+
+                for (let attempt = 0; attempt < 30; attempt++) {
+                    const film = await waitForArchive(
+                        identity.entryId, FILM
+                    );
+
+                    layerElements = (
+                        film.data.elemental_composition || []
+                    ).map(item => item && item.element)
+                     .filter(Boolean);
+
+                    if (layerElements.length) break;
+                    await wait(500);
+                }
+
+                if (!layerElements.length) {
+                    throw new Error(
+                        'Layer composition not normalized: ' +
+                        (layer.name || identity.entryId)
+                    );
+                }
+
+                for (const element of layerElements) {
+                    if (!elements.includes(element)) {
+                        elements.push(element);
+                    }
+                }
+            }
+
+            const sameElements = (actual, expected) =>
+                Array.isArray(actual) &&
+                actual.length === expected.length &&
+                new Set(actual).size === expected.length &&
+                actual.every(e => expected.includes(e));
+
+            const sourceElements = archive =>
+                (archive.data.elemental_composition || [])
+                    .map(item => item && item.element)
+                    .filter(Boolean);
+
+            const resultElements = archive =>
+                archive.results &&
+                archive.results.material &&
+                archive.results.material.elements;
+
+            const expected = elements.map(element => ({
+                element
+            }));
+
+            if (!sameElements(sourceElements(stack), elements)) {
+                // Refuse to overwrite a concurrently edited archive.
+                const fresh = await getArchive(entryId);
+
+                if (
+                    JSON.stringify(
+                        fresh.data.elemental_composition || []
+                    ) !==
+                    JSON.stringify(
+                        stack.data.elemental_composition || []
+                    )
+                ) {
+                    throw new Error(
+                        'Stack composition changed concurrently.'
+                    );
+                }
+
+                const response = await fetcher(
+                    apiBase +
+                    '/entries/' +
+                    encodeURIComponent(entryId) +
+                    '/edit',
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            changes: [{
+                                path: 'data/elemental_composition',
+                                action: 'upsert',
+                                new_value: expected
+                            }]
+                        })
+                    }
+                );
+
+                if (!response.ok) {
+                    await responseError(
+                        response,
+                        'Stack film-only composition update failed'
+                    );
+                }
+            }
+
+            // Verify both stored data and normalized search results.
+            for (let attempt = 0; attempt < 30; attempt++) {
+                const checked = await getArchive(entryId);
+
+                if (
+                    sameElements(
+                        sourceElements(checked), elements
+                    ) &&
+                    sameElements(
+                        resultElements(checked), elements
+                    )
+                ) {
+                    return elements;
+                }
+
+                await wait(500);
+            }
+
+            throw new Error(
+                'Film-only stack elements not verified: ' +
+                entryId
+            );
+        }
+
         async function addExtraLayers(uploadId, experimentEntryId, plans) {
             if (!plans || !plans.length) throw new Error('Layer plan missing');
+            const model = typeof window !== 'undefined' ? window.NomadMbeDrafts : require('./mbe_drafts.js');
             const experiment = await waitForArchive(experimentEntryId, EXP);
             const samples = experiment.data.samples || [];
             if (!samples.length) throw new Error('Normalizer has not created experiment samples; retry after processing.');
@@ -155,10 +376,36 @@
                 if (found.identity.uploadId !== uploadId) {
                     throw new Error('Expected stack is in a different upload: ' + plan.stack_id);
                 }
+                const substrateRef=refIdentity(found.stack.data.substrate);
+                if (!substrateRef) {
+                    throw new Error(
+                        'Stack substrate reference missing: '+plan.stack_id
+                    );
+                }
+                const substrate=await getArchive(substrateRef.entryId);
+                if (!substrate.data.geometry) {
+                    throw new Error(
+                        'Substrate has no geometry: '+plan.stack_id
+                    );
+                }
+
+                const firstRef=refIdentity(mandatory);
+                const first=model.filmData(
+                    {
+                        m_def:FILM,
+                        name:plan.mandatory_layer_1,
+                        lab_id:plan.mandatory_layer_1
+                    },
+                    substrate.data.geometry,
+                    plan.mandatory_layer_1_properties
+                );
+                await fillFilm(firstRef.entryId,first,model);
+
                 const additions = [];
                 for (const extra of plan.extra_layer_archives) {
                     const name = extra.thin_film.lab_id;
                     const filename = extra.filename.replace(/\.archive\.yaml$/, '.archive.json');
+                    const film=model.filmData(extra.thin_film,substrate.data.geometry,extra.nominal_properties_local_only);
                     const entryId = await entryIdForFile(uploadId, filename);
                     const existing = await getArchive(entryId, true);
                     if (existing) {
@@ -166,11 +413,13 @@
                             throw new Error('Existing archive conflicts with planned layer: ' + name);
                         }
                     } else {
-                        await writeNewArchive(uploadId, filename, extra.thin_film);
+                        await writeNewArchive(uploadId, filename, film);
                     }
+                    await fillFilm(entryId,film,model);
                     additions.push({name, uploadId, entryId, reference: ref(uploadId, entryId)});
                 }
                 if (additions.length) await editStack(found.identity.entryId, additions);
+                await syncStackFilmElements(found.identity.entryId);
                 results.push({stack: plan.stack_id, extraLayers: additions.length});
             }
             return results;

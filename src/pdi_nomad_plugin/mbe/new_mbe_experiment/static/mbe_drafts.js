@@ -129,6 +129,7 @@
                 stack_id: stackId,
                 expected_stack_type: STACK,
                 mandatory_layer_1: stackId + '_lyr_1',
+                mandatory_layer_1_properties: layers[0],
                 extra_layer_archives: extra
             });
         }
@@ -151,5 +152,178 @@
             ])
         };
     }
-    return {build: build};
+
+    const PRESETS = [
+        'SnO','SnO2','Sn','Al','Al2O3','Ge','GeO2',
+        'BaSnO3','LaInO3','BaO','InO2','LaO'
+    ];
+    const ELEMENTS = new Set((
+        'H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc ' +
+        'Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr Rb Sr Y Zr ' +
+        'Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Ce Pr ' +
+        'Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu Hf Ta W Re Os Ir ' +
+        'Pt Au Hg Tl Pb Bi Po At Rn Fr Ra Ac Th Pa U Np Pu Am ' +
+        'Cm Bk Cf Es Fm Md No Lr Rf Db Sg Bh Hs Mt Ds Rg Cn ' +
+        'Nh Fl Mc Lv Ts Og'
+    ).split(' '));
+    const FORMULA_PART = /^([A-Z][a-z]?)(\d+(?:\.\d+)?)?/;
+
+    function checkFormula(formula) {
+        formula = String(formula || '').trim();
+        if (!formula) throw new Error('Chemical formula required.');
+        let i=0, depth=0, atoms=0;
+        while (i < formula.length) {
+            if (formula[i] === '(') {
+                depth++;
+                i++;
+                continue;
+            }
+            if (formula[i] === ')') {
+                if (!depth--) throw new Error('Unmatched closing parenthesis.');
+                i++;
+                const mult = /^(\d+(?:\.\d+)?)/.exec(formula.slice(i));
+                if (mult) {
+                    if (+mult[1] <= 0) throw new Error('Invalid factor.');
+                    i += mult[1].length;
+                }
+                continue;
+            }
+            const m = FORMULA_PART.exec(formula.slice(i));
+            if (!m || !ELEMENTS.has(m[1])) {
+                throw new Error(
+                    'Invalid formula/capitalization near '+formula.slice(i)
+                );
+            }
+            if (m[2] && +m[2] <= 0) {
+                throw new Error('Invalid stoichiometric factor.');
+            }
+            i += m[0].length;
+            atoms++;
+        }
+        if (depth || !atoms) {
+            throw new Error('Unclosed group / missing element.');
+        }
+        return formula;
+    }
+
+    function filmData(base, substrateGeometry, layer) {
+        if (!substrateGeometry || !substrateGeometry.m_def) {
+            throw new Error('Substrate geometry missing.');
+        }
+        const type = substrateGeometry.m_def;
+        const prefix = 'nomad_material_processing.general.';
+        const shapes = {
+            [prefix+'RectangleCuboid']:
+                ['length','width','alpha','beta','gamma'],
+            [prefix+'SquareCuboid']:
+                ['length','width','alpha','beta','gamma'],
+            [prefix+'Cylinder']: ['radius'],
+            [prefix+'CylinderSector']: ['radius','central_angle']
+        };
+        const fields = shapes[type];
+        if (!fields) {
+            throw new Error('Unsupported substrate geometry: '+type);
+        }
+
+        const g = {m_def:type};
+        for (const k of fields) {
+            if (substrateGeometry[k] != null) {
+                if (!Number.isFinite(+substrateGeometry[k])) {
+                    throw new Error('Invalid geometry '+k);
+                }
+                g[k] = +substrateGeometry[k];
+            }
+        }
+
+        if (
+            type.endsWith('RectangleCuboid') &&
+                (!(g.length>0) || !(g.width>0)) ||
+            type.endsWith('SquareCuboid') && !(g.width>0) ||
+            (type.endsWith('Cylinder') ||
+                type.endsWith('CylinderSector')) && !(g.radius>0) ||
+            type.endsWith('CylinderSector') &&
+                !(g.central_angle>0 && g.central_angle<=360)
+        ) {
+            throw new Error('Substrate lateral dimensions missing or invalid.');
+        }
+
+        if (!(+layer.thicknessNm>0) ||
+            !Number.isFinite(+layer.thicknessNm)) {
+            throw new Error('Layer thickness must be positive (nm).');
+        }
+
+        // NOMAD geometry uses meters.
+        // Never copy substrate height into the thin film.
+        g.height = +layer.thicknessNm * 1e-9;
+
+        const formula = checkFormula(layer.composition);
+        const description = [];
+        const dopant = String(layer.dopant||'').trim();
+        const value = String(layer.dopantValue??'').trim();
+        const unit = String(layer.dopantUnit||'').trim();
+
+        if (dopant) {
+            if (!ELEMENTS.has(dopant)) {
+                throw new Error('Invalid dopant symbol: '+dopant);
+            }
+            description.push('Nominal dopant: '+dopant);
+        }
+
+        if (value) {
+            if (
+                !dopant ||
+                !['cm^-3','at.%','mol.%'].includes(unit) ||
+                !Number.isFinite(+value) ||
+                +value<=0
+            ) {
+                throw new Error('Invalid dopant value or unit.');
+            }
+            description.push(
+                'Nominal doping value: '+value+' '+unit
+            );
+        }
+
+        if (layer.notes) {
+            description.push('Growth notes: '+String(layer.notes).trim());
+        }
+
+        const data = {
+            m_def: base.m_def,
+            name: base.name,
+            lab_id: base.lab_id,
+            geometry: g,
+            components: [{
+                m_def:
+                    'nomad.datamodel.metainfo.basesections.v1.PureSubstanceComponent',
+                pure_substance: {molecular_formula:formula}
+            }]
+        };
+
+        if (description.length) {
+            data.description = description.join('\n');
+        }
+        return data;
+    }
+
+    function includesFields(actual,expected) {
+        if (typeof expected==='number') {
+            return typeof actual==='number' &&
+                Math.abs(actual-expected) <=
+                Math.max(1e-18,Math.abs(expected)*1e-9);
+        }
+        if (Array.isArray(expected)) {
+            return Array.isArray(actual) &&
+                actual.length===expected.length &&
+                expected.every((v,i)=>includesFields(actual[i],v));
+        }
+        if (expected && typeof expected==='object') {
+            return actual && typeof actual==='object' &&
+                Object.keys(expected).every(
+                    k=>includesFields(actual[k],expected[k])
+                );
+        }
+        return actual===expected;
+    }
+
+    return {build: build, PRESETS, checkFormula, filmData, includesFields};
 });

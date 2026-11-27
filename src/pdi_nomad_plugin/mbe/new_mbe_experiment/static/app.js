@@ -2229,87 +2229,236 @@ function addTreatmentToQueue() {
 
 
 function validateNominalLayers() {
-    const list = experimentState.nominalLayers;
+    const list=experimentState.nominalLayers;
     if (!Array.isArray(list) || !list.length) {
         throw new Error('Layer 1 is mandatory.');
     }
-    return list.map(function(layer, index) {
-        const composition = String(layer.composition || '').trim();
-        const dopant = String(layer.dopant || '').trim();
-        const notes = String(layer.notes || '').trim();
-        const thickness = String(layer.thicknessNm ?? '').trim();
-        if (index > 0 && !composition) {
-            throw new Error('Layer ' + (index + 1) + ': nominal composition is required.');
+
+    const model=window.NomadMbeDrafts;
+    return list.map((layer,index)=>{
+        const composition=String(layer.composition||'').trim();
+        try {
+            model.checkFormula(composition);
+        } catch(e) {
+            throw new Error('Layer '+(index+1)+': '+e.message);
         }
-        if (thickness && (!Number.isFinite(Number(thickness)) || Number(thickness) <= 0)) {
-            throw new Error('Layer ' + (index + 1) + ': nominal thickness must be positive.');
+
+        const thickness=Number(layer.thicknessNm);
+        if (
+            !String(layer.thicknessNm??'').trim() ||
+            !Number.isFinite(thickness) || thickness<=0
+        ) {
+            throw new Error(
+                'Layer '+(index+1)+': thickness must be positive (nm).'
+            );
         }
-        return {
-            number: index + 1,
-            composition: composition,
-            thicknessNm: thickness ? Number(thickness) : null,
-            dopant: dopant,
-            notes: notes,
-            creation: index === 0 ? 'original-ExperimentMbePDI-normalizer' : 'post-normalization'
+
+        const dopant=String(layer.dopant||'').trim();
+        const dopantValue=String(layer.dopantValue??'').trim();
+        const dopantUnit=String(layer.dopantUnit||'');
+
+        const out={
+            number:index+1,
+            composition,
+            thicknessNm:thickness,
+            dopant,
+            dopantValue,
+            dopantUnit,
+            notes:String(layer.notes||'').trim(),
+            creation:index===0
+                ?'original-ExperimentMbePDI-normalizer'
+                :'post-normalization'
         };
+
+        if (
+            dopantValue &&
+            (!dopant || !dopantUnit ||
+            !Number.isFinite(+dopantValue) ||
+            +dopantValue<=0)
+        ) {
+            throw new Error(
+                'Layer '+(index+1)+': invalid doping value/unit.'
+            );
+        }
+
+        // Validate chemical and doping data before saving anything.
+        model.filmData(
+            {
+                m_def:'pdi_nomad_plugin.mbe.materials.ThinFilmMbe',
+                name:'validation',
+                lab_id:'validation'
+            },
+            {
+                m_def:'nomad_material_processing.general.RectangleCuboid',
+                length:1,
+                width:1
+            },
+            out
+        );
+        return out;
     });
 }
 
 function renderNominalLayers() {
-    const container = document.getElementById('layerStackList');
-    const preview = document.getElementById('layerStackPreview');
+    const container=document.getElementById('layerStackList');
     if (!container) return;
     container.replaceChildren();
-    const layers = experimentState.nominalLayers;
-    layers.forEach(function(layer, index) {
-        const card = document.createElement('div');
-        card.className = 'layer-card';
-        const header = document.createElement('div');
-        header.className = 'layer-card-header';
-        const title = document.createElement('strong');
-        title.textContent = 'Layer ' + (index + 1) +
-            (index === 0 ? ' — mandatory (PDI normalizer)' : ' — optional');
+
+    const presets=window.NomadMbeDrafts.PRESETS;
+    const refresh=()=>{
+        updateNominalLayerPreview();
+        updateStatePreview();
+    };
+
+    experimentState.nominalLayers.forEach((layer,index)=>{
+        const card=document.createElement('div');
+        card.className='layer-card';
+
+        const header=document.createElement('div');
+        header.className='layer-card-header';
+        const title=document.createElement('strong');
+        title.textContent='Layer '+(index+1)+
+            (index===0
+                ? ' — mandatory (PDI normalizer)'
+                : ' — optional');
         header.appendChild(title);
-        if (index > 0) {
-            const remove = document.createElement('button');
-            remove.type = 'button';
-            remove.className = 'secondary layer-remove-button';
-            remove.textContent = 'Remove';
-            remove.addEventListener('click', function() {
-                experimentState.nominalLayers.splice(index, 1);
+
+        if (index>0) {
+            const remove=document.createElement('button');
+            remove.type='button';
+            remove.className='secondary layer-remove-button';
+            remove.textContent='Remove';
+            remove.addEventListener('click',()=>{
+                experimentState.nominalLayers.splice(index,1);
                 renderNominalLayers();
-                updateStatePreview();
+                refresh();
             });
             header.appendChild(remove);
         }
         card.appendChild(header);
-        const fields = [
-            ['composition', 'Nominal composition / formula', 'text', 'e.g. BaSnO3'],
-            ['thicknessNm', 'Nominal thickness (nm)', 'number', 'e.g. 20'],
-            ['dopant', 'Dopant (optional)', 'text', 'e.g. La'],
-            ['notes', 'Growth notes (optional)', 'text', '']
-        ];
-        fields.forEach(function(spec) {
-            const label = document.createElement('label');
-            label.textContent = spec[1];
-            const input = document.createElement('input');
-            input.type = spec[2];
-            input.placeholder = spec[3];
-            if (spec[2] === 'number') {
-                input.min = '0';
-                input.step = 'any';
+
+        const label=document.createElement('label');
+        label.textContent='Nominal composition / formula';
+        const select=document.createElement('select');
+
+        for (const [value,name] of [
+            ['','Choose formula'],
+            ...presets.map(x=>[x,x]),
+            ['__other__','Other — custom formula']
+        ]) {
+            const option=document.createElement('option');
+            option.value=value;
+            option.textContent=name;
+            select.appendChild(option);
+        }
+
+        const current=String(layer.composition||'').trim();
+        select.value=!current
+            ? ''
+            : presets.includes(current) && !layer.compositionOther
+                ? current
+                : '__other__';
+        label.appendChild(select);
+
+        const custom=document.createElement('input');
+        custom.type='text';
+        custom.placeholder='e.g. SrTiO3, La0.7Sr0.3MnO3';
+        custom.value=select.value==='__other__'?current:'';
+        custom.style.display=
+            select.value==='__other__'?'':'none';
+
+        const feedback=document.createElement('small');
+
+        function check() {
+            try {
+                window.NomadMbeDrafts.checkFormula(layer.composition);
+                feedback.textContent='';
+            } catch(e) {
+                feedback.textContent=e.message;
             }
-            input.value = layer[spec[0]] ?? '';
-            input.addEventListener('input', function() {
-                layer[spec[0]] = input.value;
-                updateNominalLayerPreview();
-                updateStatePreview();
-            });
-            label.appendChild(input);
-            card.appendChild(label);
+        }
+
+        select.addEventListener('change',()=>{
+            layer.compositionOther=select.value==='__other__';
+            layer.composition=layer.compositionOther
+                ? custom.value
+                : select.value;
+            custom.style.display=layer.compositionOther?'':'none';
+            check();
+            refresh();
         });
+
+        custom.addEventListener('input',()=>{
+            layer.composition=custom.value;
+            check();
+            refresh();
+        });
+
+        label.appendChild(custom);
+        label.appendChild(feedback);
+        card.appendChild(label);
+
+        for (const [key,text,type,placeholder] of [
+            ['thicknessNm','Nominal thickness (nm)','number','e.g. 20'],
+            ['dopant','Dopant element (optional)','text','e.g. La'],
+            ['dopantValue','Nominal dopant concentration (optional)','text','e.g. 1e19']
+        ]) {
+            const field=document.createElement('label');
+            field.textContent=text;
+            const input=document.createElement('input');
+            input.type=type;
+            input.placeholder=placeholder;
+            if (type==='number') input.step='any';
+            input.value=layer[key]??'';
+            input.addEventListener('input',()=>{
+                layer[key]=input.value;
+                refresh();
+            });
+            field.appendChild(input);
+            card.appendChild(field);
+        }
+
+        const unitLabel=document.createElement('label');
+        unitLabel.textContent='Nominal doping unit';
+        const unit=document.createElement('select');
+
+        for (const [value,text] of [
+            ['','Not specified'],
+            ['cm^-3','Nominal concentration (cm⁻³)'],
+            ['at.%','Nominal atomic fraction (at.%)'],
+            ['mol.%','Nominal molar fraction (mol.%)']
+        ]) {
+            const option=document.createElement('option');
+            option.value=value;
+            option.textContent=text;
+            unit.appendChild(option);
+        }
+
+        unit.value=layer.dopantUnit||'';
+        unit.addEventListener('change',()=>{
+            layer.dopantUnit=unit.value;
+            refresh();
+        });
+
+        unitLabel.appendChild(unit);
+        card.appendChild(unitLabel);
+
+        const notesLabel = document.createElement('label');
+        notesLabel.textContent = 'Growth notes (optional)';
+
+        const notesInput = document.createElement('input');
+        notesInput.type = 'text';
+        notesInput.value = layer.notes || '';
+        notesInput.addEventListener('input', () => {
+            layer.notes = notesInput.value;
+            refresh();
+        });
+
+        notesLabel.appendChild(notesInput);
+        card.appendChild(notesLabel);
         container.appendChild(card);
     });
+
     updateNominalLayerPreview();
 }
 
@@ -5168,7 +5317,55 @@ async function confirmedFilledHolderForExperiment(uploadId) {
 async function saveExperimentToNomad() {
     const button = document.getElementById('saveExperimentButton');
     const status = document.getElementById('experimentSaveStatus');
+
+    function setExperimentSaveStatus(kind, message) {
+        if (!status) return;
+
+        const themes = {
+            pending: {
+                background: '#f3f4f6',
+                foreground: '#374151',
+                border: '#9ca3af',
+                symbol: '…'
+            },
+            success: {
+                background: '#dcfce7',
+                foreground: '#14532d',
+                border: '#22c55e',
+                symbol: '✓'
+            },
+            error: {
+                background: '#fee2e2',
+                foreground: '#991b1b',
+                border: '#ef4444',
+                symbol: '✕'
+            }
+        };
+
+        const theme = themes[kind];
+        if (!theme) throw new Error('Invalid save status: ' + kind);
+
+        status.textContent = theme.symbol + '  ' + message;
+        status.style.backgroundColor = theme.background;
+        status.style.color = theme.foreground;
+        status.style.border = '2px solid ' + theme.border;
+        status.style.borderRadius = '6px';
+        status.style.padding = '12px 16px';
+        status.style.marginTop = '12px';
+        status.style.fontWeight = '600';
+        status.style.lineHeight = '1.5';
+
+        status.setAttribute('data-save-state', kind);
+        status.setAttribute(
+            'role', kind === 'error' ? 'alert' : 'status'
+        );
+        status.setAttribute(
+            'aria-live', kind === 'error' ? 'assertive' : 'polite'
+        );
+    }
+
     if (button) button.disabled = true;
+    setExperimentSaveStatus('pending', 'Saving MBE experiment...');
     try {
         const uploadId = selectedWritableUpload();
         const filled =
@@ -5193,7 +5390,10 @@ async function saveExperimentToNomad() {
             experiment = saved;
         } else {
             const filename = experimentSafePart(growthId) + '_mbe_exp.archive.json';
-            status.textContent = 'Creating ExperimentMbePDI; original normalizer will create Layer 1...';
+            setExperimentSaveStatus(
+                'pending',
+                'Creating ExperimentMbePDI; original normalizer will create Layer 1...'
+            );
             // Original ExperimentMbePDI.description is a verified original
             // quantity. Preserve nominal layer metadata as descriptive text
             // without inventing typed metainfo fields or modifying normalizers.
@@ -5213,7 +5413,10 @@ async function saveExperimentToNomad() {
             experiment.filledReference = filled.reference;
             experimentState.savedExperiment = experiment;
         }
-        status.textContent = 'Verifying original Layer 1 and connecting optional layers...';
+        setExperimentSaveStatus(
+            'pending',
+            'Verifying original Layer 1 and connecting optional layers...'
+        );
         const result = await writer.addExtraLayers(
             uploadId, experiment.entryId, draft.post_normalization_plan
         );
@@ -5230,13 +5433,19 @@ async function saveExperimentToNomad() {
         await setPhysicalHolderWorkflowStatus('grown');
         experimentState.experimentSaved = true;
         const count = result.reduce((n, item) => n + item.extraLayers, 0);
-        status.textContent = 'Saved and verified experiment. ' + result.length +
-            ' stack(s), ' + count + ' optional layer reference(s).';
+        setExperimentSaveStatus(
+            'success',
+            'Saved and verified experiment. ' + result.length +
+                ' stack(s), ' + count + ' optional layer reference(s).'
+        );
     } catch (error) {
-        status.textContent = 'Experiment save incomplete: ' + error.message +
-            (experimentState.savedExperiment
-                ? ' Experiment entry exists; retry to resume, do not create a duplicate.'
-                : ' No experiment entry was confirmed.');
+        setExperimentSaveStatus(
+            'error',
+            'Experiment save incomplete: ' + error.message +
+                (experimentState.savedExperiment
+                    ? ' Experiment entry exists; retry to resume, do not create a duplicate.'
+                    : ' No experiment entry was confirmed.')
+        );
     } finally {
         if (button) button.disabled = false;
     }
