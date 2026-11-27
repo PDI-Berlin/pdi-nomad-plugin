@@ -1,0 +1,649 @@
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: #f5f7fa;
+    color: #1f2937;
+    font-family: Arial, sans-serif;
+}
+
+.page {
+    max-width: 1450px;
+    margin: auto;
+    padding: 24px;
+}
+
+h1 { margin: 0 0 4px; }
+h2, h3 { margin-top: 0; }
+
+.subtitle { margin: 0; color: #667085; }
+
+.title-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.panel {
+    background: white;
+    border: 1px solid #d8dee7;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.toolbar {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 16px 18px;
+    border-bottom: 1px solid #d8dee7;
+}
+
+.type-tabs, .subtype-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.subtype-tabs {
+    margin-top: 10px;
+    padding-left: 2px;
+}
+
+.type-tab, .subtype-tab { padding: 8px 11px; }
+
+.type-tab.active {
+    border-color: #1976d2;
+    background: #eaf3ff;
+    color: #0b5cab;
+    font-weight: bold;
+}
+
+.subtype-tab.active {
+    border-color: #7a8da8;
+    background: #f1f5f9;
+    font-weight: bold;
+}
+
+.search-box { width: min(360px, 40vw); }
+
+label {
+    display: block;
+    margin: 0 0 5px;
+    color: #667085;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+input, select, textarea {
+    width: 100%;
+    padding: 9px;
+    border: 1px solid #c8d0dc;
+    border-radius: 7px;
+    background: white;
+}
+
+button {
+    padding: 9px 12px;
+    border: 1px solid #bcc6d3;
+    border-radius: 7px;
+    background: white;
+    cursor: pointer;
+}
+
+button:disabled { opacity: .5; cursor: not-allowed; }
+
+.primary {
+    background: #1976d2;
+    color: white;
+    border-color: #1976d2;
+}
+
+.status { color: #667085; font-size: 12px; }
+
+#libraryStatus {
+    padding: 10px 18px;
+    border-bottom: 1px solid #eef1f4;
+}
+
+.library-list { min-height: 220px; }
+
+.library-row {
+    display: grid;
+    grid-template-columns: minmax(190px, 1.4fr) minmax(170px, 1fr) minmax(300px, 1.6fr) auto;
+    gap: 14px;
+    align-items: center;
+    padding: 13px 18px;
+    border-bottom: 1px solid #eef1f4;
+}
+
+.library-row:last-child { border-bottom: 0; }
+
+.item-title { font-weight: bold; }
+.item-subtitle, .item-details { margin-top: 3px; color: #667085; font-size: 12px; }
+.item-type { font-size: 12px; color: #475467; }
+
+.item-actions {
+    display: flex;
+    gap: 7px;
+    justify-content: flex-end;
+}
+
+.create-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    border-top: 1px solid #d8dee7;
+    color: #0b5cab;
+    background: #fbfdff;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.create-row:hover { background: #f1f7ff; }
+
+.create-plus {
+    width: 28px;
+    height: 28px;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid #9fc4ee;
+    border-radius: 50%;
+    background: white;
+    font-size: 18px;
+}
+
+.empty-state { padding: 28px 18px; color: #667085; }
+
+.hidden { display: none !important; }
+
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 5vh 20px;
+    overflow-y: auto;
+    background: rgba(15, 23, 42, .44);
+}
+
+.modal {
+    width: min(1120px, 100%);
+    max-height: 90vh;
+    overflow-y: auto;
+    background: white;
+    border: 1px solid #d8dee7;
+    border-radius: 12px;
+    box-shadow: 0 18px 60px rgba(0,0,0,.18);
+}
+
+.modal-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 18px;
+    background: white;
+    border-bottom: 1px solid #d8dee7;
+}
+
+.modal-header h2 { margin-bottom: 4px; }
+.modal-subtitle { color: #667085; font-size: 12px; }
+
+.icon-button { padding: 4px 10px; border: 0; font-size: 24px; }
+
+.modal-body { padding: 18px; }
+
+.generated-id {
+    padding: 13px 15px;
+    border: 1px solid #bdd4ee;
+    border-radius: 9px;
+    background: #f6faff;
+}
+
+.generated-label {
+    color: #667085;
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.generated-value {
+    margin-top: 4px;
+    font-family: Consolas, monospace;
+    font-size: 20px;
+    font-weight: bold;
+}
+
+.generated-hint {
+    margin-top: 3px;
+    color: #667085;
+    font-size: 11px;
+}
+
+.field-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(160px, 280px));
+    gap: 12px;
+    align-items: end;
+}
+
+.field-grid.three { grid-template-columns: repeat(3, minmax(150px, 230px)); }
+
+.editor-section {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #e4e7ec;
+}
+
+.section-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 18px;
+}
+
+.section-heading p, .helper {
+    margin: 3px 0 12px;
+    color: #667085;
+    font-size: 12px;
+}
+
+.holder-position-header, .holder-position-row {
+    display: grid;
+    grid-template-columns: 90px repeat(4, minmax(85px, 1fr)) 42px;
+    gap: 7px;
+    align-items: center;
+}
+
+.holder-position-header {
+    padding: 7px 0;
+    color: #667085;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.holder-position-row { margin-bottom: 7px; }
+.holder-position-row input { min-width: 0; }
+.remove-position { padding: 7px 9px; color: #b42318; }
+
+.dynamic-fields {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(160px, 1fr));
+    gap: 12px;
+    margin-top: 15px;
+}
+
+.dynamic-field {
+    padding: 10px;
+    border: 1px solid #e4e7ec;
+    border-radius: 8px;
+    background: #fcfcfd;
+}
+
+.custom-value { margin-top: 7px; }
+
+#targetUploadFields {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #e4e7ec;
+    max-width: 620px;
+}
+
+.modal-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 9px;
+    margin-top: 18px;
+}
+
+.modal-actions .status { margin-right: auto; }
+
+.view-grid {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 8px 14px;
+    margin-bottom: 18px;
+}
+
+.view-label { color: #667085; font-size: 12px; font-weight: bold; }
+
+.view-raw {
+    overflow-x: auto;
+    padding: 12px;
+    border: 1px solid #e4e7ec;
+    border-radius: 8px;
+    background: #fafbfc;
+    font-family: Consolas, monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+}
+
+@media (max-width: 900px) {
+    .title-row, .toolbar { flex-direction: column; align-items: stretch; }
+    .search-box { width: 100%; }
+    .library-row { grid-template-columns: 1fr; }
+    .item-actions { justify-content: flex-start; }
+    .field-grid, .field-grid.three, .dynamic-fields { grid-template-columns: 1fr 1fr; }
+    .holder-position-header { display: none; }
+    .holder-position-row {
+        grid-template-columns: 1fr 1fr;
+        padding: 10px;
+        border: 1px solid #e4e7ec;
+        border-radius: 8px;
+    }
+}
+
+
+.library-row:has(.item-subtitle) {
+    transition: background .12s ease;
+}
+
+.item-subtitle {
+    line-height: 1.35;
+}
+
+
+/* Chemical-treatment recipe editor */
+
+#processingDynamicFields.cleaning-editor {
+    display: grid;
+    grid-template-columns: 320px minmax(560px, 760px);
+    gap: 20px;
+    align-items: start;
+    margin-top: 15px;
+}
+
+.cleaning-left-column {
+    display: grid;
+    gap: 12px;
+}
+
+.cleaning-left-column select,
+.cleaning-left-column input {
+    width: 100%;
+}
+
+.cleaning-right-column {
+    min-width: 0;
+}
+
+.cleaning-steps-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.cleaning-steps-heading h3 {
+    margin: 0;
+}
+
+#addCleaningStep {
+    width: auto;
+    padding: 5px 10px;
+    min-height: 30px;
+}
+
+.cleaning-step-row {
+    border: 1px solid #dfe4ea;
+    border-radius: 8px;
+    background: #fcfcfd;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+}
+
+.cleaning-step-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.cleaning-remove-step {
+    width: auto;
+    padding: 4px 8px;
+    min-height: 28px;
+    font-size: 12px;
+}
+
+.cleaning-step-primary {
+    display: grid;
+    grid-template-columns: minmax(220px, 1.8fr) 120px 130px;
+    gap: 10px;
+    align-items: end;
+}
+
+.cleaning-step-secondary {
+    display: grid;
+    grid-template-columns: 220px minmax(260px, 1fr);
+    gap: 10px;
+    align-items: end;
+    margin-top: 8px;
+}
+
+.cleaning-step-row label {
+    display: block;
+    margin-bottom: 3px;
+    font-size: 12px;
+}
+
+.cleaning-step-row input,
+.cleaning-step-row select {
+    width: 100%;
+    min-width: 0;
+    height: 34px;
+    padding: 5px 7px;
+}
+
+.cleaning-reagent-custom {
+    margin-top: 5px;
+}
+
+#targetUploadFields {
+    width: min(380px, 100%);
+    max-width: 380px;
+}
+
+@media (max-width: 1050px) {
+    #processingDynamicFields.cleaning-editor {
+        grid-template-columns: 280px minmax(500px, 1fr);
+    }
+}
+
+@media (max-width: 850px) {
+    #processingDynamicFields.cleaning-editor {
+        grid-template-columns: 1fr;
+    }
+
+    .cleaning-step-primary,
+    .cleaning-step-secondary {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* Chemical-treatment left-side controls */
+.cleaning-left-column #targetUploadFields {
+    width: 100%;
+    max-width: none;
+    margin-top: 4px;
+    padding-top: 12px;
+}
+
+.cleaning-left-column #targetUploadFields select {
+    width: 100%;
+}
+
+.cleaning-steps-heading {
+    justify-content: flex-start;
+}
+
+.cleaning-right-column #addCleaningStep {
+    display: inline-block;
+    width: auto;
+    margin-top: 0;
+    padding: 5px 10px;
+}
+
+
+.processing-template-helper {
+    max-width: 560px;
+    margin: 8px 0 0 0;
+    line-height: 1.35;
+}
+
+
+/* Cleaning template alignment */
+.cleaning-left-column #processingTemplateBlock {
+    width: 100%;
+}
+
+.cleaning-left-column #processingTemplateBlock .field-grid {
+    grid-template-columns: 1fr;
+}
+
+.cleaning-left-column #processingTemplateBlock select {
+    width: 100%;
+}
+
+.cleaning-left-column .processing-template-helper {
+    margin: 6px 0 4px 0;
+}
+
+
+/* Annealing recipe editor */
+
+#processingDynamicFields.annealing-editor {
+    display: grid;
+    grid-template-columns: 320px minmax(650px, 820px);
+    gap: 20px;
+    align-items: start;
+    margin-top: 15px;
+}
+
+.annealing-left-column {
+    display: grid;
+    gap: 12px;
+}
+
+.annealing-left-column #processingTemplateBlock .field-grid {
+    grid-template-columns: 1fr;
+}
+
+.annealing-left-column input,
+.annealing-left-column select,
+.annealing-left-column #targetUploadFields {
+    width: 100%;
+    max-width: none;
+}
+
+.annealing-right-column {
+    min-width: 0;
+}
+
+.annealing-condition-grid {
+    display: grid;
+    grid-template-columns: minmax(220px, 1.5fr) 150px 130px 130px;
+    gap: 10px;
+    align-items: end;
+    margin-bottom: 14px;
+}
+
+.annealing-steps-heading h3 {
+    margin: 0 0 8px 0;
+}
+
+.annealing-step-row {
+    border: 1px solid #dfe4ea;
+    border-radius: 8px;
+    background: #fcfcfd;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+}
+
+.annealing-step-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.annealing-remove-step,
+#addAnnealingStep {
+    width: auto;
+    min-height: 28px;
+    padding: 4px 9px;
+}
+
+.annealing-step-primary {
+    display: grid;
+    grid-template-columns: 190px 150px minmax(220px, 1fr);
+    gap: 10px;
+    align-items: end;
+}
+
+.annealing-step-secondary {
+    margin-top: 8px;
+}
+
+.annealing-step-secondary input {
+    width: 100%;
+}
+
+.annealing-step-row label,
+.annealing-condition-grid label {
+    display: block;
+    margin-bottom: 3px;
+    font-size: 12px;
+}
+
+.annealing-step-row input,
+.annealing-step-row select,
+.annealing-condition-grid input,
+.annealing-condition-grid select {
+    width: 100%;
+    min-width: 0;
+    height: 34px;
+}
+
+@media (max-width: 1050px) {
+    #processingDynamicFields.annealing-editor {
+        grid-template-columns: 280px minmax(560px, 1fr);
+    }
+}
+
+@media (max-width: 850px) {
+    #processingDynamicFields.annealing-editor {
+        grid-template-columns: 1fr;
+    }
+
+    .annealing-condition-grid,
+    .annealing-step-primary {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+.annealing-ramp-control {
+    display: grid;
+    grid-template-columns: minmax(90px, 1fr) 90px;
+    gap: 6px;
+}
+
+.annealing-ramp-control input,
+.annealing-ramp-control select {
+    width: 100%;
+}
